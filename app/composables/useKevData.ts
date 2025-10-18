@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { parseISO } from 'date-fns'
 import type {
   KevDomainCategory,
@@ -74,6 +74,43 @@ export const useKevData = () => {
   const entries = computed(() => data.value?.entries ?? [])
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
   const filters = reactive<KevFilterState>(createDefaultFilters())
+  const importing = ref(false)
+  const importError = ref<string | null>(null)
+  const lastImportSummary = ref<
+    | null
+    | {
+        imported: number
+        dateReleased: string
+        catalogVersion: string
+        importedAt: string
+      }
+  >(null)
+
+  const importLatest = async () => {
+    importing.value = true
+    importError.value = null
+
+    try {
+      const response = await $fetch<{
+        imported: number
+        dateReleased: string
+        catalogVersion: string
+        importedAt: string
+      }>('/api/fetchKev', {
+        method: 'POST'
+      })
+
+      lastImportSummary.value = response
+      await refresh()
+      return response
+    } catch (exception) {
+      const message = exception instanceof Error ? exception.message : 'Unable to import KEV data'
+      importError.value = message
+      return null
+    } finally {
+      importing.value = false
+    }
+  }
 
   const wellKnownCveIds = computed(() => {
     const identifiers = new Set<string>()
@@ -335,6 +372,10 @@ export const useKevData = () => {
     updatedAt,
     pending,
     error,
-    refresh
+    refresh,
+    importing,
+    importError,
+    importLatest,
+    lastImportSummary
   }
 }

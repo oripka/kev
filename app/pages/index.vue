@@ -13,7 +13,52 @@ import type { SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import type { KevEntry } from "~/types";
 
-const { entries, getWellKnownCveName, earliestDate, lastAddedDate } = useKevData();
+const {
+  entries,
+  getWellKnownCveName,
+  earliestDate,
+  lastAddedDate,
+  updatedAt,
+  importLatest,
+  importing,
+  importError,
+  lastImportSummary,
+} = useKevData();
+
+const totalEntries = computed(() => entries.value.length);
+
+const formatTimestamp = (value: string) => {
+  const parsed = parseISO(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return format(parsed, "yyyy-MM-dd HH:mm");
+};
+
+const catalogUpdatedAt = computed(() => {
+  const value = updatedAt.value;
+  if (!value) {
+    return "No imports yet";
+  }
+
+  return formatTimestamp(value);
+});
+
+const importSummaryMessage = computed(() => {
+  const summary = lastImportSummary.value;
+  if (!summary) {
+    return null;
+  }
+
+  const importedAt = formatTimestamp(summary.importedAt);
+  const importedCount = summary.imported.toLocaleString();
+  return `Imported ${importedCount} entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.`;
+});
+
+const handleImport = async () => {
+  await importLatest();
+};
 
 const sliderMinYear = 1990;
 const sliderMaxYear = new Date().getFullYear();
@@ -676,6 +721,58 @@ const columns: TableColumn<KevEntry>[] = [
 
     <UPageBody>
       <div class="grid grid-cols-1 gap-3 max-w-7xl mx-auto">
+        <UCard>
+          <div
+            class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div class="space-y-2">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                Data freshness
+              </p>
+              <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                Last imported release: <span class="font-medium">{{ catalogUpdatedAt }}</span>
+              </p>
+              <p
+                v-if="totalEntries > 0"
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                {{ totalEntries.toLocaleString() }} entries cached locally for instant filtering.
+              </p>
+              <p
+                v-else
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                No entries cached yet. Use the import button to fetch the latest KEV data.
+              </p>
+              <p
+                v-if="importSummaryMessage && !importError"
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                {{ importSummaryMessage }}
+              </p>
+            </div>
+            <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+              <UButton
+                color="primary"
+                icon="i-lucide-cloud-download"
+                :loading="importing"
+                :disabled="importing"
+                @click="handleImport"
+              >
+                {{ importing ? "Importing…" : "Import latest KEV" }}
+              </UButton>
+              <UAlert
+                v-if="importError"
+                color="error"
+                variant="soft"
+                icon="i-lucide-alert-triangle"
+                title="Import failed"
+                :description="importError"
+              />
+            </div>
+          </div>
+        </UCard>
+
         <UCard>
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
