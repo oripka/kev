@@ -13,7 +13,7 @@ import type { SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import type { KevEntry } from "~/types";
 
-const { entries } = useKevData();
+const { entries, getWellKnownCveName } = useKevData();
 
 type FilterKey = "domain" | "exploit" | "vulnerability" | "vendor" | "product";
 
@@ -37,6 +37,7 @@ const filters = reactive<FilterState>({ ...defaultFilters });
 
 const searchInput = ref("");
 const debouncedSearch = ref("");
+const showWellKnownOnly = ref(false);
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -132,11 +133,15 @@ watch(showDetails, (value) => {
 const textFilteredEntries = computed(() => {
   const term = debouncedSearch.value.trim().toLowerCase();
 
-  if (!term) {
-    return entries.value;
-  }
-
   return entries.value.filter((entry) => {
+    if (showWellKnownOnly.value && !getWellKnownCveName(entry.cveId)) {
+      return false;
+    }
+
+    if (!term) {
+      return true;
+    }
+
     const text = `${entry.cveId} ${entry.vendor} ${entry.product} ${entry.vulnerabilityName}`.toLowerCase();
     return text.includes(term);
   });
@@ -195,7 +200,8 @@ const hasActiveFilters = computed(() =>
       filters.exploit ||
       filters.vulnerability ||
       filters.vendor ||
-      filters.product
+      filters.product ||
+      showWellKnownOnly.value
   )
 );
 
@@ -207,6 +213,7 @@ const resetFilters = () => {
   }
   searchInput.value = "";
   debouncedSearch.value = "";
+  showWellKnownOnly.value = false;
 };
 
 type ProgressDatum = {
@@ -292,7 +299,7 @@ const filterLabels: Record<FilterKey, string> = {
 };
 
 type ActiveFilter = {
-  key: FilterKey | "search";
+  key: FilterKey | "search" | "wellKnown";
   label: string;
   value: string;
 };
@@ -311,6 +318,10 @@ const activeFilters = computed<ActiveFilter[]>(() => {
       items.push({ key, label: filterLabels[key], value });
     }
   });
+
+  if (showWellKnownOnly.value) {
+    items.push({ key: "wellKnown", label: "Focus", value: "Well-known CVEs" });
+  }
 
   return items;
 });
@@ -338,7 +349,7 @@ const toggleFilter = (key: FilterKey, value: string) => {
   resetDownstreamFilters(key);
 };
 
-const clearFilter = (key: FilterKey | "search") => {
+const clearFilter = (key: FilterKey | "search" | "wellKnown") => {
   if (key === "search") {
     if (searchDebounce) {
       clearTimeout(searchDebounce);
@@ -346,6 +357,11 @@ const clearFilter = (key: FilterKey | "search") => {
     }
     searchInput.value = "";
     debouncedSearch.value = "";
+    return;
+  }
+
+  if (key === "wellKnown") {
+    showWellKnownOnly.value = false;
     return;
   }
 
@@ -357,8 +373,37 @@ const columns: TableColumn<KevEntry>[] = [
   {
     id: "summary",
     header: "Description",
-    cell: ({ row }) =>
-      h("div", { class: "space-y-1" }, [
+    cell: ({ row }) => {
+      const description = row.original.description || "No description provided.";
+      const wellKnownLabel = getWellKnownCveName(row.original.cveId);
+      const descriptionChildren = [] as Array<ReturnType<typeof h>>;
+
+      if (wellKnownLabel) {
+        descriptionChildren.push(
+          h(
+            UBadge,
+            {
+              color: "primary",
+              variant: "soft",
+              class: "shrink-0 text-xs font-semibold",
+            },
+            () => wellKnownLabel
+          )
+        );
+      }
+
+      descriptionChildren.push(
+        h(
+          "span",
+          {
+            class:
+              "text-sm text-neutral-500 dark:text-neutral-400 max-w-xl whitespace-normal break-words text-pretty leading-relaxed",
+          },
+          description
+        )
+      );
+
+      return h("div", { class: "space-y-1" }, [
         h(
           "p",
           {
@@ -371,11 +416,12 @@ const columns: TableColumn<KevEntry>[] = [
           "p",
           {
             class:
-              "text-sm text-neutral-500 dark:text-neutral-400 max-w-xl whitespace-normal break-words text-pretty",
+              "flex flex-wrap items-start gap-2 text-neutral-500 dark:text-neutral-400",
           },
-          row.original.description || "No description provided."
+          descriptionChildren
         ),
-      ]),
+      ]);
+    },
   },
   {
     accessorKey: "dateAdded",
@@ -478,6 +524,15 @@ const columns: TableColumn<KevEntry>[] = [
                 v-model="searchInput"
                 placeholder="Filter by CVE, vendor, or product"
               />
+            </UFormField>
+
+            <UFormField label="Well-known focus">
+              <div class="flex items-center justify-between gap-3">
+                <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                  Only show named, high-profile CVEs
+                </p>
+                <USwitch v-model="showWellKnownOnly" />
+              </div>
             </UFormField>
 
             <div
@@ -905,9 +960,21 @@ const columns: TableColumn<KevEntry>[] = [
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Description
                   </p>
-                  <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-                    {{ detailEntry.description || 'No description provided.' }}
-                  </p>
+                  <div
+                    class="flex flex-wrap items-start gap-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300"
+                  >
+                    <UBadge
+                      v-if="getWellKnownCveName(detailEntry.cveId)"
+                      color="primary"
+                      variant="soft"
+                      class="shrink-0 text-xs font-semibold"
+                    >
+                      {{ getWellKnownCveName(detailEntry.cveId) }}
+                    </UBadge>
+                    <span class="max-w-4xl whitespace-normal break-words">
+                      {{ detailEntry.description || 'No description provided.' }}
+                    </span>
+                  </div>
                 </div>
 
                 <div class="grid gap-3 sm:grid-cols-3">

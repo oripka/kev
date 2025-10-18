@@ -362,6 +362,11 @@ const serverDomainHints: ReadonlySet<KevDomainCategory> = new Set([
   'Security Appliances'
 ])
 
+const rcePatterns: RegExp[] = [
+  ...remoteExecutionPatterns,
+  ...codeExecutionPatterns
+]
+
 const vulnerabilityRules: Array<{
   category: KevVulnerabilityCategory
   patterns: RegExp[]

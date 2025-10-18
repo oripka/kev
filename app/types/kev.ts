@@ -6,6 +6,7 @@ export interface KevFilterState {
   exploitLayer: string | null
   vulnerabilityType: string | null
   ransomwareOnly: boolean
+  wellKnownOnly: boolean
   startDate: string | null
   endDate: string | null
 }

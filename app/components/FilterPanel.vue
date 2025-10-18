@@ -33,6 +33,7 @@ const setCategory = (value: unknown) => update({ category: coerceNullableString(
 const setExploitLayer = (value: unknown) => update({ exploitLayer: coerceNullableString(value) })
 const setVulnerabilityType = (value: unknown) => update({ vulnerabilityType: coerceNullableString(value) })
 const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomwareOnly: value === true })
+const setWellKnownOnly = (value: boolean) => update({ wellKnownOnly: value })
 </script>
 
 <template>
@@ -100,6 +101,14 @@ const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomw
             label="Only show ransomware-linked KEVs"
             @update:model-value="setRansomwareOnly"
           />
+        </UFormField>
+        <UFormField label="Well-known focus">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm text-neutral-600 dark:text-neutral-300">
+              Only show named, high-profile CVEs
+            </span>
+            <USwitch :model-value="props.filters.wellKnownOnly" @update:model-value="setWellKnownOnly" />
+          </div>
         </UFormField>
         <UFormField label="Added after">
           <UInput

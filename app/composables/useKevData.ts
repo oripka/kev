@@ -8,6 +8,7 @@ import type {
   KevVulnerabilityCategory
 } from '~/types'
 import type { KevFilterState } from '~/types'
+import { lookupCveName } from '~/utils/cveToNameMap'
 
 export type CountDatum = {
   name: string
@@ -51,6 +52,7 @@ const createDefaultFilters = (): KevFilterState => ({
   exploitLayer: null,
   vulnerabilityType: null,
   ransomwareOnly: false,
+  wellKnownOnly: false,
   startDate: null,
   endDate: null
 })
@@ -72,6 +74,20 @@ export const useKevData = () => {
   const entries = computed(() => data.value?.entries ?? [])
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
   const filters = reactive<KevFilterState>(createDefaultFilters())
+
+  const wellKnownCveIds = computed(() => {
+    const identifiers = new Set<string>()
+    for (const entry of entries.value) {
+      if (lookupCveName(entry.cveId)) {
+        identifiers.add(entry.cveId)
+      }
+    }
+    return identifiers
+  })
+
+  const isWellKnownCve = (rawCve: string) => Boolean(lookupCveName(rawCve))
+
+  const getWellKnownCveName = (rawCve: string) => lookupCveName(rawCve)
 
   const total = computed(() => entries.value.length)
 
@@ -177,6 +193,10 @@ export const useKevData = () => {
         if (!use.includes('known')) {
           return false
         }
+      }
+
+      if (filters.wellKnownOnly && !wellKnownCveIds.value.has(entry.cveId)) {
+        return false
       }
 
       if (startDate || endDate) {
@@ -309,6 +329,9 @@ export const useKevData = () => {
     ransomwareCount,
     resetFilters,
     exportCsv,
+    isWellKnownCve,
+    getWellKnownCveName,
+    wellKnownCveIds,
     updatedAt,
     pending,
     error,
