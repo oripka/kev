@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { KevEntry } from '~/types/kev'
+import type { KevEntry } from '~/types'
 
 const props = defineProps<{
   entries: KevEntry[]
@@ -16,19 +16,16 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
   {
     accessorKey: 'cveId',
     header: 'CVE ID',
-    cell: ({ row }) => {
-      const entry = row.original
-      if (!entry.sources.length) return entry.cveId
-      return h(
+    cell: ({ row }) =>
+      h(
         ULink,
         {
-          href: entry.sources[0],
+          href: `https://nvd.nist.gov/vuln/detail/${row.original.cveId}`,
           target: '_blank',
-          rel: 'noopener'
+          rel: 'noopener noreferrer'
         },
-        () => entry.cveId
+        () => row.original.cveId
       )
-    }
   },
   {
     accessorKey: 'vendor',
@@ -39,12 +36,14 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
     header: 'Product'
   },
   {
-    accessorKey: 'vulnerabilityType',
-    header: 'Type'
+    id: 'vulnerabilityCategories',
+    header: 'Vulnerability',
+    cell: ({ row }) => row.original.vulnerabilityCategories.join(', ') || '—'
   },
   {
-    accessorKey: 'category',
-    header: 'Category'
+    id: 'domainCategories',
+    header: 'Domain',
+    cell: ({ row }) => row.original.domainCategories.join(', ') || '—'
   },
   {
     accessorKey: 'dateAdded',
@@ -58,15 +57,18 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
   {
     id: 'ransomware',
     header: 'Ransomware',
-    cell: ({ row }) =>
-      h(
+    cell: ({ row }) => {
+      const use = row.original.ransomwareUse ?? ''
+      const isKnown = use.toLowerCase().includes('known')
+      return h(
         UBadge,
         {
-          color: row.original.knownRansomware ? 'error' : 'neutral',
+          color: isKnown ? 'error' : 'neutral',
           variant: 'subtle'
         },
-        () => (row.original.knownRansomware ? 'Known' : 'None')
+        () => (isKnown ? 'Known' : 'None')
       )
+    }
   }
 ])
 </script>

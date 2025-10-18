@@ -1,11 +1,11 @@
-import { cachedEventHandler } from 'nitropack'
 import { enrichEntry } from '~/utils/classification'
+import type { KevBaseEntry } from '~/utils/classification'
 import type { KevEntry, KevResponse } from '~/types'
 
 const KEV_SOURCE =
   'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json'
 
-export default cachedEventHandler(async (): Promise<KevResponse> => {
+export default defineEventHandler(async (): Promise<KevResponse> => {
   const payload = await $fetch<{ dateReleased?: string; vulnerabilities?: any[] }>(KEV_SOURCE)
 
   const entries = (payload.vulnerabilities ?? []).map((item): KevEntry => {
@@ -17,7 +17,7 @@ export default cachedEventHandler(async (): Promise<KevResponse> => {
 
     const cwes = Array.isArray(item.cwes) ? item.cwes : []
 
-    return enrichEntry({
+    const baseEntry: KevBaseEntry = {
       cveId: item.cveID,
       vendor: item.vendorProject ?? 'Unknown',
       product: item.product ?? 'Unknown',
@@ -29,7 +29,9 @@ export default cachedEventHandler(async (): Promise<KevResponse> => {
       ransomwareUse: item.knownRansomwareCampaignUse ?? null,
       notes,
       cwes
-    })
+    }
+
+    return enrichEntry(baseEntry)
   })
 
   entries.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
@@ -38,7 +40,4 @@ export default cachedEventHandler(async (): Promise<KevResponse> => {
     updatedAt: payload.dateReleased ?? new Date().toISOString(),
     entries
   }
-}, {
-  maxAge: 60 * 60,
-  swr: true
 })

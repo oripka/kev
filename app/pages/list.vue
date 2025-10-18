@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import type { KevFilterState } from '~/types'
 import { useKevData } from '~/composables/useKevData'
 
 const kev = useKevData()
 
-function updateFilters(value: typeof kev.filters) {
+function updateFilters(value: KevFilterState) {
   Object.assign(kev.filters, value)
 }
 
@@ -38,10 +39,10 @@ function exportCsv() {
       <UPageSection>
         <FilterPanel
           :filters="kev.filters"
-          :vendors="kev.vendors.value"
-          :products="kev.products.value"
-          :categories="kev.categories.value"
-          :vulnerability-types="kev.vulnerabilityTypes.value"
+          :vendors="kev.vendorNames.value"
+          :products="kev.productNames.value"
+          :categories="kev.categoryNames.value"
+          :vulnerability-types="kev.vulnerabilityTypeNames.value"
           @update:filters="updateFilters"
           @reset="resetFilters"
         />
@@ -50,9 +51,9 @@ function exportCsv() {
       <UPageSection>
         <UCard>
           <template #header>
-            <UText size="lg" weight="semibold">
+            <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
               Export results
-            </UText>
+            </p>
           </template>
           <template #default>
             <UButton color="secondary" icon="i-lucide-download" @click="exportCsv">

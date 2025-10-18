@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import { parseISO } from 'date-fns'
 import type {
   KevDomainCategory,
@@ -6,6 +6,7 @@ import type {
   KevResponse,
   KevVulnerabilityCategory
 } from '~/types'
+import type { KevFilterState } from '~/types'
 
 export type CountDatum = {
   name: string
@@ -41,6 +42,23 @@ const aggregateCounts = (
     .sort((a, b) => b.count - a.count)
 }
 
+const createDefaultFilters = (): KevFilterState => ({
+  search: '',
+  vendor: null,
+  product: null,
+  category: null,
+  vulnerabilityType: null,
+  ransomwareOnly: false,
+  startDate: null,
+  endDate: null
+})
+
+const toCsvValue = (value: string | string[]) => {
+  const text = Array.isArray(value) ? value.join('; ') : value
+  const escaped = text.replace(/"/g, '""')
+  return `"${escaped}"`
+}
+
 export const useKevData = () => {
   const { data, pending, error, refresh } = useFetch<KevResponse>('/api/kev', {
     default: () => ({
@@ -51,6 +69,7 @@ export const useKevData = () => {
 
   const entries = computed(() => data.value?.entries ?? [])
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
+  const filters = reactive<KevFilterState>(createDefaultFilters())
 
   const total = computed(() => entries.value.length)
 
@@ -73,6 +92,113 @@ export const useKevData = () => {
     aggregateCounts(entries.value, entry => entry.vulnerabilityCategories as KevVulnerabilityCategory[])
   )
 
+  const vendorNames = computed(() => {
+    const names = new Set(entries.value.map(entry => entry.vendor).filter(Boolean))
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  })
+
+  const productNames = computed(() => {
+    const names = new Set(entries.value.map(entry => entry.product).filter(Boolean))
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  })
+
+  const categoryNames = computed(() => {
+    const names = new Set<string>()
+    for (const entry of entries.value) {
+      for (const category of entry.domainCategories) {
+        names.add(category)
+      }
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  })
+
+  const vulnerabilityTypeNames = computed(() => {
+    const names = new Set<string>()
+    for (const entry of entries.value) {
+      for (const category of entry.vulnerabilityCategories) {
+        names.add(category)
+      }
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  })
+
+  const filteredEntries = computed(() => {
+    const term = filters.search.trim().toLowerCase()
+    const startDate = filters.startDate ? new Date(filters.startDate) : null
+    const endDate = filters.endDate ? new Date(filters.endDate) : null
+
+    return entries.value.filter(entry => {
+      if (filters.vendor && entry.vendor !== filters.vendor) {
+        return false
+      }
+
+      if (filters.product && entry.product !== filters.product) {
+        return false
+      }
+
+      if (
+        filters.category &&
+        !entry.domainCategories.includes(filters.category as KevDomainCategory)
+      ) {
+        return false
+      }
+
+      if (
+        filters.vulnerabilityType &&
+        !entry.vulnerabilityCategories.includes(filters.vulnerabilityType as KevVulnerabilityCategory)
+      ) {
+        return false
+      }
+
+      if (filters.ransomwareOnly) {
+        const use = (entry.ransomwareUse ?? '').toLowerCase()
+        if (!use.includes('known')) {
+          return false
+        }
+      }
+
+      if (startDate || endDate) {
+        const addedOn = toDate(entry.dateAdded)
+        if (!addedOn) {
+          return false
+        }
+
+        if (startDate && addedOn < startDate) {
+          return false
+        }
+
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          if (addedOn > end) {
+            return false
+          }
+        }
+      }
+
+      if (term) {
+        const haystack = [
+          entry.cveId,
+          entry.vendor,
+          entry.product,
+          entry.vulnerabilityName,
+          entry.description,
+          ...entry.notes
+        ]
+          .join(' ')
+          .toLowerCase()
+
+        if (!haystack.includes(term)) {
+          return false
+        }
+      }
+
+      return true
+    })
+  })
+
+  const totalEntries = computed(() => filteredEntries.value.length)
+
   const vendorTotal = computed(() => new Set(entries.value.map(entry => entry.vendor)).size)
   const productTotal = computed(() => new Set(entries.value.map(entry => entry.product)).size)
 
@@ -80,9 +206,52 @@ export const useKevData = () => {
     entries.value.filter(entry => (entry.ransomwareUse ?? '').toLowerCase() === 'known').length
   )
 
+  const resetFilters = () => {
+    Object.assign(filters, createDefaultFilters())
+  }
+
+  const exportCsv = () => {
+    const header = [
+      'CVE ID',
+      'Vendor',
+      'Product',
+      'Vulnerability',
+      'Date Added',
+      'Ransomware Use',
+      'Domain Categories',
+      'Vulnerability Categories',
+      'Description',
+      'Required Action',
+      'Notes',
+      'CWEs'
+    ].map(toCsvValue).join(',')
+
+    const rows = filteredEntries.value.map(entry => {
+      return [
+        toCsvValue(entry.cveId),
+        toCsvValue(entry.vendor),
+        toCsvValue(entry.product),
+        toCsvValue(entry.vulnerabilityName),
+        toCsvValue(entry.dateAdded),
+        toCsvValue(entry.ransomwareUse ?? ''),
+        toCsvValue(entry.domainCategories),
+        toCsvValue(entry.vulnerabilityCategories),
+        toCsvValue(entry.description),
+        toCsvValue(entry.requiredAction),
+        toCsvValue(entry.notes),
+        toCsvValue(entry.cwes)
+      ].join(',')
+    })
+
+    return [header, ...rows].join('\n')
+  }
+
   return {
     data,
     entries,
+    filters,
+    filteredEntries,
+    totalEntries,
     total,
     lastAddedDate,
     earliestDate,
@@ -90,9 +259,15 @@ export const useKevData = () => {
     products,
     domainCategories,
     vulnerabilityCategories,
+    vendorNames,
+    productNames,
+    categoryNames,
+    vulnerabilityTypeNames,
     vendorTotal,
     productTotal,
     ransomwareCount,
+    resetFilters,
+    exportCsv,
     updatedAt,
     pending,
     error,

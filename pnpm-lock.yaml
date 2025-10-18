@@ -41,6 +41,10 @@ importers:
       zod:
         specifier: ^4.1.12
         version: 4.1.12
+    devDependencies:
+      '@iconify-json/lucide':
+        specifier: ^1.2.70
+        version: 1.2.70
 
 packages:
 
@@ -419,6 +423,9 @@ packages:
 
   '@floating-ui/vue@1.1.9':
     resolution: {integrity: sha512-BfNqNW6KA83Nexspgb9DZuz578R7HT8MZw1CfK9I6Ah4QReNWEJsXWHN+SdmOVLNGmTPDi+fDT535Df5PzMLbQ==}
+
+  '@iconify-json/lucide@1.2.70':
+    resolution: {integrity: sha512-56s9NdBKgshywVY1e4gOcxzAbU1J649e/jLHBJU1tyNqRs7mFLVEGwj2mmzHJ5YAZB5Tsngi4f/ocTBPlG06ZA==}
 
   '@iconify/collections@1.0.606':
     resolution: {integrity: sha512-PQiFoOJpOpd3ulwmhKdtxCaeRVWp2d5jeHR2TUMuyyEizCqCmIWppWL/dGbDcbWPPLx7sovXzhLIrGihWNzBdQ==}
@@ -4822,6 +4829,10 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
       - vue
+
+  '@iconify-json/lucide@1.2.70':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify/collections@1.0.606':
     dependencies:

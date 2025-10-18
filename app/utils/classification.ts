@@ -4,6 +4,8 @@ import type {
   KevVulnerabilityCategory
 } from '~/types'
 
+export type KevBaseEntry = Omit<KevEntry, 'domainCategories' | 'vulnerabilityCategories'>
+
 const domainRules: Array<{
   category: KevDomainCategory
   patterns: RegExp[]
@@ -150,7 +152,7 @@ export const classifyVulnerabilityCategories = (entry: {
   return categories
 }
 
-export const enrichEntry = (entry: KevEntry): KevEntry => {
+export const enrichEntry = (entry: KevBaseEntry): KevEntry => {
   const domainCategories = classifyDomainCategories(entry)
   const vulnerabilityCategories = classifyVulnerabilityCategories(entry)
 

@@ -33,9 +33,9 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
         <UPageGrid>
           <UCard>
             <template #header>
-              <UText size="lg" weight="semibold">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                 Top vendors
-              </UText>
+              </p>
             </template>
 
             <VisXYContainer :data="vendorData" class="h-96">
@@ -48,9 +48,9 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
 
           <UCard>
             <template #header>
-              <UText size="lg" weight="semibold">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                 Top products
-              </UText>
+              </p>
             </template>
 
             <VisXYContainer :data="productData" class="h-96">
@@ -63,9 +63,9 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
 
           <UCard>
             <template #header>
-              <UText size="lg" weight="semibold">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                 Domain categories
-              </UText>
+              </p>
             </template>
 
             <VisXYContainer :data="domainData" class="h-96">
@@ -78,9 +78,9 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
 
           <UCard>
             <template #header>
-              <UText size="lg" weight="semibold">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                 Vulnerability categories
-              </UText>
+              </p>
             </template>
 
             <VisXYContainer :data="vulnerabilityData" class="h-96">

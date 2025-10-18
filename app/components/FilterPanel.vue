@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { KevFilterState } from '~/types/kev'
+import type { KevFilterState } from '~/types'
 
 const props = defineProps<{
   filters: KevFilterState
@@ -21,6 +21,16 @@ function update(partial: Partial<KevFilterState>) {
 function reset() {
   emit('reset')
 }
+
+const coerceNullableString = (value: unknown) => {
+  return typeof value === 'string' && value.length ? value : null
+}
+
+const setVendor = (value: unknown) => update({ vendor: coerceNullableString(value) })
+const setProduct = (value: unknown) => update({ product: coerceNullableString(value) })
+const setCategory = (value: unknown) => update({ category: coerceNullableString(value) })
+const setVulnerabilityType = (value: unknown) => update({ vulnerabilityType: coerceNullableString(value) })
+const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomwareOnly: value === true })
 </script>
 
 <template>
@@ -42,7 +52,7 @@ function reset() {
             :model-value="props.filters.vendor"
             :options="props.vendors"
             placeholder="All vendors"
-            @update:model-value="(value) => update({ vendor: value })"
+            @update:model-value="setVendor"
             clearable
           />
         </UFormField>
@@ -51,7 +61,7 @@ function reset() {
             :model-value="props.filters.product"
             :options="props.products"
             placeholder="All products"
-            @update:model-value="(value) => update({ product: value })"
+            @update:model-value="setProduct"
             clearable
           />
         </UFormField>
@@ -60,7 +70,7 @@ function reset() {
             :model-value="props.filters.category"
             :options="props.categories"
             placeholder="All categories"
-            @update:model-value="(value) => update({ category: value })"
+            @update:model-value="setCategory"
             clearable
           />
         </UFormField>
@@ -69,7 +79,7 @@ function reset() {
             :model-value="props.filters.vulnerabilityType"
             :options="props.vulnerabilityTypes"
             placeholder="All types"
-            @update:model-value="(value) => update({ vulnerabilityType: value })"
+            @update:model-value="setVulnerabilityType"
             clearable
           />
         </UFormField>
@@ -77,7 +87,7 @@ function reset() {
           <UCheckbox
             :model-value="props.filters.ransomwareOnly"
             label="Only show ransomware-linked KEVs"
-            @update:model-value="(value) => update({ ransomwareOnly: value ?? false })"
+            @update:model-value="setRansomwareOnly"
           />
         </UFormField>
         <UFormField label="Added after">

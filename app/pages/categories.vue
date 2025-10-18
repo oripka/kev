@@ -104,23 +104,23 @@ const columns: TableColumn<KevEntry>[] = [
       <UPageSection>
         <UCard>
           <template #header>
-            <UText size="lg" weight="semibold">
+            <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
               Filters
-            </UText>
+            </p>
           </template>
 
           <div class="space-y-4">
-            <UFormGroup label="Domain category">
+            <UFormField label="Domain category">
               <USelectMenu v-model="filters.domain" :options="domainOptions" clearable searchable />
-            </UFormGroup>
+            </UFormField>
 
-            <UFormGroup label="Vulnerability category">
+            <UFormField label="Vulnerability category">
               <USelectMenu v-model="filters.vulnerability" :options="vulnerabilityOptions" clearable searchable />
-            </UFormGroup>
+            </UFormField>
 
-            <UFormGroup label="Search">
+            <UFormField label="Search">
               <UInput v-model="filters.text" placeholder="Filter by CVE, vendor, or product" />
-            </UFormGroup>
+            </UFormField>
 
             <UAlert
               v-if="filters.domain || filters.vulnerability || filters.text"
@@ -136,9 +136,9 @@ const columns: TableColumn<KevEntry>[] = [
       <UPageSection>
         <UCard>
           <template #header>
-            <UText size="lg" weight="semibold">
+            <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
               Results
-            </UText>
+            </p>
           </template>
 
           <UTable :data="results" :columns="columns" />

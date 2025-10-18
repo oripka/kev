@@ -53,3 +53,5 @@ export type KevResponse = {
   updatedAt: string
   entries: KevEntry[]
 }
+
+export type { KevFilterState } from './kev'

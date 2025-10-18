@@ -18,7 +18,7 @@ Backend	Supabase (Postgres + REST)
 Data Source	Official CISA KEV JSON/CSV feed
 Deployment	Static Nuxt site with a server route for fetching KEV data
 
-USE Nuxt ui 3/4 there is nuxtui-llms.txt and nuxtui-llms-full.txt (just look at chucks or grep because it is huge) for reference 
+USE Nuxt ui 3/4 there is nuxtui-llms-full.txt (just look at chucks or grep because it is huge) for reference 
 
 ⸻
 

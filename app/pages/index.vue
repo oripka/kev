@@ -111,13 +111,13 @@ const range = computed<Range>(() => resolveRange())
           <UPageGrid>
             <UCard v-for="card in summaryCards" :key="card.title">
               <template #header>
-                <UText size="sm" color="neutral">
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
                   {{ card.title }}
-                </UText>
+                </p>
               </template>
-              <UText size="3xl" weight="semibold">
+              <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50">
                 {{ card.value }}
-              </UText>
+              </p>
             </UCard>
           </UPageGrid>
         </template>
@@ -127,24 +127,24 @@ const range = computed<Range>(() => resolveRange())
         <UCard>
           <template #header>
             <div>
-              <UText size="lg" weight="semibold">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                 Activity trend
-              </UText>
+              </p>
             </div>
           </template>
 
           <template #default>
             <div class="space-y-4">
-              <UFormGroup label="Period">
+              <UFormField label="Period">
                 <USelectMenu v-model="period" :options="[
                   { label: 'Daily', value: 'daily' },
                   { label: 'Weekly', value: 'weekly' },
                   { label: 'Monthly', value: 'monthly' }
                 ]" />
-              </UFormGroup>
-              <UFormGroup label="Range">
+              </UFormField>
+              <UFormField label="Range">
                 <USelectMenu v-model="rangePreset" :options="rangeOptions" />
-              </UFormGroup>
+              </UFormField>
               <KevTimelineCard :entries="entries" :period="period" :range="range" />
             </div>
           </template>

@@ -103,7 +103,13 @@ watch(
         continue
       }
 
-      buckets[index].amount += 1
+      const target = buckets[index]
+
+      if (!target) {
+        continue
+      }
+
+      target.amount += 1
     }
 
     data.value = buckets
@@ -143,12 +149,12 @@ const template = (datum: DataRecord) => `${formatDate(datum.date)}: ${formatNumb
   <UCard ref="cardRef" :ui="{ root: 'overflow-visible', body: '!px-0 !pt-0 !pb-3' }">
     <template #header>
       <div>
-        <UText size="xs" color="neutral">
+        <p class="text-xs text-neutral-500 dark:text-neutral-400">
           Activity in range
-        </UText>
-        <UText size="3xl" weight="semibold">
+        </p>
+        <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50">
           {{ formatNumber(total) }}
-        </UText>
+        </p>
       </div>
     </template>
 
