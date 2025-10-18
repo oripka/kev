@@ -133,7 +133,7 @@ const fetchChunk = async (ids: string[], attempt = 0): Promise<NvdVulnerability[
     params.append('cveId', id)
   }
 
-  params.set('noRejected', 'true')
+  params.append('noRejected', '')
 
   const url = `${NVD_API_URL}?${params.toString()}`
 

@@ -646,7 +646,7 @@ const columns: TableColumn<KevEntry>[] = [
 
 
     <UPageBody>
-      <div class="grid grid-cols-1 gap-3 max-w-7xl mx-auto">
+      <div class="grid grid-cols-1 gap-3 w-full px-8 mx-auto">
         <UCard>
           <div
             class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
