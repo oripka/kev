@@ -3,6 +3,7 @@ import { parseISO } from 'date-fns'
 import type {
   KevDomainCategory,
   KevEntry,
+  KevExploitLayer,
   KevResponse,
   KevVulnerabilityCategory
 } from '~/types'
@@ -47,6 +48,7 @@ const createDefaultFilters = (): KevFilterState => ({
   vendor: null,
   product: null,
   category: null,
+  exploitLayer: null,
   vulnerabilityType: null,
   ransomwareOnly: false,
   startDate: null,
@@ -88,6 +90,9 @@ export const useKevData = () => {
   const domainCategories = computed(() =>
     aggregateCounts(entries.value, entry => entry.domainCategories as KevDomainCategory[])
   )
+  const exploitLayers = computed(() =>
+    aggregateCounts(entries.value, entry => entry.exploitLayers as KevExploitLayer[])
+  )
   const vulnerabilityCategories = computed(() =>
     aggregateCounts(entries.value, entry => entry.vulnerabilityCategories as KevVulnerabilityCategory[])
   )
@@ -107,6 +112,16 @@ export const useKevData = () => {
     for (const entry of entries.value) {
       for (const category of entry.domainCategories) {
         names.add(category)
+      }
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  })
+
+  const exploitLayerNames = computed(() => {
+    const names = new Set<string>()
+    for (const entry of entries.value) {
+      for (const layer of entry.exploitLayers) {
+        names.add(layer)
       }
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b))
@@ -139,6 +154,13 @@ export const useKevData = () => {
       if (
         filters.category &&
         !entry.domainCategories.includes(filters.category as KevDomainCategory)
+      ) {
+        return false
+      }
+
+      if (
+        filters.exploitLayer &&
+        !entry.exploitLayers.includes(filters.exploitLayer as KevExploitLayer)
       ) {
         return false
       }
@@ -201,6 +223,9 @@ export const useKevData = () => {
   const filteredDomainCategories = computed(() =>
     aggregateCounts(filteredEntries.value, entry => entry.domainCategories as KevDomainCategory[])
   )
+  const filteredExploitLayers = computed(() =>
+    aggregateCounts(filteredEntries.value, entry => entry.exploitLayers as KevExploitLayer[])
+  )
   const filteredVulnerabilityCategories = computed(() =>
     aggregateCounts(
       filteredEntries.value,
@@ -228,6 +253,7 @@ export const useKevData = () => {
       'Date Added',
       'Ransomware Use',
       'Domain Categories',
+      'Exploit Layers',
       'Vulnerability Categories',
       'Description',
       'Required Action',
@@ -244,6 +270,7 @@ export const useKevData = () => {
         toCsvValue(entry.dateAdded),
         toCsvValue(entry.ransomwareUse ?? ''),
         toCsvValue(entry.domainCategories),
+        toCsvValue(entry.exploitLayers),
         toCsvValue(entry.vulnerabilityCategories),
         toCsvValue(entry.description),
         toCsvValue(entry.requiredAction),
@@ -267,12 +294,15 @@ export const useKevData = () => {
     vendors,
     products,
     domainCategories,
+    exploitLayers,
     vulnerabilityCategories,
     filteredDomainCategories,
+    filteredExploitLayers,
     filteredVulnerabilityCategories,
     vendorNames,
     productNames,
     categoryNames,
+    exploitLayerNames,
     vulnerabilityTypeNames,
     vendorTotal,
     productTotal,

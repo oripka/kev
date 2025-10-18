@@ -1,10 +1,14 @@
 import type {
   KevDomainCategory,
   KevEntry,
+  KevExploitLayer,
   KevVulnerabilityCategory
 } from '~/types'
 
-export type KevBaseEntry = Omit<KevEntry, 'domainCategories' | 'vulnerabilityCategories'>
+export type KevBaseEntry = Omit<
+  KevEntry,
+  'domainCategories' | 'exploitLayers' | 'vulnerabilityCategories'
+>
 
 const domainRules: Array<{
   category: KevDomainCategory
@@ -267,6 +271,44 @@ const nonWebContextPatterns: RegExp[] = [
   /(command line interface|\bcli\b)/i
 ]
 
+const privilegePatterns: RegExp[] = [
+  /(privilege escalation|elevation of privilege|gain[s]? (?:administrative|root|privileges?)|eop)/i
+]
+
+const rcePatterns: RegExp[] = [/(remote code execution|code execution|rce|arbitrary code)/i]
+
+const memoryCorruptionPatterns: RegExp[] = [
+  /(memory corruption|buffer overflow|heap overflow|stack overflow|out-of-bounds|use-after-free|dangling pointer|double free|overflow)/i
+]
+
+const clientSignalPatterns: RegExp[] = [
+  /(client[- ]?side)/i,
+  /(browser|chrome|firefox|edge|safari|webkit)/i,
+  /(desktop|workstation|endpoint|reader|viewer|player)/i,
+  /(local user|user interaction)/i
+]
+
+const serverSignalPatterns: RegExp[] = [
+  /(server|service|daemon|appliance|controller)/i,
+  /(web[- ]?based management|management server|management interface)/i,
+  /(remote service|http service|network service)/i,
+  /(gateway|vpn|firewall|router|switch)/i
+]
+
+const clientDomainHints: ReadonlySet<KevDomainCategory> = new Set(['Browsers'])
+
+const serverDomainHints: ReadonlySet<KevDomainCategory> = new Set([
+  'Web Applications',
+  'Web Servers',
+  'Mail Servers',
+  'Networking & VPN',
+  'Industrial Control Systems',
+  'Cloud & SaaS',
+  'Virtualization & Containers',
+  'Database & Storage',
+  'Security Appliances'
+])
+
 const vulnerabilityRules: Array<{
   category: KevVulnerabilityCategory
   patterns: RegExp[]
@@ -292,16 +334,12 @@ const vulnerabilityRules: Array<{
     patterns: [/(directory traversal|path traversal|dot-dot)/i]
   },
   {
-    category: 'Privilege Escalation',
-    patterns: [/(privilege escalation|elevation of privilege|gain[s]? administrative|gain[s]? root|eop)/i]
-  },
-  {
     category: 'Memory Corruption',
-    patterns: [/(memory corruption|buffer overflow|heap overflow|stack overflow|out-of-bounds|use-after-free|dangling pointer|double free|overflow)/i]
+    patterns: memoryCorruptionPatterns
   },
   {
     category: 'Remote Code Execution',
-    patterns: [/(remote code execution|code execution|rce|arbitrary code)/i]
+    patterns: rcePatterns
   },
   {
     category: 'Authentication Bypass',
@@ -431,6 +469,74 @@ export const classifyDomainCategories = (entry: {
   return Array.from(categories)
 }
 
+export const classifyExploitLayers = (
+  entry: {
+    vulnerabilityName: string
+    description: string
+  },
+  domainCategories: KevDomainCategory[]
+): KevExploitLayer[] => {
+  const text = normalise(`${entry.vulnerabilityName} ${entry.description}`)
+  const layers = new Set<KevExploitLayer>()
+
+  if (privilegePatterns.some(pattern => pattern.test(text))) {
+    layers.add('Privilege Escalation')
+  }
+
+  if (!rcePatterns.some(pattern => pattern.test(text))) {
+    return Array.from(layers)
+  }
+
+  const hasMemoryCorruption = memoryCorruptionPatterns.some(pattern => pattern.test(text))
+  const hasClientSignal = clientSignalPatterns.some(pattern => pattern.test(text))
+  const hasServerSignal = serverSignalPatterns.some(pattern => pattern.test(text))
+
+  const domainSuggestsClient = domainCategories.some(category =>
+    clientDomainHints.has(category)
+  )
+  const domainSuggestsServer = domainCategories.some(category =>
+    serverDomainHints.has(category)
+  )
+
+  let side: 'Client-side' | 'Server-side'
+
+  if (hasClientSignal && !hasServerSignal) {
+    side = 'Client-side'
+  } else if (hasServerSignal && !hasClientSignal) {
+    side = 'Server-side'
+  } else if (domainSuggestsClient && !domainSuggestsServer) {
+    side = 'Client-side'
+  } else if (domainSuggestsServer && !domainSuggestsClient) {
+    side = 'Server-side'
+  } else if (domainSuggestsClient) {
+    side = 'Client-side'
+  } else {
+    side = 'Server-side'
+  }
+
+  const labelMap: Record<
+    'Client-side' | 'Server-side',
+    { memory: KevExploitLayer; nonMemory: KevExploitLayer }
+  > = {
+    'Client-side': {
+      memory: 'RCE · Client-side Memory Corruption',
+      nonMemory: 'RCE · Client-side Non-memory'
+    },
+    'Server-side': {
+      memory: 'RCE · Server-side Memory Corruption',
+      nonMemory: 'RCE · Server-side Non-memory'
+    }
+  }
+
+  const label = hasMemoryCorruption
+    ? labelMap[side].memory
+    : labelMap[side].nonMemory
+
+  layers.add(label)
+
+  return Array.from(layers)
+}
+
 export const classifyVulnerabilityCategories = (entry: {
   vulnerabilityName: string
   description: string
@@ -443,11 +549,13 @@ export const classifyVulnerabilityCategories = (entry: {
 
 export const enrichEntry = (entry: KevBaseEntry): KevEntry => {
   const domainCategories = classifyDomainCategories(entry)
+  const exploitLayers = classifyExploitLayers(entry, domainCategories)
   const vulnerabilityCategories = classifyVulnerabilityCategories(entry)
 
   return {
     ...entry,
     domainCategories,
+    exploitLayers,
     vulnerabilityCategories
   }
 }

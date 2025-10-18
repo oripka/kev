@@ -3,6 +3,7 @@ export interface KevFilterState {
   vendor: string | null
   product: string | null
   category: string | null
+  exploitLayer: string | null
   vulnerabilityType: string | null
   ransomwareOnly: boolean
   startDate: string | null

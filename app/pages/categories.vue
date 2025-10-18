@@ -8,14 +8,14 @@ import type { KevEntry } from "~/types";
 const {
   entries,
   categoryNames,
+  exploitLayerNames,
   vulnerabilityTypeNames,
 } = useKevData();
 
-type SelectValue = SelectMenuItem<string> | string | null;
-
 const filters = reactive({
-  domain: null as SelectValue,
-  vulnerability: null as SelectValue,
+  domain: null as string | null,
+  exploit: null as string | null,
+  vulnerability: null as string | null,
   text: "",
 });
 
@@ -29,14 +29,12 @@ const toSelectItems = (
   }));
 
   const seen = new Set(counts.map((item) => item.name));
+  const zeroItems = names
+    .filter((name) => !seen.has(name))
+    .map((name) => ({ label: `${name} (0)`, value: name }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
-  for (const name of names) {
-    if (!seen.has(name)) {
-      formatted.push({ label: name, value: name });
-    }
-  }
-
-  return formatted;
+  return [...formatted, ...zeroItems];
 };
 
 const computeCounts = (
@@ -84,28 +82,26 @@ watch(showDetails, (value) => {
   }
 });
 
-const resolveSelectedValue = (value: SelectValue) => {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
-  return value.value ?? value.label ?? null;
-};
-
 const results = computed(() => {
   const term = filters.text.trim().toLowerCase();
-  const domain = resolveSelectedValue(filters.domain);
-  const vulnerability = resolveSelectedValue(filters.vulnerability);
+  const domain = filters.domain;
+  const exploit = filters.exploit;
+  const vulnerability = filters.vulnerability;
 
   return entries.value.filter((entry) => {
     if (
       domain &&
       !entry.domainCategories.includes(
         domain as (typeof entry.domainCategories)[number]
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      exploit &&
+      !entry.exploitLayers.includes(
+        exploit as (typeof entry.exploitLayers)[number]
       )
     ) {
       return false;
@@ -140,6 +136,14 @@ const domainItems = computed(() =>
   toSelectItems(domainCounts.value, categoryNames.value)
 );
 
+const exploitLayerCounts = computed(() =>
+  computeCounts(results.value, (entry) => entry.exploitLayers)
+);
+
+const exploitLayerItems = computed(() =>
+  toSelectItems(exploitLayerCounts.value, exploitLayerNames.value)
+);
+
 const vulnerabilityCounts = computed(() =>
   computeCounts(results.value, (entry) => entry.vulnerabilityCategories)
 );
@@ -147,6 +151,70 @@ const vulnerabilityCounts = computed(() =>
 const vulnerabilityItems = computed(() =>
   toSelectItems(vulnerabilityCounts.value, vulnerabilityTypeNames.value)
 );
+
+type ProgressDatum = {
+  name: string;
+  count: number;
+  percent: number;
+  percentLabel: string;
+};
+
+const MAX_PROGRESS_ITEMS = 8;
+const percentFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+});
+
+const toProgressStats = (
+  counts: { name: string; count: number }[]
+): ProgressDatum[] => {
+  if (!counts.length) {
+    return [];
+  }
+
+  const total = counts.reduce((sum, item) => sum + item.count, 0);
+  if (!total) {
+    return [];
+  }
+
+  return counts.slice(0, MAX_PROGRESS_ITEMS).map((item) => {
+    const percent = (item.count / total) * 100;
+    return {
+      ...item,
+      percent,
+      percentLabel: percentFormatter.format(percent),
+    };
+  });
+};
+
+const domainStats = computed(() => toProgressStats(domainCounts.value));
+const exploitLayerStats = computed(() =>
+  toProgressStats(exploitLayerCounts.value)
+);
+const vulnerabilityStats = computed(() =>
+  toProgressStats(vulnerabilityCounts.value)
+);
+
+const domainProgressColor = (name: string) =>
+  filters.domain && name === filters.domain ? "secondary" : "primary";
+
+const exploitLayerProgressColor = (name: string) =>
+  filters.exploit && name === filters.exploit ? "error" : "warning";
+
+const domainTotalCount = computed(() =>
+  domainCounts.value.reduce((sum, item) => sum + item.count, 0)
+);
+
+const exploitLayerTotalCount = computed(() =>
+  exploitLayerCounts.value.reduce((sum, item) => sum + item.count, 0)
+);
+
+const vulnerabilityTotalCount = computed(() =>
+  vulnerabilityCounts.value.reduce((sum, item) => sum + item.count, 0)
+);
+
+const topDomainStat = computed(() => domainStats.value[0] ?? null);
+const topExploitLayerStat = computed(() => exploitLayerStats.value[0] ?? null);
+const topVulnerabilityStat = computed(() => vulnerabilityStats.value[0] ?? null);
 
 const columns: TableColumn<KevEntry>[] = [
   {
@@ -195,6 +263,18 @@ const columns: TableColumn<KevEntry>[] = [
       ),
   },
   {
+    id: "exploit",
+    header: "Exploit profile",
+    cell: ({ row }) =>
+      h(
+        "div",
+        { class: "flex flex-wrap gap-2" },
+        row.original.exploitLayers.map((layer) =>
+          h(UBadge, { color: "warning", variant: "soft" }, () => layer)
+        )
+      ),
+  },
+  {
     id: "type",
     header: "Type",
     cell: ({ row }) =>
@@ -230,7 +310,7 @@ const columns: TableColumn<KevEntry>[] = [
   <UPage>
     <UPageHeader
       title="Category explorer"
-      description="Combine domain and vulnerability categories to focus on what matters"
+      description="Combine domain, exploit, and vulnerability categories to focus on what matters"
     />
 
     <UPageBody>
@@ -250,6 +330,18 @@ const columns: TableColumn<KevEntry>[] = [
                 class="w-full"
                 v-model="filters.domain"
                 :items="domainItems"
+                value-key="value"
+                clearable
+                searchable
+              />
+            </UFormField>
+
+            <UFormField class="w-full" label="Exploit profile">
+              <USelectMenu
+                class="w-full"
+                v-model="filters.exploit"
+                :items="exploitLayerItems"
+                value-key="value"
                 clearable
                 searchable
               />
@@ -260,6 +352,7 @@ const columns: TableColumn<KevEntry>[] = [
                 class="w-full"
                 v-model="filters.vulnerability"
                 :items="vulnerabilityItems"
+                value-key="value"
                 clearable
                 searchable
               />
@@ -274,7 +367,7 @@ const columns: TableColumn<KevEntry>[] = [
             </UFormField>
 
             <div
-              v-if="filters.domain || filters.vulnerability || filters.text"
+              v-if="filters.domain || filters.exploit || filters.vulnerability || filters.text"
               class="md:col-span-2"
             >
               <UAlert
@@ -283,6 +376,216 @@ const columns: TableColumn<KevEntry>[] = [
                 icon="i-lucide-filters"
                 :title="`${results.length} matching vulnerabilities`"
               />
+            </div>
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <div class="flex flex-col gap-1">
+              <p
+                class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
+              >
+                Category insights
+              </p>
+              <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                Compare how the filtered vulnerabilities distribute across
+                domains and categories
+              </p>
+            </div>
+          </template>
+
+          <div class="grid gap-6 lg:grid-cols-3">
+            <div class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <p
+                    class="text-base font-semibold text-neutral-900 dark:text-neutral-50"
+                  >
+                    Domain coverage
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Share of vulnerabilities per domain grouping
+                  </p>
+                </div>
+                <UBadge color="primary" variant="soft">
+                  {{ domainTotalCount }}
+                </UBadge>
+              </div>
+
+              <div v-if="domainStats.length" class="space-y-4">
+                <div
+                  v-for="stat in domainStats"
+                  :key="stat.name"
+                  class="space-y-2"
+                >
+                  <div
+                    class="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span
+                      :class="[
+                        'font-medium truncate',
+                        filters.domain === stat.name
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-neutral-900 dark:text-neutral-50',
+                      ]"
+                    >
+                      {{ stat.name }}
+                    </span>
+                    <span
+                      class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap"
+                    >
+                      {{ stat.count }} · {{ stat.percentLabel }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    :model-value="stat.percent"
+                    :max="100"
+                    :color="domainProgressColor(stat.name)"
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                No domain category data for this filter.
+              </p>
+
+              <div
+                v-if="topDomainStat"
+                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <span>Top domain</span>
+                <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                  {{ topDomainStat.name }} ({{ topDomainStat.percentLabel }}%)
+                </span>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <p
+                    class="text-base font-semibold text-neutral-900 dark:text-neutral-50"
+                  >
+                    Exploit dynamics
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    How execution paths cluster for these CVEs
+                  </p>
+                </div>
+                <UBadge color="warning" variant="soft">
+                  {{ exploitLayerTotalCount }}
+                </UBadge>
+              </div>
+
+              <div v-if="exploitLayerStats.length" class="space-y-4">
+                <div
+                  v-for="stat in exploitLayerStats"
+                  :key="stat.name"
+                  class="space-y-2"
+                >
+                  <div
+                    class="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span
+                      :class="[
+                        'font-medium truncate',
+                        filters.exploit === stat.name
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-neutral-900 dark:text-neutral-50',
+                      ]"
+                    >
+                      {{ stat.name }}
+                    </span>
+                    <span
+                      class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap"
+                    >
+                      {{ stat.count }} · {{ stat.percentLabel }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    :model-value="stat.percent"
+                    :max="100"
+                    :color="exploitLayerProgressColor(stat.name)"
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                No exploit profile data for this filter.
+              </p>
+
+              <div
+                v-if="topExploitLayerStat"
+                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <span>Top profile</span>
+                <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                  {{ topExploitLayerStat.name }}
+                  ({{ topExploitLayerStat.percentLabel }}%)
+                </span>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <p
+                    class="text-base font-semibold text-neutral-900 dark:text-neutral-50"
+                  >
+                    Vulnerability mix
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Breakdown of vulnerability categories in view
+                  </p>
+                </div>
+                <UBadge color="violet" variant="soft">
+                  {{ vulnerabilityTotalCount }}
+                </UBadge>
+              </div>
+
+              <div v-if="vulnerabilityStats.length" class="space-y-4">
+                <div
+                  v-for="stat in vulnerabilityStats"
+                  :key="stat.name"
+                  class="space-y-2"
+                >
+                  <div
+                    class="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span
+                      class="font-medium text-neutral-900 dark:text-neutral-50 truncate"
+                    >
+                      {{ stat.name }}
+                    </span>
+                    <span
+                      class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap"
+                    >
+                      {{ stat.count }} · {{ stat.percentLabel }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    :model-value="stat.percent"
+                    :max="100"
+                    color="error"
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                No vulnerability category data for this filter.
+              </p>
+
+              <div
+                v-if="topVulnerabilityStat"
+                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <span>Top category</span>
+                <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                  {{ topVulnerabilityStat.name }}
+                  ({{ topVulnerabilityStat.percentLabel }}%)
+                </span>
+              </div>
             </div>
           </div>
         </UCard>
@@ -384,7 +687,7 @@ const columns: TableColumn<KevEntry>[] = [
                   </p>
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-2">
+                <div class="grid gap-3 sm:grid-cols-3">
                   <div class="space-y-2">
                     <p
                       class="text-sm font-medium text-neutral-500 dark:text-neutral-400"
@@ -399,6 +702,23 @@ const columns: TableColumn<KevEntry>[] = [
                         variant="soft"
                       >
                         {{ category }}
+                      </UBadge>
+                    </div>
+                  </div>
+                  <div class="space-y-2">
+                    <p
+                      class="text-sm font-medium text-neutral-500 dark:text-neutral-400"
+                    >
+                      Exploit profiles
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                      <UBadge
+                        v-for="layer in detailEntry.exploitLayers"
+                        :key="layer"
+                        color="warning"
+                        variant="soft"
+                      >
+                        {{ layer }}
                       </UBadge>
                     </div>
                   </div>

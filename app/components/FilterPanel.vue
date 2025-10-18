@@ -6,6 +6,7 @@ const props = defineProps<{
   vendors: string[]
   products: string[]
   categories: string[]
+  exploitLayers: string[]
   vulnerabilityTypes: string[]
 }>()
 
@@ -29,6 +30,7 @@ const coerceNullableString = (value: unknown) => {
 const setVendor = (value: unknown) => update({ vendor: coerceNullableString(value) })
 const setProduct = (value: unknown) => update({ product: coerceNullableString(value) })
 const setCategory = (value: unknown) => update({ category: coerceNullableString(value) })
+const setExploitLayer = (value: unknown) => update({ exploitLayer: coerceNullableString(value) })
 const setVulnerabilityType = (value: unknown) => update({ vulnerabilityType: coerceNullableString(value) })
 const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomwareOnly: value === true })
 </script>
@@ -71,6 +73,15 @@ const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomw
             :options="props.categories"
             placeholder="All categories"
             @update:model-value="setCategory"
+            clearable
+          />
+        </UFormField>
+        <UFormField label="Exploit profile">
+          <USelect
+            :model-value="props.filters.exploitLayer"
+            :options="props.exploitLayers"
+            placeholder="All profiles"
+            @update:model-value="setExploitLayer"
             clearable
           />
         </UFormField>

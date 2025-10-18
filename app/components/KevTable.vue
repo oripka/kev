@@ -36,14 +36,19 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
     header: 'Product'
   },
   {
-    id: 'vulnerabilityCategories',
-    header: 'Vulnerability',
-    cell: ({ row }) => row.original.vulnerabilityCategories.join(', ') || '—'
-  },
-  {
     id: 'domainCategories',
     header: 'Domain',
     cell: ({ row }) => row.original.domainCategories.join(', ') || '—'
+  },
+  {
+    id: 'exploitLayers',
+    header: 'Exploit profile',
+    cell: ({ row }) => row.original.exploitLayers.join(', ') || '—'
+  },
+  {
+    id: 'vulnerabilityCategories',
+    header: 'Vulnerability',
+    cell: ({ row }) => row.original.vulnerabilityCategories.join(', ') || '—'
   },
   {
     accessorKey: 'dateAdded',

@@ -20,10 +20,16 @@ export type KevDomainCategory =
   | 'Security Appliances'
   | 'Other'
 
+export type KevExploitLayer =
+  | 'RCE · Client-side Memory Corruption'
+  | 'RCE · Server-side Memory Corruption'
+  | 'RCE · Client-side Non-memory'
+  | 'RCE · Server-side Non-memory'
+  | 'Privilege Escalation'
+
 export type KevVulnerabilityCategory =
   | 'Remote Code Execution'
   | 'Memory Corruption'
-  | 'Privilege Escalation'
   | 'Command Injection'
   | 'Authentication Bypass'
   | 'Information Disclosure'
@@ -48,6 +54,7 @@ export type KevEntry = {
   notes: string[]
   cwes: string[]
   domainCategories: KevDomainCategory[]
+  exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
 }
 

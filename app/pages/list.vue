@@ -5,10 +5,15 @@ import { useKevData } from '~/composables/useKevData'
 import type { CountDatum } from '~/composables/useKevData'
 
 const kev = useKevData()
+type ProgressDatum = CountDatum & {
+  percent: number
+  percentLabel: string
+}
+
 const MAX_PROGRESS_ITEMS = 6
 const percentFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
 
-const toProgressItems = (items: CountDatum[]) => {
+const toProgressItems = (items: CountDatum[]): ProgressDatum[] => {
   if (!items.length) {
     return []
   }
@@ -29,15 +34,25 @@ const toProgressItems = (items: CountDatum[]) => {
 }
 
 const domainStats = computed(() => toProgressItems(kev.filteredDomainCategories.value))
+const exploitLayerStats = computed(() => toProgressItems(kev.filteredExploitLayers.value))
 const categoryStats = computed(() => toProgressItems(kev.filteredVulnerabilityCategories.value))
 const domainTotalCount = computed(() =>
   kev.filteredDomainCategories.value.reduce((sum, item) => sum + item.count, 0)
 )
+const exploitLayerTotalCount = computed(() =>
+  kev.filteredExploitLayers.value.reduce((sum, item) => sum + item.count, 0)
+)
 const categoryTotalCount = computed(() =>
   kev.filteredVulnerabilityCategories.value.reduce((sum, item) => sum + item.count, 0)
 )
+const topDomainStat = computed(() => domainStats.value[0] ?? null)
+const topExploitLayerStat = computed(() => exploitLayerStats.value[0] ?? null)
+const topCategoryStat = computed(() => categoryStats.value[0] ?? null)
 const hasProgressStats = computed(
-  () => domainStats.value.length > 0 || categoryStats.value.length > 0
+  () =>
+    domainStats.value.length > 0 ||
+    exploitLayerStats.value.length > 0 ||
+    categoryStats.value.length > 0
 )
 
 function updateFilters(value: KevFilterState) {
@@ -78,6 +93,7 @@ function exportCsv() {
           :vendors="kev.vendorNames.value"
           :products="kev.productNames.value"
           :categories="kev.categoryNames.value"
+          :exploit-layers="kev.exploitLayerNames.value"
           :vulnerability-types="kev.vulnerabilityTypeNames.value"
           @update:filters="updateFilters"
           @reset="resetFilters"
@@ -85,7 +101,7 @@ function exportCsv() {
       </UPageSection>
 
       <UPageSection v-if="hasProgressStats">
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="grid gap-4 lg:grid-cols-3">
           <UCard>
             <template #header>
               <div class="flex items-center justify-between gap-3">
@@ -101,10 +117,10 @@ function exportCsv() {
                   {{ domainTotalCount }}
                 </UBadge>
               </div>
-            </template>
+          </template>
 
-            <template #default>
-              <div v-if="domainStats.length" class="space-y-4">
+          <template #default>
+            <div v-if="domainStats.length" class="space-y-4">
                 <div
                   v-for="stat in domainStats"
                   :key="stat.name"
@@ -125,6 +141,70 @@ function exportCsv() {
                 No domain category data for this filter.
               </p>
             </template>
+            <template #footer>
+              <div
+                v-if="topDomainStat"
+                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <span>Top domain</span>
+                <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                  {{ topDomainStat.name }} ({{ topDomainStat.percentLabel }}%)
+                </span>
+              </div>
+            </template>
+          </UCard>
+
+          <UCard>
+            <template #header>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                    Exploit profiles
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Context for how code execution happens
+                  </p>
+                </div>
+                <UBadge color="warning" variant="soft">
+                  {{ exploitLayerTotalCount }}
+                </UBadge>
+              </div>
+            </template>
+
+            <template #default>
+              <div v-if="exploitLayerStats.length" class="space-y-4">
+                <div
+                  v-for="stat in exploitLayerStats"
+                  :key="stat.name"
+                  class="space-y-2"
+                >
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="font-medium text-neutral-900 dark:text-neutral-50 truncate">
+                      {{ stat.name }}
+                    </span>
+                    <span class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                      {{ stat.count }} · {{ stat.percentLabel }}%
+                    </span>
+                  </div>
+                  <UProgress :model-value="stat.percent" color="warning" size="sm" />
+                </div>
+              </div>
+              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                No exploit profile data for this filter.
+              </p>
+            </template>
+
+            <template #footer>
+              <div
+                v-if="topExploitLayerStat"
+                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <span>Top profile</span>
+                <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                  {{ topExploitLayerStat.name }} ({{ topExploitLayerStat.percentLabel }}%)
+                </span>
+              </div>
+            </template>
           </UCard>
 
           <UCard>
@@ -142,10 +222,10 @@ function exportCsv() {
                   {{ categoryTotalCount }}
                 </UBadge>
               </div>
-            </template>
+          </template>
 
-            <template #default>
-              <div v-if="categoryStats.length" class="space-y-4">
+          <template #default>
+            <div v-if="categoryStats.length" class="space-y-4">
                 <div
                   v-for="stat in categoryStats"
                   :key="stat.name"
@@ -165,6 +245,17 @@ function exportCsv() {
               <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
                 No vulnerability category data for this filter.
               </p>
+            </template>
+            <template #footer>
+              <div
+                v-if="topCategoryStat"
+                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <span>Top category</span>
+                <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                  {{ topCategoryStat.name }} ({{ topCategoryStat.percentLabel }}%)
+                </span>
+              </div>
             </template>
           </UCard>
         </div>
