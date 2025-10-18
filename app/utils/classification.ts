@@ -288,6 +288,36 @@ const clientSignalPatterns: RegExp[] = [
   /(local user|user interaction)/i
 ]
 
+const clientApplicationPatterns: RegExp[] = [
+  /(microsoft (?:office|word|excel|powerpoint|outlook|project|visio))/i,
+  /(office (?:document|file))/i,
+  /(mshtml|msdt|mshta|jscript|vbscript|activex|ole)/i,
+  /(smart[- ]?screen|mark of the web|motw)/i,
+  /(adobe (?:reader|acrobat))/i,
+  /(winrar|7-zip|7zip|archive manager)/i,
+  /(media (?:center|player)|windows media)/i,
+  /(truetype|opentype|font (?:library|parsing|engine))/i
+]
+
+const clientFileInteractionPatterns: RegExp[] = [
+  /(specially crafted|malicious)[\s\S]{0,80}(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation)/i,
+  /(open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|process(?:ing)?|pars(?:e|ing))[\s\S]{0,80}(?:document|file|attachment|email|message|image|font|media|archive|content)/i,
+  /(delivered (?:via|through) email)/i,
+  /(when (?:viewing|opening|loading))[\s\S]{0,80}\.(?:docx|doc|rtf|xls|xlsx|ppt|pptx|pdf|eml|msg|zip|rar|iso)/i
+]
+
+const clientUserInteractionPatterns: RegExp[] = [
+  /(email attachment)/i,
+  /(phishing (?:email|message))/i,
+  /(social engineering)/i,
+  /(requires user interaction|user must (?:open|click|interact))/i
+]
+
+const clientLocalExecutionPatterns: RegExp[] = [
+  /(local attacker|locally authenticated|local user)/i,
+  /(execute code in (?:kernel|user) mode)/i
+]
+
 const serverSignalPatterns: RegExp[] = [
   /(server|service|daemon|appliance|controller)/i,
   /(web[- ]?based management|management server|management interface)/i,
@@ -488,7 +518,11 @@ export const classifyExploitLayers = (
   }
 
   const hasMemoryCorruption = memoryCorruptionPatterns.some(pattern => pattern.test(text))
-  const hasClientSignal = clientSignalPatterns.some(pattern => pattern.test(text))
+  const hasClientSignal = matchesAny(text, clientSignalPatterns)
+  const hasClientApplicationSignal = matchesAny(text, clientApplicationPatterns)
+  const hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns)
+  const hasClientUserInteractionSignal = matchesAny(text, clientUserInteractionPatterns)
+  const hasClientLocalExecutionSignal = matchesAny(text, clientLocalExecutionPatterns)
   const hasServerSignal = serverSignalPatterns.some(pattern => pattern.test(text))
 
   const domainSuggestsClient = domainCategories.some(category =>
@@ -500,18 +534,32 @@ export const classifyExploitLayers = (
 
   let side: 'Client-side' | 'Server-side'
 
-  if (hasClientSignal && !hasServerSignal) {
+  const clientScore =
+    (hasClientSignal ? 2 : 0) +
+    (hasClientApplicationSignal ? 2 : 0) +
+    (hasClientFileSignal ? 2 : 0) +
+    (hasClientUserInteractionSignal ? 1 : 0) +
+    (hasClientLocalExecutionSignal ? 1 : 0) +
+    (domainSuggestsClient ? 1 : 0)
+  const serverScore =
+    (hasServerSignal ? 2 : 0) + (domainSuggestsServer ? 1 : 0)
+
+  if (clientScore > serverScore) {
     side = 'Client-side'
-  } else if (hasServerSignal && !hasClientSignal) {
+  } else if (serverScore > clientScore) {
     side = 'Server-side'
-  } else if (domainSuggestsClient && !domainSuggestsServer) {
+  } else if (hasClientFileSignal || hasClientApplicationSignal) {
     side = 'Client-side'
   } else if (domainSuggestsServer && !domainSuggestsClient) {
     side = 'Server-side'
-  } else if (domainSuggestsClient) {
+  } else if (domainSuggestsClient && !domainSuggestsServer) {
+    side = 'Client-side'
+  } else if (hasServerSignal && !hasClientSignal) {
+    side = 'Server-side'
+  } else if (hasClientSignal && !hasServerSignal) {
     side = 'Client-side'
   } else {
-    side = 'Server-side'
+    side = 'Client-side'
   }
 
   const labelMap: Record<
