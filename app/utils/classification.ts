@@ -28,7 +28,21 @@ const domainRules: Array<{
   },
   {
     category: 'Web Applications',
-    patterns: [/(wordpress|drupal|joomla|magento|confluence|jira|sharepoint|portal|cms|web application|http server|apache tomcat|nginx|iis|owa|webmail|web server)/i]
+    patterns: [
+      /(wordpress|drupal|joomla|magento|confluence|jira|sharepoint|portal|cms|web application|owa|webmail|jenkins|phpmailer|whatsup gold|commvault|command center|manageengine|grafana|kibana|splunk|tableau|apache (?:struts|ofbiz)|weblogic|wildfly|liferay|alfresco|sap (?:netweaver|portal)|cacti|zabbix|nagios)/i
+    ]
+  },
+  {
+    category: 'Web Servers',
+    patterns: [
+      /(apache (?:http server|httpd))/i,
+      /(nginx)/i,
+      /(internet information services|microsoft iis|iis)/i,
+      /(apache tomcat|tomcat|catalina)/i,
+      /(jetty)/i,
+      /(lighttpd)/i,
+      /(caddy|openresty)/i
+    ]
   },
   {
     category: 'Operating Systems',
@@ -50,6 +64,84 @@ const domainRules: Array<{
     category: 'Database & Storage',
     patterns: [/(database|sql server|mysql|postgres|oracle|mongodb|db2|couchbase|sap hana|storage|nas|netapp|iscsi)/i]
   }
+]
+
+const matchesAny = (value: string, patterns: RegExp[]) =>
+  patterns.some(pattern => pattern.test(value))
+
+const webProductPatterns: RegExp[] = [
+  /(jenkins)/i,
+  /(phpmailer)/i,
+  /(apache (?:struts|ofbiz|roller|felix))/i,
+  /(weblogic|websphere|glassfish|wildfly|jboss)/i,
+  /(wordpress|drupal|joomla|magento|opencart|prestashop|woocommerce)/i,
+  /(confluence|jira|bitbucket|crowd|bamboo)/i,
+  /(sharepoint|liferay|alfresco|sitecore|strapi)/i,
+  /(manageengine|servicedesk|adselfservice|opmanager|desktop central)/i,
+  /(grafana|kibana|splunk|tableau|superset)/i,
+  /(sap (?:portal|netweaver|commerce|hybris))/i,
+  /(progress.*whatsup gold|whatsup gold)/i,
+  /(commvault.*command center|command center)/i,
+  /(zimbra|roundcube|webmail|owa|outlook web)/i,
+  /(phpmyadmin|cacti|zabbix|nagios|pfsense)/i,
+  /(gitlab|gitbucket|gitea|bitbucket)/i,
+  /(ip camera|nvr|dvr|webcam)/i
+]
+
+const webServerPatterns: RegExp[] = [
+  /(apache (?:http server|httpd))/i,
+  /(nginx)/i,
+  /(internet information services|microsoft iis|iis)/i,
+  /(apache tomcat|tomcat|catalina)/i,
+  /(jetty)/i,
+  /(lighttpd)/i,
+  /(caddy|openresty)/i
+]
+
+const webDevicePatterns: RegExp[] = [/(ip camera|nvr|dvr|webcam|nas)/i]
+
+const webNegativePatterns: RegExp[] = [
+  /(internet explorer)/i,
+  /(google chrome)/i,
+  /(mozilla firefox)/i,
+  /(microsoft edge)/i,
+  /(safari)/i,
+  /(brave)/i,
+  /(opera)/i,
+  /(vivaldi)/i,
+  /\bbrowser\b/i
+]
+
+const webIndicatorPatterns: RegExp[] = [
+  /(cross[- ]?site scripting|xss)/i,
+  /(server[- ]?side request forgery|ssrf)/i,
+  /(sql injection|sqli)/i,
+  /(directory traversal|path traversal)/i,
+  /(remote file inclusion|rfi)/i,
+  /(open redirect|url redirect)/i,
+  /(arbitrary (?:file|code) upload|file upload|file download)/i,
+  /(command injection|os command)/i,
+  /(template injection|twig|freemarker)/i
+]
+
+const webStrongContextPatterns: RegExp[] = [
+  /(web (?:interface|console|ui|portal|application|service|dashboard|admin|client))/i,
+  /(browser[- ]?based|web[- ]?based)/i,
+  /https?:\/\//i,
+  /\bhttp\b[^.]*\b(request|response|endpoint|header|parameter|query)\b/i,
+  /(rest api|graphql|soap api|json-rpc)/i,
+  /(csrf|cross[- ]?site request forgery)/i,
+  /(deserialization|serialized object)/i,
+  /(crafted (?:http )?requests?)/i,
+  /(cgi|servlet)/i
+]
+
+const webDeviceContextPatterns: RegExp[] = [
+  /(web interface|web management|web console|browser)/i,
+  /https?:\/\//i,
+  /(crafted requests?)/i,
+  /\bhttp\b/i,
+  /(cgi)/i
 ]
 
 const vulnerabilityRules: Array<{
@@ -137,9 +229,43 @@ export const classifyDomainCategories = (entry: {
   const source = normalise(`${entry.vendor} ${entry.product}`)
   const context = normalise(`${entry.vulnerabilityName ?? ''} ${entry.description ?? ''}`)
   const text = `${source} ${context}`
-  const categories = matchCategory(text, domainRules, 'Other')
+  const categories = new Set(matchCategory(text, domainRules, 'Other'))
 
-  return categories
+  const isBrowser = categories.has('Browsers') || matchesAny(source, webNegativePatterns)
+  const isWebServer = categories.has('Web Servers') || matchesAny(source, webServerPatterns)
+  const isWebProduct = matchesAny(source, webProductPatterns)
+  const isWebDevice = matchesAny(source, webDevicePatterns)
+  const hasWebIndicators = matchesAny(context, webIndicatorPatterns)
+  const hasStrongWebSignal = matchesAny(context, webStrongContextPatterns)
+  const deviceHasWebSignal = isWebDevice && matchesAny(context, webDeviceContextPatterns)
+  const isMailServer = categories.has('Mail Servers')
+  const isNetworkDevice = categories.has('Networking & VPN')
+
+  const shouldTagWeb =
+    !isBrowser &&
+    !isWebServer &&
+    (isWebProduct ||
+      hasStrongWebSignal ||
+      deviceHasWebSignal ||
+      (hasWebIndicators && (isWebProduct || isWebDevice || isMailServer || isNetworkDevice)))
+
+  if (shouldTagWeb) {
+    categories.add('Web Applications')
+  }
+
+  if (categories.has('Web Applications')) {
+    categories.delete('Non-Web Applications')
+  } else if (categories.has('Web Servers')) {
+    categories.delete('Non-Web Applications')
+  } else {
+    categories.add('Non-Web Applications')
+  }
+
+  if (categories.size > 1 && categories.has('Other')) {
+    categories.delete('Other')
+  }
+
+  return Array.from(categories)
 }
 
 export const classifyVulnerabilityCategories = (entry: {

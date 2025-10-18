@@ -7,6 +7,8 @@ export type Range = {
 
 export type KevDomainCategory =
   | 'Web Applications'
+  | 'Web Servers'
+  | 'Non-Web Applications'
   | 'Mail Servers'
   | 'Browsers'
   | 'Operating Systems'
