@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS kev_entries (
   ransomware_use TEXT,
   notes TEXT,
   cwes TEXT,
+  cvss_score REAL,
+  cvss_vector TEXT,
+  cvss_version TEXT,
+  cvss_severity TEXT,
   domain_categories TEXT,
   exploit_layers TEXT,
   vulnerability_categories TEXT,
@@ -31,6 +35,16 @@ CREATE TABLE IF NOT EXISTS kev_metadata (
 `
 
 const DB_FILENAME = 'kev.sqlite'
+
+const ensureColumn = (db: SqliteDatabase, table: string, column: string, definition: string) => {
+  const columns = db
+    .prepare<{ name: string }>(`PRAGMA table_info(${table})`)
+    .all() as Array<{ name: string }>
+
+  if (!columns.some(existing => existing.name === column)) {
+    db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run()
+  }
+}
 
 export const getDatabase = () => {
   if (instance) {
@@ -48,6 +62,11 @@ export const getDatabase = () => {
   instance.pragma('journal_mode = WAL')
   instance.pragma('busy_timeout = 5000')
   instance.exec(MIGRATIONS)
+
+  ensureColumn(instance, 'kev_entries', 'cvss_score', 'REAL')
+  ensureColumn(instance, 'kev_entries', 'cvss_vector', 'TEXT')
+  ensureColumn(instance, 'kev_entries', 'cvss_version', 'TEXT')
+  ensureColumn(instance, 'kev_entries', 'cvss_severity', 'TEXT')
 
   return instance
 }

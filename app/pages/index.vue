@@ -108,6 +108,7 @@ const {
   importing,
   importError,
   lastImportSummary,
+  importProgress,
   getWellKnownCveName,
 } = useKevData(filterParams);
 
@@ -153,12 +154,98 @@ const importSummaryMessage = computed(() => {
   return `Imported ${importedCount} entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.`;
 });
 
+const importProgressPhase = computed(() => importProgress.value.phase);
+const importProgressPercent = computed(() => {
+  const { total, completed, phase } = importProgress.value;
+  if (phase === "complete") {
+    return 100;
+  }
+  if (total > 0) {
+    return Math.min(100, Math.round((completed / total) * 100));
+  }
+  if (phase === "preparing") {
+    return 10;
+  }
+  if (phase === "enriching") {
+    return 80;
+  }
+  if (phase === "saving") {
+    return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));
+  }
+  return 0;
+});
+
+const showImportProgress = computed(() => {
+  const phase = importProgressPhase.value;
+  if (phase === "idle") {
+    return importing.value;
+  }
+  if (phase === "complete") {
+    return false;
+  }
+  return true;
+});
+
+const importProgressMessage = computed(() => {
+  const { message, phase, error } = importProgress.value;
+  if (phase === "idle" && importing.value) {
+    return "Preparing KEV import…";
+  }
+  if (phase === "error" && error) {
+    return error;
+  }
+  if (message) {
+    return message;
+  }
+  return "Importing the latest KEV data…";
+});
+
+const hasProgressValue = computed(() => {
+  const percent = importProgressPercent.value;
+  return Number.isFinite(percent) && percent > 0 && percent <= 100;
+});
+
 const handleImport = async () => {
   await importLatest();
 };
 
 const UBadge = resolveComponent("UBadge");
 const UButton = resolveComponent("UButton");
+
+const cvssSeverityColors: Record<Exclude<KevEntry["cvssSeverity"], null>, string> = {
+  None: "success",
+  Low: "primary",
+  Medium: "warning",
+  High: "error",
+  Critical: "error",
+};
+
+const formatCvssScore = (score: number | null) =>
+  typeof score === "number" && Number.isFinite(score)
+    ? score.toFixed(1)
+    : null;
+
+const buildCvssLabel = (
+  severity: KevEntry["cvssSeverity"],
+  score: number | null
+) => {
+  const parts: string[] = [];
+
+  if (severity) {
+    parts.push(severity);
+  }
+
+  const formatted = formatCvssScore(score);
+  if (formatted) {
+    parts.push(formatted);
+  }
+
+  if (!parts.length) {
+    parts.push("Unknown");
+  }
+
+  return parts.join(" ");
+};
 
 const showDetails = ref(false);
 const detailEntry = ref<KevEntry | null>(null);
@@ -468,6 +555,37 @@ const columns: TableColumn<KevEntry>[] = [
     },
   },
   {
+    id: "cvss",
+    header: "CVSS",
+    cell: ({ row }) => {
+      const { cvssScore, cvssSeverity } = row.original;
+      const formattedScore = formatCvssScore(cvssScore);
+
+      if (!formattedScore && !cvssSeverity) {
+        return h(
+          "span",
+          { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+          "—"
+        );
+      }
+
+      const label = buildCvssLabel(cvssSeverity, cvssScore);
+      const color = cvssSeverity
+        ? cvssSeverityColors[cvssSeverity] ?? "neutral"
+        : "neutral";
+
+      return h(
+        UBadge,
+        {
+          color,
+          variant: "soft",
+          class: "font-semibold",
+        },
+        () => label
+      );
+    },
+  },
+  {
     id: "domain",
     header: "Domain",
     cell: ({ row }) =>
@@ -525,10 +643,7 @@ const columns: TableColumn<KevEntry>[] = [
 
 <template>
   <UPage>
-    <UPageHeader
-      title="Category explorer"
-      description="Combine domain, exploit, and vulnerability categories to focus on what matters"
-    />
+
 
     <UPageBody>
       <div class="grid grid-cols-1 gap-3 max-w-7xl mx-auto">
@@ -580,6 +695,35 @@ const columns: TableColumn<KevEntry>[] = [
                 title="Import failed"
                 :description="importError"
               />
+              <div
+                v-else-if="showImportProgress"
+                class="w-full space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                    Import status
+                  </span>
+                  <span
+                    v-if="hasProgressValue"
+                    class="tabular-nums text-neutral-600 dark:text-neutral-300"
+                  >
+                    {{ importProgressPercent }}%
+                  </span>
+                </div>
+                <UProgress
+                  v-if="hasProgressValue"
+                  :value="importProgressPercent"
+                  size="xs"
+                  :ui="{
+                    rounded: 'rounded-md',
+                    track: 'bg-neutral-200 dark:bg-neutral-800',
+                    indicator: 'bg-primary-500 dark:bg-primary-400'
+                  }"
+                />
+                <p class="text-[0.78rem] text-neutral-500 dark:text-neutral-400">
+                  {{ importProgressMessage }}
+                </p>
+              </div>
             </div>
           </div>
         </UCard>
@@ -1045,7 +1189,7 @@ const columns: TableColumn<KevEntry>[] = [
 
             <template #default>
               <div class="space-y-4">
-                <div class="grid gap-3 sm:grid-cols-2">
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
                     <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                       Vendor
@@ -1076,6 +1220,56 @@ const columns: TableColumn<KevEntry>[] = [
                     </p>
                     <p class="text-base text-neutral-900 dark:text-neutral-100">
                       {{ detailEntry.ransomwareUse || 'Not specified' }}
+                    </p>
+                  </div>
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                      CVSS
+                    </p>
+                    <div
+                      v-if="detailEntry.cvssScore !== null || detailEntry.cvssSeverity"
+                      class="flex items-center gap-2"
+                    >
+                      <UBadge
+                        :color="
+                          detailEntry.cvssSeverity
+                            ? cvssSeverityColors[detailEntry.cvssSeverity] ?? 'neutral'
+                            : 'neutral'
+                        "
+                        variant="soft"
+                        class="font-semibold"
+                      >
+                        {{
+                          buildCvssLabel(
+                            detailEntry.cvssSeverity,
+                            detailEntry.cvssScore
+                          )
+                        }}
+                      </UBadge>
+                      <span
+                        v-if="detailEntry.cvssVersion"
+                        class="text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        v{{ detailEntry.cvssVersion }}
+                      </span>
+                    </div>
+                    <p
+                      v-else
+                      class="text-base text-neutral-500 dark:text-neutral-400"
+                    >
+                      Not available
+                    </p>
+                    <p
+                      v-if="detailEntry.cvssVector"
+                      class="text-xs font-mono text-neutral-600 dark:text-neutral-300 break-all"
+                    >
+                      {{ detailEntry.cvssVector }}
+                    </p>
+                    <p
+                      v-else
+                      class="text-xs text-neutral-400 dark:text-neutral-500"
+                    >
+                      CVSS vector not available.
                     </p>
                   </div>
                 </div>

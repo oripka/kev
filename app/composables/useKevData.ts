@@ -1,5 +1,14 @@
-import { computed, ref, unref, type ComputedRef, type MaybeRef, type Ref } from 'vue'
-import type { KevCountDatum, KevEntry, KevResponse } from '~/types'
+import {
+  computed,
+  onScopeDispose,
+  ref,
+  unref,
+  watch,
+  type ComputedRef,
+  type MaybeRef,
+  type Ref
+} from 'vue'
+import type { ImportProgress, KevCountDatum, KevEntry, KevResponse } from '~/types'
 import { lookupCveName } from '~/utils/cveToNameMap'
 
 type KevQueryParams = Record<string, string | number | boolean | undefined>
@@ -31,6 +40,7 @@ type UseKevDataResult = {
   importing: Ref<boolean>
   importError: Ref<string | null>
   lastImportSummary: Ref<ImportSummary | null>
+  importProgress: Ref<ImportProgress>
   isWellKnownCve: (rawCve: string) => boolean
   getWellKnownCveName: (rawCve: string) => string | undefined
 }
@@ -86,12 +96,68 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   const importing = ref(false)
   const importError = ref<string | null>(null)
   const lastImportSummary = ref<ImportSummary | null>(null)
+  const defaultImportProgress = (): ImportProgress => ({
+    phase: 'idle',
+    completed: 0,
+    total: 0,
+    message: '',
+    startedAt: null,
+    updatedAt: null,
+    error: null
+  })
+  const importProgress = ref<ImportProgress>(defaultImportProgress())
+  const isClient = typeof window !== 'undefined'
+  let progressTimer: ReturnType<typeof setInterval> | null = null
+
+  const shouldPoll = (phase: ImportProgress['phase']) =>
+    phase === 'preparing' || phase === 'fetchingCvss' || phase === 'enriching' || phase === 'saving'
+
+  const stopProgressPolling = () => {
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = null
+    }
+  }
+
+  const refreshProgress = async () => {
+    try {
+      const latest = await $fetch<ImportProgress>('/api/import/progress', {
+        headers: {
+          'cache-control': 'no-store'
+        }
+      })
+      importProgress.value = latest
+
+      if (!shouldPoll(latest.phase)) {
+        stopProgressPolling()
+      }
+    } catch {
+      // Ignore polling errors to avoid interrupting the import flow.
+    }
+  }
+
+  const startProgressPolling = () => {
+    if (!isClient) {
+      return
+    }
+
+    if (!progressTimer) {
+      void refreshProgress()
+      progressTimer = setInterval(() => {
+        void refreshProgress()
+      }, 2_000)
+    }
+  }
 
   const importLatest = async () => {
     importing.value = true
     importError.value = null
 
     try {
+      if (isClient) {
+        startProgressPolling()
+      }
+
       const response = await $fetch<ImportSummary>('/api/fetchKev', {
         method: 'POST'
       })
@@ -106,6 +172,13 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
       return null
     } finally {
       importing.value = false
+      if (isClient) {
+        void refreshProgress().finally(() => {
+          if (!shouldPoll(importProgress.value.phase)) {
+            stopProgressPolling()
+          }
+        })
+      }
     }
   }
 
@@ -117,6 +190,22 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   const isWellKnownCve = (rawCve: string) => Boolean(lookupCveName(rawCve))
 
   const getWellKnownCveName = (rawCve: string) => lookupCveName(rawCve)
+
+  if (isClient) {
+    watch(
+      importing,
+      value => {
+        if (value) {
+          startProgressPolling()
+        }
+      },
+      { immediate: true }
+    )
+
+    onScopeDispose(() => {
+      stopProgressPolling()
+    })
+  }
 
   return {
     entries,
@@ -130,6 +219,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     importing,
     importError,
     lastImportSummary,
+    importProgress,
     isWellKnownCve,
     getWellKnownCveName
   }

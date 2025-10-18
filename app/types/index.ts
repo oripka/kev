@@ -5,6 +5,8 @@ export type Range = {
   end: Date
 }
 
+export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
+
 export type KevDomainCategory =
   | 'Web Applications'
   | 'Web Servers'
@@ -55,6 +57,10 @@ export type KevEntry = {
   ransomwareUse: string | null
   notes: string[]
   cwes: string[]
+  cvssScore: number | null
+  cvssVector: string | null
+  cvssVersion: string | null
+  cvssSeverity: CvssSeverity | null
   domainCategories: KevDomainCategory[]
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
@@ -79,6 +85,18 @@ export type KevResponse = {
     earliest: string | null
     latest: string | null
   }
+}
+
+export type ImportPhase = 'idle' | 'preparing' | 'fetchingCvss' | 'enriching' | 'saving' | 'complete' | 'error'
+
+export type ImportProgress = {
+  phase: ImportPhase
+  completed: number
+  total: number
+  message: string
+  startedAt: string | null
+  updatedAt: string | null
+  error: string | null
 }
 
 export type { KevFilterState } from './kev'

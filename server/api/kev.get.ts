@@ -22,6 +22,10 @@ type KevRow = {
   ransomware_use: string | null
   notes: string | null
   cwes: string | null
+  cvss_score: number | null
+  cvss_vector: string | null
+  cvss_version: string | null
+  cvss_severity: string | null
   domain_categories: string | null
   exploit_layers: string | null
   vulnerability_categories: string | null
@@ -65,6 +69,13 @@ const toEntries = (rows: KevRow[]): KevEntry[] =>
     ransomwareUse: row.ransomware_use,
     notes: parseJsonArray(row.notes),
     cwes: parseJsonArray(row.cwes),
+    cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
+    cvssVector: typeof row.cvss_vector === 'string' ? row.cvss_vector : null,
+    cvssVersion: typeof row.cvss_version === 'string' ? row.cvss_version : null,
+    cvssSeverity:
+      typeof row.cvss_severity === 'string'
+        ? (row.cvss_severity as KevEntry['cvssSeverity'])
+        : null,
     domainCategories: parseJsonArray(row.domain_categories) as KevEntry['domainCategories'],
     exploitLayers: parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers'],
     vulnerabilityCategories: parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
@@ -227,6 +238,10 @@ const buildQuery = (filters: KevQuery) => {
     ransomware_use,
     notes,
     cwes,
+    cvss_score,
+    cvss_vector,
+    cvss_version,
+    cvss_severity,
     domain_categories,
     exploit_layers,
     vulnerability_categories

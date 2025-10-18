@@ -12,6 +12,39 @@ const props = defineProps<{
 const UBadge = resolveComponent('UBadge')
 const ULink = resolveComponent('ULink')
 
+const severityColors: Record<Exclude<KevEntry['cvssSeverity'], null>, string> = {
+  None: 'success',
+  Low: 'primary',
+  Medium: 'warning',
+  High: 'error',
+  Critical: 'error'
+}
+
+const formatScore = (score: number | null) =>
+  typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : null
+
+const buildCvssLabel = (
+  severity: KevEntry['cvssSeverity'],
+  score: number | null
+) => {
+  const parts: string[] = []
+
+  if (severity) {
+    parts.push(severity)
+  }
+
+  const formattedScore = formatScore(score)
+  if (formattedScore) {
+    parts.push(formattedScore)
+  }
+
+  if (!parts.length) {
+    parts.push('Unknown')
+  }
+
+  return parts.join(' ')
+}
+
 const columns = computed<TableColumn<KevEntry>[]>(() => [
   {
     accessorKey: 'cveId',
@@ -34,6 +67,32 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
   {
     accessorKey: 'product',
     header: 'Product'
+  },
+  {
+    id: 'cvss',
+    header: 'CVSS',
+    cell: ({ row }) => {
+      const { cvssScore, cvssSeverity } = row.original
+      const formattedScore = formatScore(cvssScore)
+
+      if (!formattedScore && !cvssSeverity) {
+        return '—'
+      }
+
+      const label = buildCvssLabel(cvssSeverity, cvssScore)
+
+      const color = cvssSeverity ? severityColors[cvssSeverity] ?? 'neutral' : 'neutral'
+
+      return h(
+        UBadge,
+        {
+          color,
+          variant: 'soft',
+          class: 'font-semibold'
+        },
+        () => label
+      )
+    }
   },
   {
     id: 'domainCategories',
