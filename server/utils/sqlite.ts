@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS enisa_entries (
   cvss_version TEXT,
   cvss_severity TEXT,
   epss_score REAL,
-  references TEXT,
+  reference_links TEXT,
   aliases TEXT,
   domain_categories TEXT,
   exploit_layers TEXT,
@@ -108,7 +108,7 @@ export const getDatabase = () => {
   ensureColumn(instance, 'enisa_entries', 'cvss_version', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'cvss_severity', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'epss_score', 'REAL')
-  ensureColumn(instance, 'enisa_entries', 'references', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'reference_links', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'aliases', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'domain_categories', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'exploit_layers', 'TEXT')

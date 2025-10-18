@@ -49,7 +49,7 @@ type EnisaRow = {
   cvss_version: string | null
   cvss_severity: string | null
   epss_score: number | null
-  references: string | null
+  reference_links: string | null
   aliases: string | null
   domain_categories: string | null
   exploit_layers: string | null
@@ -304,7 +304,7 @@ const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
   }
 
   const cveId = normaliseCve(row.cve_id)
-  const references = parseJsonArray(row.references)
+  const references = parseJsonArray(row.reference_links)
   const aliases = parseAliasArray(row.aliases)
   const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
   const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
@@ -805,7 +805,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         cvss_version,
         cvss_severity,
         epss_score,
-        references,
+        reference_links,
         aliases,
         domain_categories,
         exploit_layers,

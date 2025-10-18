@@ -16,11 +16,8 @@ type NvdVulnerability = {
 
 const NVD_API_URL = 'https://services.nvd.nist.gov/rest/json/cves/2.0'
 const MAX_RETRIES = 5
-const RATE_LIMIT_WAIT = 1_000
-const RATE_LIMIT_BUFFER = 250
-const DEFAULT_RATE_LIMIT = { requests: 500, window: 30_000 }
-const API_KEY_RATE_LIMIT = { requests: 50, window: 30_000 }
 const API_KEY = process.env.NVD_API_KEY
+const CVSS_FETCH_ENABLED = false // Temporary toggle to disable outbound CVSS lookups without removing implementation.
 
 const sleep = (duration: number) =>
   new Promise<void>(resolve => setTimeout(resolve, duration))
@@ -147,40 +144,10 @@ const getErrorStatus = (error: unknown): number | undefined => {
   return undefined
 }
 
-type RateLimitConfig = {
-  requests: number
-  window: number
-}
-
-const applyRateLimit = async (log: number[], limit: RateLimitConfig) => {
-  while (true) {
-    const now = Date.now()
-
-    while (log.length && now - log[0] > limit.window) {
-      log.shift()
-    }
-
-    if (log.length < limit.requests) {
-      log.push(Date.now())
-      return
-    }
-
-    const wait = limit.window - (now - log[0]) + RATE_LIMIT_BUFFER
-    await sleep(Math.max(wait, RATE_LIMIT_BUFFER))
-  }
-}
-
-const fetchMetricForId = async (
-  id: string,
-  log: number[],
-  limit: RateLimitConfig,
-  attempt = 0
-): Promise<CvssMetric | null> => {
+const fetchMetricForId = async (id: string, attempt = 0): Promise<CvssMetric | null> => {
   if (!id) {
     return null
   }
-
-  await applyRateLimit(log, limit)
 
   const params = new URLSearchParams()
   params.append('cveId', id)
@@ -215,14 +182,14 @@ const fetchMetricForId = async (
       return null
     }
 
-    const delay = isRateLimited ? RATE_LIMIT_WAIT * (attempt + 1) : 750 * (attempt + 1)
+    const delay = isRateLimited ? 1_000 * (attempt + 1) : 750 * (attempt + 1)
     console.warn(
       `CVSS fetch attempt ${attempt + 1} failed${status ? ` (status ${status})` : ''}, retrying in ${
         delay / 1000
       }s`
     )
     await sleep(delay)
-    return fetchMetricForId(id, log, limit, attempt + 1)
+    return fetchMetricForId(id, attempt + 1)
   }
 }
 
@@ -245,13 +212,15 @@ export const fetchCvssMetrics = async (
 
   options.onStart?.(unique.length)
 
-  const requestLog: number[] = []
-  const rateLimit = API_KEY ? API_KEY_RATE_LIMIT : DEFAULT_RATE_LIMIT
+  if (!CVSS_FETCH_ENABLED) {
+    options.onProgress?.(unique.length, unique.length)
+    return result
+  }
 
   let completed = 0
 
   for (const id of unique) {
-    const metrics = await fetchMetricForId(id, requestLog, rateLimit)
+    const metrics = await fetchMetricForId(id)
     if (metrics) {
       result.set(id, metrics)
     }

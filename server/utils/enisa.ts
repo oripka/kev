@@ -145,8 +145,13 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
 
   const dateAdded = exploitedSince ?? datePublished ?? ''
 
+  const uniqueId = item.id?.trim() || item.enisaUuid?.trim() || cveId
+  if (!uniqueId) {
+    return null
+  }
+
   const baseEntry: KevBaseEntry = {
-    id: `enisa:${item.enisaUuid ?? cveId}`,
+    id: `enisa:${uniqueId}`,
     sources: ['enisa'],
     cveId,
     vendor,
@@ -227,14 +232,22 @@ export const importEnisaCatalog = async (
     page += 1
   }
 
-  const baseEntries: KevBaseEntry[] = []
+  const entryById = new Map<string, KevBaseEntry>()
 
   for (const item of items) {
     const baseEntry = toBaseEntry(item)
-    if (baseEntry) {
-      baseEntries.push(baseEntry)
+    if (!baseEntry) {
+      continue
     }
+
+    if (entryById.has(baseEntry.id)) {
+      continue
+    }
+
+    entryById.set(baseEntry.id, baseEntry)
   }
+
+  const baseEntries = Array.from(entryById.values())
 
   setImportPhase('enriching', {
     message: 'Enriching ENISA entries with classification data'
@@ -266,7 +279,7 @@ export const importEnisaCatalog = async (
       cvss_version,
       cvss_severity,
       epss_score,
-      references,
+      reference_links,
       aliases,
       domain_categories,
       exploit_layers,
@@ -289,7 +302,7 @@ export const importEnisaCatalog = async (
       @cvss_version,
       @cvss_severity,
       @epss_score,
-      @references,
+      @reference_links,
       @aliases,
       @domain_categories,
       @exploit_layers,
@@ -320,7 +333,7 @@ export const importEnisaCatalog = async (
         cvss_version: entry.cvssVersion,
         cvss_severity: entry.cvssSeverity,
         epss_score: entry.epssScore,
-        references: toJson(entry.references),
+        reference_links: toJson(entry.references),
         aliases: toJson(entry.aliases),
         domain_categories: toJson(entry.domainCategories),
         exploit_layers: toJson(entry.exploitLayers),
