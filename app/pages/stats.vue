@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { VisAxis, VisBar, VisTooltip, VisXYContainer } from '@unovis/vue'
+import { VisAxis, VisGroupedBar, VisTooltip, VisXYContainer } from '@unovis/vue'
 import { useKevData } from '~/composables/useKevData'
 
 const { vendors, products, domainCategories, vulnerabilityCategories } = useKevData()
@@ -39,7 +39,7 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
             </template>
 
             <VisXYContainer :data="vendorData" class="h-96">
-              <VisBar :x="x" :y="y" color="var(--ui-primary)" />
+              <VisGroupedBar :x="x" :y="y" color="var(--ui-primary)" />
               <VisAxis type="x" :x="x" :tick-format="vendorTicks" />
               <VisAxis type="y" :y="y" />
               <VisTooltip :template="tooltip" />
@@ -54,7 +54,7 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
             </template>
 
             <VisXYContainer :data="productData" class="h-96">
-              <VisBar :x="x" :y="y" color="var(--ui-secondary)" />
+              <VisGroupedBar :x="x" :y="y" color="var(--ui-secondary)" />
               <VisAxis type="x" :x="x" :tick-format="productTicks" />
               <VisAxis type="y" :y="y" />
               <VisTooltip :template="tooltip" />
@@ -69,7 +69,7 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
             </template>
 
             <VisXYContainer :data="domainData" class="h-96">
-              <VisBar :x="x" :y="y" color="var(--ui-info)" />
+              <VisGroupedBar :x="x" :y="y" color="var(--ui-info)" />
               <VisAxis type="x" :x="x" :tick-format="domainTicks" />
               <VisAxis type="y" :y="y" />
               <VisTooltip :template="tooltip" />
@@ -84,7 +84,7 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
             </template>
 
             <VisXYContainer :data="vulnerabilityData" class="h-96">
-              <VisBar :x="x" :y="y" color="var(--ui-warning)" />
+              <VisGroupedBar :x="x" :y="y" color="var(--ui-warning)" />
               <VisAxis type="x" :x="x" :tick-format="vulnerabilityTicks" />
               <VisAxis type="y" :y="y" />
               <VisTooltip :template="tooltip" />

@@ -28,30 +28,47 @@ function exportCsv() {
 </script>
 
 <template>
-  <section>
-    <FilterPanel
-      :filters="kev.filters"
-      :vendors="kev.vendors.value"
-      :products="kev.products.value"
-      :categories="kev.categories.value"
-      :vulnerability-types="kev.vulnerabilityTypes.value"
-      @update:filters="updateFilters"
-      @reset="resetFilters"
+  <UPage>
+    <UPageHeader
+      title="Catalog browser"
+      description="Filter the KEV catalog and export the current view"
     />
-  </section>
 
-  <section>
-    <UCard>
-      <template #header>
-        <strong>Results</strong>
-      </template>
-      <template #body>
-        <UButton color="secondary" icon="i-lucide-download" @click="exportCsv">Export filtered CSV</UButton>
-      </template>
-    </UCard>
-  </section>
+    <UPageBody>
+      <UPageSection>
+        <FilterPanel
+          :filters="kev.filters"
+          :vendors="kev.vendors.value"
+          :products="kev.products.value"
+          :categories="kev.categories.value"
+          :vulnerability-types="kev.vulnerabilityTypes.value"
+          @update:filters="updateFilters"
+          @reset="resetFilters"
+        />
+      </UPageSection>
 
-  <section>
-    <KevTable :entries="kev.filteredEntries.value" :loading="kev.pending.value" :total="kev.totalEntries.value" />
-  </section>
+      <UPageSection>
+        <UCard>
+          <template #header>
+            <UText size="lg" weight="semibold">
+              Export results
+            </UText>
+          </template>
+          <template #default>
+            <UButton color="secondary" icon="i-lucide-download" @click="exportCsv">
+              Export filtered CSV
+            </UButton>
+          </template>
+        </UCard>
+      </UPageSection>
+
+      <UPageSection>
+        <KevTable
+          :entries="kev.filteredEntries.value"
+          :loading="kev.pending.value"
+          :total="kev.totalEntries.value"
+        />
+      </UPageSection>
+    </UPageBody>
+  </UPage>
 </template>
