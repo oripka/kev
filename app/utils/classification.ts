@@ -77,7 +77,12 @@ const webProductPatterns: RegExp[] = [
   /(wordpress|drupal|joomla|magento|opencart|prestashop|woocommerce)/i,
   /(confluence|jira|bitbucket|crowd|bamboo)/i,
   /(sharepoint|liferay|alfresco|sitecore|strapi)/i,
+  /(coldfusion)/i,
+  /(e-?business suite|ebs)/i,
+  /(bi publisher)/i,
+  /(netweaver)/i,
   /(manageengine|servicedesk|adselfservice|opmanager|desktop central)/i,
+  /(endpoint manager)/i,
   /(grafana|kibana|splunk|tableau|superset)/i,
   /(sap (?:portal|netweaver|commerce|hybris))/i,
   /(progress.*whatsup gold|whatsup gold)/i,
@@ -85,7 +90,27 @@ const webProductPatterns: RegExp[] = [
   /(zimbra|roundcube|webmail|owa|outlook web)/i,
   /(phpmyadmin|cacti|zabbix|nagios|pfsense)/i,
   /(gitlab|gitbucket|gitea|bitbucket)/i,
-  /(ip camera|nvr|dvr|webcam)/i
+  /(ip camera|nvr|dvr|webcam)/i,
+  /(qlik\s*sense)/i,
+  /(goanywhere)/i,
+  /(crushftp)/i,
+  /(pulse connect secure)/i,
+  /(cityworks)/i,
+  /(jasperreports)/i,
+  /(langflow)/i,
+  /(simplehelp)/i,
+  /(projectsend)/i,
+  /(veracore)/i,
+  /(adminer)/i,
+  /(identity services engine|cisco ise)/i,
+  /(apex one)/i,
+  /(sysaid)/i,
+  /(fortiweb)/i,
+  /(telemessages?)/i,
+  /(sonicwall)/i,
+  /(md[a]?emon)/i,
+  /(geovision)/i,
+  /(rails)/i
 ]
 
 const webServerPatterns: RegExp[] = [
@@ -114,6 +139,7 @@ const webNegativePatterns: RegExp[] = [
 
 const webIndicatorPatterns: RegExp[] = [
   /(cross[- ]?site scripting|xss)/i,
+  /(xml external entity|xxe)/i,
   /(server[- ]?side request forgery|ssrf)/i,
   /(sql injection|sqli)/i,
   /(directory traversal|path traversal)/i,
@@ -126,14 +152,28 @@ const webIndicatorPatterns: RegExp[] = [
 
 const webStrongContextPatterns: RegExp[] = [
   /(web (?:interface|console|ui|portal|application|service|dashboard|admin|client))/i,
+  /(management (?:interface|portal|console|ui|plane|dashboard|panel))/i,
+  /(admin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel))/i,
+  /(super-?admin)/i,
+  /(control panel|control plane|control center)/i,
+  /(login (?:portal|page|interface|screen|panel))/i,
+  /(server url)/i,
   /(browser[- ]?based|web[- ]?based)/i,
   /https?:\/\//i,
   /\bhttp\b[^.]*\b(request|response|endpoint|header|parameter|query)\b/i,
+  /https?\s*(?:request|requests|response|responses)/i,
+  /(crafted[^.]{0,40}https?)/i,
   /(rest api|graphql|soap api|json-rpc)/i,
   /(csrf|cross[- ]?site request forgery)/i,
   /(deserialization|serialized object)/i,
   /(crafted (?:http )?requests?)/i,
-  /(cgi|servlet)/i
+  /(cgi|servlet)/i,
+  /(httpd)/i,
+  /(web server)/i,
+  /(vpn web server)/i,
+  /(api (?:request|response|endpoint|call))/i,
+  /(?:rest|graphql|soap|json)\s+api/i,
+  /\b(?:get|post|put|delete|patch)\s+requests?\b/i
 ]
 
 const webDeviceContextPatterns: RegExp[] = [
@@ -142,6 +182,39 @@ const webDeviceContextPatterns: RegExp[] = [
   /(crafted requests?)/i,
   /\bhttp\b/i,
   /(cgi)/i
+]
+
+const webManagementPatterns: RegExp[] = [
+  /(management (?:interface|portal|console|ui|plane|dashboard|panel))/i,
+  /(admin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel))/i,
+  /(admin(?:istrator)? account)/i,
+  /(super-?admin)/i,
+  /(control panel|control plane|control center)/i,
+  /(login (?:portal|page|interface|screen|panel))/i,
+  /(server url)/i
+]
+
+const webApiPatterns: RegExp[] = [
+  /(rest(?:ful)? api)/i,
+  /(graphql api)/i,
+  /(soap api)/i,
+  /(json api)/i,
+  /(web api)/i,
+  /(api endpoint)/i,
+  /(api interface)/i,
+  /(api (?:request|response|call|gateway|server))/i
+]
+
+const nonWebProductPatterns: RegExp[] = [
+  /(kernel|driver|firmware|microcode|bootloader|hypervisor)/i,
+  /(common log file system|clfs)/i,
+  /(sandbox escape)/i
+]
+
+const nonWebContextPatterns: RegExp[] = [
+  /(physical access)/i,
+  /(local privilege escalation|locally)/i,
+  /(stack[- ]?based buffer overflow|heap[- ]?based buffer overflow|buffer overflow|out[- ]?of[- ]?bounds|use[- ]?after[- ]?free|memory corruption)/i
 ]
 
 const vulnerabilityRules: Array<{
@@ -238,6 +311,11 @@ export const classifyDomainCategories = (entry: {
   const hasWebIndicators = matchesAny(context, webIndicatorPatterns)
   const hasStrongWebSignal = matchesAny(context, webStrongContextPatterns)
   const deviceHasWebSignal = isWebDevice && matchesAny(context, webDeviceContextPatterns)
+  const hasManagementSignal = matchesAny(context, webManagementPatterns)
+  const hasApiSignal = matchesAny(context, webApiPatterns)
+  const hasNonWebProductSignal =
+    matchesAny(source, nonWebProductPatterns) || matchesAny(context, nonWebProductPatterns)
+  const hasNonWebContextSignal = matchesAny(context, nonWebContextPatterns)
   const isMailServer = categories.has('Mail Servers')
   const isNetworkDevice = categories.has('Networking & VPN')
 
@@ -246,18 +324,38 @@ export const classifyDomainCategories = (entry: {
     !isWebServer &&
     (isWebProduct ||
       hasStrongWebSignal ||
+      hasManagementSignal ||
+      hasApiSignal ||
       deviceHasWebSignal ||
-      (hasWebIndicators && (isWebProduct || isWebDevice || isMailServer || isNetworkDevice)))
+      (hasWebIndicators &&
+        (isWebProduct ||
+          isWebDevice ||
+          isMailServer ||
+          isNetworkDevice ||
+          hasManagementSignal ||
+          hasApiSignal)))
 
-  if (shouldTagWeb) {
+  const shouldPreferNonWeb =
+    hasNonWebProductSignal ||
+    (hasNonWebContextSignal &&
+      !hasStrongWebSignal &&
+      !hasManagementSignal &&
+      !hasApiSignal &&
+      !isWebProduct &&
+      !deviceHasWebSignal)
+
+  if (shouldPreferNonWeb) {
+    categories.delete('Web Applications')
+    categories.add('Non-Web Applications')
+  } else if (shouldTagWeb) {
     categories.add('Web Applications')
   }
 
   if (categories.has('Web Applications')) {
     categories.delete('Non-Web Applications')
-  } else if (categories.has('Web Servers')) {
+  } else if (categories.has('Web Servers') && !shouldPreferNonWeb) {
     categories.delete('Non-Web Applications')
-  } else {
+  } else if (!shouldPreferNonWeb) {
     categories.add('Non-Web Applications')
   }
 
