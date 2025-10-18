@@ -3,6 +3,7 @@ import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import type { KevEntry } from '~/types'
 import { fetchCvssMetrics } from '../utils/cvss'
+import { importEnisaCatalog } from '../utils/enisa'
 import {
   completeImportProgress,
   failImportProgress,
@@ -90,23 +91,36 @@ export default defineEventHandler(async () => {
       })
     }
 
-    const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => ({
-      cveId: item.cveID,
-      vendor: item.vendorProject ?? 'Unknown',
-      product: item.product ?? 'Unknown',
-      vulnerabilityName: item.vulnerabilityName ?? 'Unknown vulnerability',
-      description: item.shortDescription ?? '',
-      requiredAction: item.requiredAction ?? '',
-      dateAdded: item.dateAdded ?? '',
-      dueDate: item.dueDate ?? null,
-      ransomwareUse: item.knownRansomwareCampaignUse ?? null,
-      notes: toNotes(item.notes),
-      cwes: Array.isArray(item.cwes) ? item.cwes : [],
-      cvssScore: null,
-      cvssVector: null,
-      cvssVersion: null,
-      cvssSeverity: null
-    }))
+    const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => {
+      const cveId = item.cveID
+      return {
+        id: `kev:${cveId}`,
+        sources: ['kev'],
+        cveId,
+        vendor: item.vendorProject ?? 'Unknown',
+        product: item.product ?? 'Unknown',
+        vulnerabilityName: item.vulnerabilityName ?? 'Unknown vulnerability',
+        description: item.shortDescription ?? '',
+        requiredAction: item.requiredAction ?? null,
+        dateAdded: item.dateAdded ?? '',
+        dueDate: item.dueDate ?? null,
+        ransomwareUse: item.knownRansomwareCampaignUse ?? null,
+        notes: toNotes(item.notes),
+        cwes: Array.isArray(item.cwes) ? item.cwes : [],
+        cvssScore: null,
+        cvssVector: null,
+        cvssVersion: null,
+        cvssSeverity: null,
+        epssScore: null,
+        assigner: null,
+        datePublished: item.dateAdded ?? null,
+        dateUpdated: null,
+        exploitedSince: item.dateAdded ?? null,
+        sourceUrl: null,
+        references: [],
+        aliases: cveId ? [cveId] : []
+      }
+    })
 
     const db = getDatabase()
     type ExistingCvssRow = {
@@ -324,12 +338,19 @@ export default defineEventHandler(async () => {
       importedAt
     })
 
-    completeImportProgress(`Imported ${entries.length} catalog entries`)
+    const enisaSummary = await importEnisaCatalog(db)
+
+    completeImportProgress(
+      `Imported ${entries.length} KEV entries and ${enisaSummary.imported} ENISA entries`
+    )
 
     return {
-      imported: entries.length,
+      imported: entries.length + enisaSummary.imported,
+      kevImported: entries.length,
+      enisaImported: enisaSummary.imported,
       dateReleased: parsed.data.dateReleased,
       catalogVersion: parsed.data.catalogVersion,
+      enisaLastUpdated: enisaSummary.lastUpdated,
       importedAt
     }
   } catch (error) {

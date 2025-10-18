@@ -60,6 +60,11 @@ const filters = reactive<FilterState>({ ...defaultFilters });
 const searchInput = ref("");
 const debouncedSearch = ref("");
 const showWellKnownOnly = ref(false);
+const defaultCvssRange = [0, 10] as const;
+const defaultEpssRange = [0, 100] as const;
+const cvssRange = ref<[number, number]>([defaultCvssRange[0], defaultCvssRange[1]]);
+const epssRange = ref<[number, number]>([defaultEpssRange[0], defaultEpssRange[1]]);
+const selectedSource = ref<"all" | "kev" | "enisa">("all");
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -85,8 +90,10 @@ onBeforeUnmount(() => {
 
 const filterParams = computed(() => {
   const [startYear, endYear] = yearRange.value;
+  const [cvssStart, cvssEnd] = cvssRange.value;
+  const [epssStart, epssEnd] = epssRange.value;
 
-  return {
+  const params: Record<string, unknown> = {
     search: debouncedSearch.value || undefined,
     domain: filters.domain || undefined,
     exploit: filters.exploit || undefined,
@@ -97,6 +104,22 @@ const filterParams = computed(() => {
     endYear,
     wellKnownOnly: showWellKnownOnly.value ? true : undefined,
   };
+
+  if (selectedSource.value !== "all") {
+    params.source = selectedSource.value;
+  }
+
+  if (cvssStart > defaultCvssRange[0] || cvssEnd < defaultCvssRange[1]) {
+    params.cvssMin = cvssStart;
+    params.cvssMax = cvssEnd;
+  }
+
+  if (epssStart > defaultEpssRange[0] || epssEnd < defaultEpssRange[1]) {
+    params.epssMin = epssStart;
+    params.epssMax = epssEnd;
+  }
+
+  return params;
 });
 
 const {
@@ -150,8 +173,13 @@ const importSummaryMessage = computed(() => {
   }
 
   const importedAt = formatTimestamp(summary.importedAt);
-  const importedCount = summary.imported.toLocaleString();
-  return `Imported ${importedCount} entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.`;
+  const kevCount = summary.kevImported.toLocaleString();
+  const enisaCount = summary.enisaImported.toLocaleString();
+  const enisaDetail = summary.enisaImported
+    ? ` Latest ENISA update: ${summary.enisaLastUpdated ? formatTimestamp(summary.enisaLastUpdated) : 'not provided'}.`
+    : '';
+
+  return `Imported ${kevCount} CISA KEV entries and ${enisaCount} ENISA entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${enisaDetail}`;
 });
 
 const importProgressPhase = computed(() => importProgress.value.phase);
@@ -169,7 +197,7 @@ const importProgressPercent = computed(() => {
   if (phase === "enriching") {
     return 80;
   }
-  if (phase === "saving") {
+  if (phase === "saving" || phase === "savingEnisa") {
     return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));
   }
   return 0;
@@ -189,7 +217,7 @@ const showImportProgress = computed(() => {
 const importProgressMessage = computed(() => {
   const { message, phase, error } = importProgress.value;
   if (phase === "idle" && importing.value) {
-    return "Preparing KEV import…";
+    return "Preparing catalog import…";
   }
   if (phase === "error" && error) {
     return error;
@@ -197,7 +225,7 @@ const importProgressMessage = computed(() => {
   if (message) {
     return message;
   }
-  return "Importing the latest KEV data…";
+  return "Importing the latest vulnerability data…";
 });
 
 const hasProgressValue = computed(() => {
@@ -220,10 +248,28 @@ const cvssSeverityColors: Record<Exclude<KevEntry["cvssSeverity"], null>, string
   Critical: "error",
 };
 
+const sourceBadgeMap: Record<KevEntry["sources"][number], { label: string; color: string }> = {
+  kev: { label: "CISA KEV", color: "primary" },
+  enisa: { label: "ENISA", color: "success" },
+};
+
 const formatCvssScore = (score: number | null) =>
   typeof score === "number" && Number.isFinite(score)
     ? score.toFixed(1)
     : null;
+
+const formatEpssScore = (score: number | null) =>
+  typeof score === "number" && Number.isFinite(score)
+    ? score.toFixed(1)
+    : null;
+
+const formatOptionalTimestamp = (value: string | null) => {
+  if (!value) {
+    return "Not available";
+  }
+
+  return formatTimestamp(value);
+};
 
 const buildCvssLabel = (
   severity: KevEntry["cvssSeverity"],
@@ -295,18 +341,30 @@ const results = computed(() => {
   });
 });
 
-const hasActiveFilters = computed(() =>
-  Boolean(
-    debouncedSearch.value.trim() ||
-      filters.domain ||
-      filters.exploit ||
-      filters.vulnerability ||
-      filters.vendor ||
-      filters.product ||
+const hasActiveFilters = computed(() => {
+  const hasSearch = Boolean(debouncedSearch.value.trim());
+  const hasDomainFilters =
+    filters.domain ||
+    filters.exploit ||
+    filters.vulnerability ||
+    filters.vendor ||
+    filters.product;
+  const hasCvssFilter =
+    cvssRange.value[0] > defaultCvssRange[0] || cvssRange.value[1] < defaultCvssRange[1];
+  const hasEpssFilter =
+    epssRange.value[0] > defaultEpssRange[0] || epssRange.value[1] < defaultEpssRange[1];
+  const hasSourceFilter = selectedSource.value !== "all";
+
+  return Boolean(
+    hasSearch ||
+      hasDomainFilters ||
       showWellKnownOnly.value ||
-      hasCustomYearRange.value
-  )
-);
+      hasCustomYearRange.value ||
+      hasCvssFilter ||
+      hasEpssFilter ||
+      hasSourceFilter
+  );
+});
 
 const resetYearRange = () => {
   yearRange.value = [defaultYearRange[0], defaultYearRange[1]];
@@ -321,6 +379,9 @@ const resetFilters = () => {
   searchInput.value = "";
   debouncedSearch.value = "";
   showWellKnownOnly.value = false;
+  cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
+  epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
+  selectedSource.value = "all";
   resetYearRange();
 };
 
@@ -407,7 +468,14 @@ const filterLabels: Record<FilterKey, string> = {
 };
 
 type ActiveFilter = {
-  key: FilterKey | "search" | "wellKnown" | "yearRange";
+  key:
+    | FilterKey
+    | "search"
+    | "wellKnown"
+    | "yearRange"
+    | "source"
+    | "cvssRange"
+    | "epssRange";
   label: string;
   value: string;
 };
@@ -439,6 +507,29 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     });
   }
 
+  if (selectedSource.value !== "all") {
+    const label = selectedSource.value === "kev" ? "CISA KEV" : "ENISA";
+    items.push({ key: "source", label: "Source", value: label });
+  }
+
+  if (cvssRange.value[0] > defaultCvssRange[0] || cvssRange.value[1] < defaultCvssRange[1]) {
+    const [min, max] = cvssRange.value;
+    items.push({
+      key: "cvssRange",
+      label: "CVSS",
+      value: `${min.toFixed(1)} – ${max.toFixed(1)}`,
+    });
+  }
+
+  if (epssRange.value[0] > defaultEpssRange[0] || epssRange.value[1] < defaultEpssRange[1]) {
+    const [min, max] = epssRange.value;
+    items.push({
+      key: "epssRange",
+      label: "EPSS",
+      value: `${Math.round(min)} – ${Math.round(max)}`,
+    });
+  }
+
   return items;
 });
 
@@ -465,7 +556,20 @@ const toggleFilter = (key: FilterKey, value: string) => {
   resetDownstreamFilters(key);
 };
 
-const clearFilter = (key: FilterKey | "search" | "wellKnown" | "yearRange") => {
+const setSourceFilter = (value: "all" | "kev" | "enisa") => {
+  selectedSource.value = value;
+};
+
+const clearFilter = (
+  key:
+    | FilterKey
+    | "search"
+    | "wellKnown"
+    | "yearRange"
+    | "source"
+    | "cvssRange"
+    | "epssRange"
+) => {
   if (key === "search") {
     if (searchDebounce) {
       clearTimeout(searchDebounce);
@@ -486,6 +590,21 @@ const clearFilter = (key: FilterKey | "search" | "wellKnown" | "yearRange") => {
     return;
   }
 
+  if (key === "source") {
+    selectedSource.value = "all";
+    return;
+  }
+
+  if (key === "cvssRange") {
+    cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
+    return;
+  }
+
+  if (key === "epssRange") {
+    epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
+    return;
+  }
+
   filters[key] = null;
   resetDownstreamFilters(key);
 };
@@ -498,9 +617,25 @@ const columns: TableColumn<KevEntry>[] = [
       const description = row.original.description || "No description provided.";
       const wellKnownLabel = getWellKnownCveName(row.original.cveId);
       const descriptionChildren = [] as Array<ReturnType<typeof h>>;
+      const badgeRowChildren = [] as Array<ReturnType<typeof h>>;
+
+      for (const source of row.original.sources) {
+        const meta = sourceBadgeMap[source];
+        badgeRowChildren.push(
+          h(
+            UBadge,
+            {
+              color: meta?.color ?? "neutral",
+              variant: "soft",
+              class: "text-xs font-semibold",
+            },
+            () => meta?.label ?? source.toUpperCase()
+          )
+        );
+      }
 
       if (wellKnownLabel) {
-        descriptionChildren.push(
+        badgeRowChildren.push(
           h(
             UBadge,
             {
@@ -509,6 +644,16 @@ const columns: TableColumn<KevEntry>[] = [
               class: "shrink-0 text-xs font-semibold",
             },
             () => wellKnownLabel
+          )
+        );
+      }
+
+      if (badgeRowChildren.length) {
+        descriptionChildren.push(
+          h(
+            "div",
+            { class: "flex flex-wrap items-center gap-2" },
+            badgeRowChildren
           )
         );
       }
@@ -582,6 +727,30 @@ const columns: TableColumn<KevEntry>[] = [
           class: "font-semibold",
         },
         () => label
+      );
+    },
+  },
+  {
+    id: "epss",
+    header: "EPSS",
+    cell: ({ row }) => {
+      const score = formatEpssScore(row.original.epssScore);
+      if (!score) {
+        return h(
+          "span",
+          { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+          "—"
+        );
+      }
+
+      return h(
+        UBadge,
+        {
+          color: "success",
+          variant: "soft",
+          class: "font-semibold",
+        },
+        () => `${score}%`
       );
     },
   },
@@ -668,7 +837,7 @@ const columns: TableColumn<KevEntry>[] = [
                 v-else
                 class="text-xs text-neutral-500 dark:text-neutral-400"
               >
-                No entries cached yet. Use the import button to fetch the latest KEV data.
+                No entries cached yet. Use the import button to fetch the latest KEV and ENISA data.
               </p>
               <p
                 v-if="importSummaryMessage && !importError"
@@ -685,7 +854,7 @@ const columns: TableColumn<KevEntry>[] = [
                 :disabled="importing"
                 @click="handleImport"
               >
-                {{ importing ? "Importing…" : "Import latest KEV" }}
+                {{ importing ? "Importing…" : "Import latest data" }}
               </UButton>
               <UAlert
                 v-if="importError"
@@ -792,6 +961,53 @@ const columns: TableColumn<KevEntry>[] = [
                 v-model="searchInput"
                 placeholder="Filter by CVE, vendor, product, or description"
               />
+            </UFormField>
+
+            <UFormField label="Data source">
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  v-for="option in ['all', 'kev', 'enisa']"
+                  :key="option"
+                  size="sm"
+                  :color="selectedSource === option ? 'primary' : 'neutral'"
+                  :variant="selectedSource === option ? 'solid' : 'outline'"
+                  @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
+                >
+                  {{ option === 'all' ? 'All sources' : option === 'kev' ? 'CISA KEV' : 'ENISA' }}
+                </UButton>
+              </div>
+            </UFormField>
+
+            <UFormField label="CVSS range">
+              <div class="space-y-2">
+                <USlider
+                  v-model="cvssRange"
+                  :min="defaultCvssRange[0]"
+                  :max="defaultCvssRange[1]"
+                  :step="0.1"
+                  :min-steps-between-thumbs="1"
+                  tooltip
+                />
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
+                </p>
+              </div>
+            </UFormField>
+
+            <UFormField label="EPSS range">
+              <div class="space-y-2">
+                <USlider
+                  v-model="epssRange"
+                  :min="defaultEpssRange[0]"
+                  :max="defaultEpssRange[1]"
+                  :step="1"
+                  :min-steps-between-thumbs="1"
+                  tooltip
+                />
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
+                </p>
+              </div>
             </UFormField>
 
             <UFormField label="Well-known focus">
@@ -1181,15 +1397,31 @@ const columns: TableColumn<KevEntry>[] = [
                 <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                   {{ detailEntry.vulnerabilityName }}
                 </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  {{ detailEntry.cveId }}
-                </p>
+                <div class="flex flex-wrap items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                  <ULink
+                    :href="`https://nvd.nist.gov/vuln/detail/${detailEntry.cveId}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="font-medium text-primary-600 hover:underline dark:text-primary-400"
+                  >
+                    {{ detailEntry.cveId }}
+                  </ULink>
+                  <UBadge
+                    v-for="source in detailEntry.sources"
+                    :key="source"
+                    :color="sourceBadgeMap[source]?.color ?? 'neutral'"
+                    variant="soft"
+                    class="text-xs font-semibold"
+                  >
+                    {{ sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
+                  </UBadge>
+                </div>
               </div>
             </template>
 
             <template #default>
               <div class="space-y-4">
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                       Vendor
@@ -1272,6 +1504,46 @@ const columns: TableColumn<KevEntry>[] = [
                       CVSS vector not available.
                     </p>
                   </div>
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                      EPSS
+                    </p>
+                    <div v-if="formatEpssScore(detailEntry.epssScore)" class="flex items-center gap-2">
+                      <UBadge color="success" variant="soft" class="font-semibold">
+                        {{ formatEpssScore(detailEntry.epssScore) }}%
+                      </UBadge>
+                    </div>
+                    <p
+                      v-else
+                      class="text-base text-neutral-500 dark:text-neutral-400"
+                    >
+                      Not available
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                      Assigner
+                    </p>
+                    <p class="text-base text-neutral-900 dark:text-neutral-100">
+                      {{ detailEntry.assigner || 'Not available' }}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                      Exploited since
+                    </p>
+                    <p class="text-base text-neutral-900 dark:text-neutral-100">
+                      {{ formatOptionalTimestamp(detailEntry.exploitedSince) }}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                      Last updated
+                    </p>
+                    <p class="text-base text-neutral-900 dark:text-neutral-100">
+                      {{ formatOptionalTimestamp(detailEntry.dateUpdated) }}
+                    </p>
+                  </div>
                 </div>
 
                 <div class="space-y-2">
@@ -1292,6 +1564,25 @@ const columns: TableColumn<KevEntry>[] = [
                     <span class="max-w-4xl whitespace-normal break-words">
                       {{ detailEntry.description || 'No description provided.' }}
                     </span>
+                  </div>
+                </div>
+
+                <div class="space-y-2">
+                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    Source
+                  </p>
+                  <div class="text-sm text-neutral-600 dark:text-neutral-300">
+                    <template v-if="detailEntry.sourceUrl">
+                      <ULink
+                        :href="detailEntry.sourceUrl"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="font-medium text-primary-600 hover:underline dark:text-primary-400"
+                      >
+                        View advisory
+                      </ULink>
+                    </template>
+                    <span v-else>Not available</span>
                   </div>
                 </div>
 
@@ -1340,6 +1631,40 @@ const columns: TableColumn<KevEntry>[] = [
                         {{ category }}
                       </UBadge>
                     </div>
+                  </div>
+                </div>
+
+                <div v-if="detailEntry.references.length" class="space-y-2">
+                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    References
+                  </p>
+                  <ul class="list-disc space-y-1 pl-4 text-sm text-neutral-600 dark:text-neutral-300">
+                    <li v-for="reference in detailEntry.references" :key="reference">
+                      <ULink
+                        :href="reference"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="break-all text-primary-600 hover:underline dark:text-primary-400"
+                      >
+                        {{ reference }}
+                      </ULink>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="detailEntry.aliases.length" class="space-y-2">
+                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    Aliases
+                  </p>
+                  <div class="flex flex-wrap gap-2">
+                    <UBadge
+                      v-for="alias in detailEntry.aliases"
+                      :key="alias"
+                      color="neutral"
+                      variant="soft"
+                    >
+                      {{ alias }}
+                    </UBadge>
                   </div>
                 </div>
 

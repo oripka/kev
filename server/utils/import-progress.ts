@@ -1,4 +1,13 @@
-type ImportPhase = 'idle' | 'preparing' | 'fetchingCvss' | 'enriching' | 'saving' | 'complete' | 'error'
+type ImportPhase =
+  | 'idle'
+  | 'preparing'
+  | 'fetchingCvss'
+  | 'fetchingEnisa'
+  | 'enriching'
+  | 'saving'
+  | 'savingEnisa'
+  | 'complete'
+  | 'error'
 
 export type ImportProgressState = {
   phase: ImportPhase
@@ -101,4 +110,3 @@ export const failImportProgress = (message: string) => {
 export const getImportProgress = (): ImportProgressState => {
   return { ...getState() }
 }
-

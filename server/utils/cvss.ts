@@ -15,8 +15,12 @@ type NvdVulnerability = {
 }
 
 const NVD_API_URL = 'https://services.nvd.nist.gov/rest/json/cves/2.0'
-const CHUNK_SIZE = 50
-const MAX_RETRIES = 3
+const MAX_RETRIES = 5
+const RATE_LIMIT_WAIT = 1_000
+const RATE_LIMIT_BUFFER = 250
+const DEFAULT_RATE_LIMIT = { requests: 500, window: 30_000 }
+const API_KEY_RATE_LIMIT = { requests: 50, window: 30_000 }
+const API_KEY = process.env.NVD_API_KEY
 
 const sleep = (duration: number) =>
   new Promise<void>(resolve => setTimeout(resolve, duration))
@@ -122,17 +126,64 @@ const extractCvssMetric = (metrics?: Record<string, unknown>): CvssMetric => {
   return { score: null, vector: null, version: null, severity: null }
 }
 
-const fetchChunk = async (ids: string[], attempt = 0): Promise<NvdVulnerability[]> => {
-  if (!ids.length) {
-    return []
+const getErrorStatus = (error: unknown): number | undefined => {
+  if (!error || typeof error !== 'object') {
+    return undefined
   }
+
+  if ('status' in error && typeof (error as { status?: unknown }).status === 'number') {
+    return (error as { status: number }).status
+  }
+
+  if ('statusCode' in error && typeof (error as { statusCode?: unknown }).statusCode === 'number') {
+    return (error as { statusCode: number }).statusCode
+  }
+
+  const response = (error as { response?: { status?: number } }).response
+  if (response && typeof response.status === 'number') {
+    return response.status
+  }
+
+  return undefined
+}
+
+type RateLimitConfig = {
+  requests: number
+  window: number
+}
+
+const applyRateLimit = async (log: number[], limit: RateLimitConfig) => {
+  while (true) {
+    const now = Date.now()
+
+    while (log.length && now - log[0] > limit.window) {
+      log.shift()
+    }
+
+    if (log.length < limit.requests) {
+      log.push(Date.now())
+      return
+    }
+
+    const wait = limit.window - (now - log[0]) + RATE_LIMIT_BUFFER
+    await sleep(Math.max(wait, RATE_LIMIT_BUFFER))
+  }
+}
+
+const fetchMetricForId = async (
+  id: string,
+  log: number[],
+  limit: RateLimitConfig,
+  attempt = 0
+): Promise<CvssMetric | null> => {
+  if (!id) {
+    return null
+  }
+
+  await applyRateLimit(log, limit)
 
   const params = new URLSearchParams()
-
-  for (const id of ids) {
-    params.append('cveId', id)
-  }
-
+  params.append('cveId', id)
   params.append('noRejected', '')
 
   const url = `${NVD_API_URL}?${params.toString()}`
@@ -140,21 +191,38 @@ const fetchChunk = async (ids: string[], attempt = 0): Promise<NvdVulnerability[
   try {
     const response = await $fetch<{ vulnerabilities?: NvdVulnerability[] }>(url, {
       headers: {
-        'User-Agent': 'kev-watch/1.0 (+https://github.com)' // Informational header per NVD guidelines
+        'User-Agent': 'kev-watch/1.0 (+https://github.com)', // Informational header per NVD guidelines
+        ...(API_KEY ? { apiKey: API_KEY } : {})
       },
       timeout: 60_000
     })
 
-    return response.vulnerabilities ?? []
-  } catch (error) {
-    if (attempt + 1 >= MAX_RETRIES) {
-      console.warn('Failed to fetch CVSS metrics after retries', error)
-      return []
+    const vulnerabilities = response.vulnerabilities ?? []
+
+    if (!vulnerabilities.length) {
+      return null
     }
 
-    const delay = 750 * (attempt + 1)
+    const vulnerability =
+      vulnerabilities.find(entry => entry.cve?.id === id) ?? vulnerabilities[0]
+    return vulnerability?.cve ? extractCvssMetric(vulnerability.cve.metrics) : null
+  } catch (error) {
+    const status = getErrorStatus(error)
+    const isRateLimited = status === 429 || status === 403
+
+    if (attempt + 1 >= MAX_RETRIES) {
+      console.warn('Failed to fetch CVSS metrics after retries', { status, error })
+      return null
+    }
+
+    const delay = isRateLimited ? RATE_LIMIT_WAIT * (attempt + 1) : 750 * (attempt + 1)
+    console.warn(
+      `CVSS fetch attempt ${attempt + 1} failed${status ? ` (status ${status})` : ''}, retrying in ${
+        delay / 1000
+      }s`
+    )
     await sleep(delay)
-    return fetchChunk(ids, attempt + 1)
+    return fetchMetricForId(id, log, limit, attempt + 1)
   }
 }
 
@@ -177,27 +245,19 @@ export const fetchCvssMetrics = async (
 
   options.onStart?.(unique.length)
 
-  for (let index = 0; index < unique.length; index += CHUNK_SIZE) {
-    const chunk = unique.slice(index, index + CHUNK_SIZE)
-    const vulnerabilities = await fetchChunk(chunk)
+  const requestLog: number[] = []
+  const rateLimit = API_KEY ? API_KEY_RATE_LIMIT : DEFAULT_RATE_LIMIT
 
-    for (const vulnerability of vulnerabilities) {
-      const id = vulnerability.cve?.id
-      if (!id) {
-        continue
-      }
+  let completed = 0
 
-      const metrics = vulnerability.cve.metrics
-      result.set(id, extractCvssMetric(metrics))
+  for (const id of unique) {
+    const metrics = await fetchMetricForId(id, requestLog, rateLimit)
+    if (metrics) {
+      result.set(id, metrics)
     }
 
-    const completed = Math.min(index + CHUNK_SIZE, unique.length)
+    completed += 1
     options.onProgress?.(completed, unique.length)
-
-    // NVD limits clients to 5 requests in a 30 second window without an API key.
-    if (index + CHUNK_SIZE < unique.length) {
-      await sleep(6_500)
-    }
   }
 
   // Fill any missing CVEs with null metrics to simplify downstream handling.

@@ -32,6 +32,31 @@ CREATE TABLE IF NOT EXISTS kev_metadata (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS enisa_entries (
+  enisa_id TEXT PRIMARY KEY,
+  cve_id TEXT,
+  vendor TEXT,
+  product TEXT,
+  vulnerability_name TEXT,
+  description TEXT,
+  assigner TEXT,
+  date_published TEXT,
+  date_updated TEXT,
+  exploited_since TEXT,
+  cvss_score REAL,
+  cvss_vector TEXT,
+  cvss_version TEXT,
+  cvss_severity TEXT,
+  epss_score REAL,
+  references TEXT,
+  aliases TEXT,
+  domain_categories TEXT,
+  exploit_layers TEXT,
+  vulnerability_categories TEXT,
+  source_url TEXT,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 const DB_FILENAME = 'kev.sqlite'
@@ -67,6 +92,29 @@ export const getDatabase = () => {
   ensureColumn(instance, 'kev_entries', 'cvss_vector', 'TEXT')
   ensureColumn(instance, 'kev_entries', 'cvss_version', 'TEXT')
   ensureColumn(instance, 'kev_entries', 'cvss_severity', 'TEXT')
+  ensureColumn(instance, 'kev_entries', 'updated_at', 'TEXT DEFAULT CURRENT_TIMESTAMP')
+
+  ensureColumn(instance, 'enisa_entries', 'cve_id', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'vendor', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'product', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'vulnerability_name', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'description', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'assigner', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'date_published', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'date_updated', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'exploited_since', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'cvss_score', 'REAL')
+  ensureColumn(instance, 'enisa_entries', 'cvss_vector', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'cvss_version', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'cvss_severity', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'epss_score', 'REAL')
+  ensureColumn(instance, 'enisa_entries', 'references', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'aliases', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'domain_categories', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'exploit_layers', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'vulnerability_categories', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'source_url', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'updated_at', 'TEXT DEFAULT CURRENT_TIMESTAMP')
 
   return instance
 }

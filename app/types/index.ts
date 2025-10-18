@@ -7,6 +7,8 @@ export type Range = {
 
 export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 
+export type CatalogSource = 'kev' | 'enisa'
+
 export type KevDomainCategory =
   | 'Web Applications'
   | 'Web Servers'
@@ -46,12 +48,14 @@ export type KevVulnerabilityCategory =
   | 'Other'
 
 export type KevEntry = {
+  id: string
   cveId: string
+  sources: CatalogSource[]
   vendor: string
   product: string
   vulnerabilityName: string
   description: string
-  requiredAction: string
+  requiredAction: string | null
   dateAdded: string
   dueDate: string | null
   ransomwareUse: string | null
@@ -61,6 +65,14 @@ export type KevEntry = {
   cvssVector: string | null
   cvssVersion: string | null
   cvssSeverity: CvssSeverity | null
+  epssScore: number | null
+  assigner: string | null
+  datePublished: string | null
+  dateUpdated: string | null
+  exploitedSince: string | null
+  sourceUrl: string | null
+  references: string[]
+  aliases: string[]
   domainCategories: KevDomainCategory[]
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
@@ -87,7 +99,16 @@ export type KevResponse = {
   }
 }
 
-export type ImportPhase = 'idle' | 'preparing' | 'fetchingCvss' | 'enriching' | 'saving' | 'complete' | 'error'
+export type ImportPhase =
+  | 'idle'
+  | 'preparing'
+  | 'fetchingCvss'
+  | 'fetchingEnisa'
+  | 'enriching'
+  | 'saving'
+  | 'savingEnisa'
+  | 'complete'
+  | 'error'
 
 export type ImportProgress = {
   phase: ImportPhase

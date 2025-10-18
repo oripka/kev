@@ -20,7 +20,15 @@ const severityColors: Record<Exclude<KevEntry['cvssSeverity'], null>, string> = 
   Critical: 'error'
 }
 
+const sourceBadgeMap: Record<KevEntry['sources'][number], { label: string; color: string }> = {
+  kev: { label: 'CISA KEV', color: 'primary' },
+  enisa: { label: 'ENISA', color: 'success' }
+}
+
 const formatScore = (score: number | null) =>
+  typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : null
+
+const formatEpss = (score: number | null) =>
   typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : null
 
 const buildCvssLabel = (
@@ -50,15 +58,34 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
     accessorKey: 'cveId',
     header: 'CVE ID',
     cell: ({ row }) =>
-      h(
-        ULink,
-        {
-          href: `https://nvd.nist.gov/vuln/detail/${row.original.cveId}`,
-          target: '_blank',
-          rel: 'noopener noreferrer'
-        },
-        () => row.original.cveId
-      )
+      h('div', { class: 'flex flex-col gap-1' }, [
+        h(
+          ULink,
+          {
+            href: `https://nvd.nist.gov/vuln/detail/${row.original.cveId}`,
+            target: '_blank',
+            rel: 'noopener noreferrer'
+          },
+          () => row.original.cveId
+        ),
+        row.original.sources.length
+          ? h(
+              'div',
+              { class: 'flex flex-wrap gap-2' },
+              row.original.sources.map(source =>
+                h(
+                  UBadge,
+                  {
+                    color: sourceBadgeMap[source]?.color ?? 'neutral',
+                    variant: 'soft',
+                    class: 'text-xs font-semibold'
+                  },
+                  () => sourceBadgeMap[source]?.label ?? source.toUpperCase()
+                )
+              )
+            )
+          : null
+      ])
   },
   {
     accessorKey: 'vendor',
@@ -91,6 +118,27 @@ const columns = computed<TableColumn<KevEntry>[]>(() => [
           class: 'font-semibold'
         },
         () => label
+      )
+    }
+  },
+  {
+    id: 'epss',
+    header: 'EPSS',
+    cell: ({ row }) => {
+      const formatted = formatEpss(row.original.epssScore)
+
+      if (!formatted) {
+        return '—'
+      }
+
+      return h(
+        UBadge,
+        {
+          color: 'success',
+          variant: 'soft',
+          class: 'font-semibold'
+        },
+        () => `${formatted}%`
       )
     }
   },
