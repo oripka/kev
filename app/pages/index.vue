@@ -916,131 +916,106 @@ const columns: TableColumn<KevEntry>[] = [
             </div>
           </template>
 
-          <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            <UFormField label="Search">
-              <UInput
-                class="w-full"
-                v-model="searchInput"
-                placeholder="Filter by CVE, vendor, product, or description"
-              />
-            </UFormField>
+          <div class="space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <UFormField label="Search">
+                <UInput
+                  class="w-full"
+                  v-model="searchInput"
+                  placeholder="Filter by CVE, vendor, product, or description"
+                />
+              </UFormField>
 
+              <UFormField label="Well-known focus">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                    Only show named, high-profile CVEs
+                  </p>
+                  <USwitch v-model="showWellKnownOnly" />
+                </div>
+              </UFormField>
 
-            <div class="md:col-span-2 xl:col-span-3">
-              <div class="grid gap-6 md:grid-cols-3">
-                <UFormField label="Well-known focus">
-                  <div class="flex items-center justify-between gap-3">
-                    <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                      Only show named, high-profile CVEs
-                    </p>
-                    <USwitch v-model="showWellKnownOnly" />
-                  </div>
-                </UFormField>
-
-                <UFormField label="Data source">
-                  <div class="flex flex-wrap gap-2">
-                    <UButton
-                      v-for="option in ['all', 'kev', 'enisa']"
-                      :key="option"
-                      size="sm"
-                      :color="selectedSource === option ? 'primary' : 'neutral'"
-                      :variant="selectedSource === option ? 'solid' : 'outline'"
-                      @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
-                    >
-                      {{ option === 'all' ? 'All sources' : option === 'kev' ? 'CISA KEV' : 'ENISA' }}
-                    </UButton>
-                  </div>
-                </UFormField>
-
-                <UFormField label="Year range">
-                  <div class="space-y-3">
-                    <div
-                      class="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400"
-                    >
-                      <span class="font-medium text-neutral-700 dark:text-neutral-200">
-                        {{ yearRange[0] }} – {{ yearRange[1] }}
-                      </span>
-                      <div class="flex items-center gap-2">
-                        <span class="hidden text-[0.8rem] text-neutral-500 dark:text-neutral-400 sm:inline">
-                          Catalog coverage {{ earliestDataYear }} – {{ latestDataYear }}
-                        </span>
-                        <UButton
-                          v-if="hasCustomYearRange"
-                          size="xs"
-                          variant="ghost"
-                          color="neutral"
-                          icon="i-lucide-undo2"
-                          @click="resetYearRange"
-                        >
-                          Reset
-                        </UButton>
-                      </div>
-                    </div>
-                    <USlider
-                      v-model="yearRange"
-                      :min="sliderMinYear"
-                      :max="sliderMaxYear"
-                      :step="1"
-                      class="px-1"
-                      tooltip
-                    />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Filter vulnerabilities by the year CISA added them to the KEV catalog.
-                    </p>
-                  </div>
-                </UFormField>
-
-                <UFormField label="CVSS range">
-                  <div class="space-y-2">
-                    <USlider
-                      v-model="cvssRange"
-                      :min="defaultCvssRange[0]"
-                      :max="defaultCvssRange[1]"
-                      :step="0.1"
-                      :min-steps-between-thumbs="1"
-                      tooltip
-                    />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
-                    </p>
-                  </div>
-                </UFormField>
-
-                <UFormField label="EPSS range">
-                  <div class="space-y-2">
-                    <USlider
-                      v-model="epssRange"
-                      :min="defaultEpssRange[0]"
-                      :max="defaultEpssRange[1]"
-                      :step="1"
-                      :min-steps-between-thumbs="1"
-                      tooltip
-                    />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
-                    </p>
-                  </div>
-                </UFormField>
-              </div>
+              <UFormField label="Data source">
+                <div class="flex flex-wrap gap-2">
+                  <UButton
+                    v-for="option in ['all', 'kev', 'enisa']"
+                    :key="option"
+                    size="sm"
+                    :color="selectedSource === option ? 'primary' : 'neutral'"
+                    :variant="selectedSource === option ? 'solid' : 'outline'"
+                    @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
+                  >
+                    {{ option === 'all' ? 'All sources' : option === 'kev' ? 'CISA KEV' : 'ENISA' }}
+                  </UButton>
+                </div>
+              </UFormField>
             </div>
 
-            <div
-              v-if="activeFilters.length"
-              class="flex flex-wrap items-center gap-2"
-            >
-              <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                Active filters
-              </p>
-              <button
-                v-for="item in activeFilters"
-                :key="`${item.key}-${item.value}`"
-                type="button"
-                class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-neutral-600"
-                @click="clearFilter(item.key)"
-              >
-                <span>{{ item.label }}: {{ item.value }}</span>
-                <UIcon name="i-lucide-x" class="size-3.5" />
-              </button>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <UFormField label="Year range">
+                <div class="space-y-2">
+ 
+                  <USlider
+                    v-model="yearRange"
+                    :min="sliderMinYear"
+                    :max="sliderMaxYear"
+                    :step="1"
+                    class="px-1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Filter vulnerabilities by the year CISA added them to the KEV catalog.
+                  </p>
+                </div>
+              </UFormField>
+
+              <UFormField label="CVSS range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="cvssRange"
+                    :min="defaultCvssRange[0]"
+                    :max="defaultCvssRange[1]"
+                    :step="0.1"
+                    :min-steps-between-thumbs="1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
+                  </p>
+                </div>
+              </UFormField>
+
+              <UFormField label="EPSS range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="epssRange"
+                    :min="defaultEpssRange[0]"
+                    :max="defaultEpssRange[1]"
+                    :step="1"
+                    :min-steps-between-thumbs="1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
+                  </p>
+                </div>
+              </UFormField>
+            </div>
+
+            <div v-if="activeFilters.length" class="flex flex-wrap items-center gap-2">
+              <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Active filters</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  v-for="item in activeFilters"
+                  :key="`${item.key}-${item.value}`"
+                  type="button"
+                  class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-neutral-600"
+                  @click="clearFilter(item.key)"
+                >
+                  <span>{{ item.label }}: {{ item.value }}</span>
+                  <UIcon name="i-lucide-x" class="size-3.5" />
+                </button>
+              </div>
             </div>
 
             <div v-if="hasActiveFilters">
