@@ -12,17 +12,24 @@ const {
   vulnerabilityTypeNames,
 } = useKevData();
 
-const filters = reactive({
+const defaultFilters = {
   domain: null as string | null,
   exploit: null as string | null,
   vulnerability: null as string | null,
   text: "",
-});
+};
+
+const filters = reactive({ ...defaultFilters });
+
+const resetFilters = () => {
+  Object.assign(filters, defaultFilters);
+};
 
 const toSelectItems = (
   counts: { name: string; count: number }[],
-  names: string[]
-): SelectMenuItem<string>[] => {
+  names: string[],
+  allLabel: string
+): SelectMenuItem<string | null>[] => {
   const formatted = counts.map(({ name, count }) => ({
     label: `${name} (${count})`,
     value: name,
@@ -34,7 +41,7 @@ const toSelectItems = (
     .map((name) => ({ label: `${name} (0)`, value: name }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  return [...formatted, ...zeroItems];
+  return [{ label: allLabel, value: null }, ...formatted, ...zeroItems];
 };
 
 const computeCounts = (
@@ -128,28 +135,57 @@ const results = computed(() => {
   });
 });
 
+const hasActiveFilters = computed(() =>
+  Boolean(
+    filters.domain ||
+      filters.exploit ||
+      filters.vulnerability ||
+      filters.text.trim()
+  )
+);
+
 const domainCounts = computed(() =>
   computeCounts(results.value, (entry) => entry.domainCategories)
 );
 
+const domainCountsAll = computed(() =>
+  computeCounts(entries.value, (entry) => entry.domainCategories)
+);
+
 const domainItems = computed(() =>
-  toSelectItems(domainCounts.value, categoryNames.value)
+  toSelectItems(domainCounts.value, categoryNames.value, "All domain categories")
 );
 
 const exploitLayerCounts = computed(() =>
   computeCounts(results.value, (entry) => entry.exploitLayers)
 );
 
+const exploitLayerCountsAll = computed(() =>
+  computeCounts(entries.value, (entry) => entry.exploitLayers)
+);
+
 const exploitLayerItems = computed(() =>
-  toSelectItems(exploitLayerCounts.value, exploitLayerNames.value)
+  toSelectItems(
+    exploitLayerCounts.value,
+    exploitLayerNames.value,
+    "All exploit profiles"
+  )
 );
 
 const vulnerabilityCounts = computed(() =>
   computeCounts(results.value, (entry) => entry.vulnerabilityCategories)
 );
 
+const vulnerabilityCountsAll = computed(() =>
+  computeCounts(entries.value, (entry) => entry.vulnerabilityCategories)
+);
+
 const vulnerabilityItems = computed(() =>
-  toSelectItems(vulnerabilityCounts.value, vulnerabilityTypeNames.value)
+  toSelectItems(
+    vulnerabilityCounts.value,
+    vulnerabilityTypeNames.value,
+    "All vulnerability categories"
+  )
 );
 
 type ProgressDatum = {
@@ -159,7 +195,6 @@ type ProgressDatum = {
   percentLabel: string;
 };
 
-const MAX_PROGRESS_ITEMS = 8;
 const percentFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
@@ -176,7 +211,7 @@ const toProgressStats = (
     return [];
   }
 
-  return counts.slice(0, MAX_PROGRESS_ITEMS).map((item) => {
+  return counts.map((item) => {
     const percent = (item.count / total) * 100;
     return {
       ...item,
@@ -186,12 +221,12 @@ const toProgressStats = (
   });
 };
 
-const domainStats = computed(() => toProgressStats(domainCounts.value));
+const domainStats = computed(() => toProgressStats(domainCountsAll.value));
 const exploitLayerStats = computed(() =>
-  toProgressStats(exploitLayerCounts.value)
+  toProgressStats(exploitLayerCountsAll.value)
 );
 const vulnerabilityStats = computed(() =>
-  toProgressStats(vulnerabilityCounts.value)
+  toProgressStats(vulnerabilityCountsAll.value)
 );
 
 const domainProgressColor = (name: string) =>
@@ -201,15 +236,15 @@ const exploitLayerProgressColor = (name: string) =>
   filters.exploit && name === filters.exploit ? "error" : "warning";
 
 const domainTotalCount = computed(() =>
-  domainCounts.value.reduce((sum, item) => sum + item.count, 0)
+  domainCountsAll.value.reduce((sum, item) => sum + item.count, 0)
 );
 
 const exploitLayerTotalCount = computed(() =>
-  exploitLayerCounts.value.reduce((sum, item) => sum + item.count, 0)
+  exploitLayerCountsAll.value.reduce((sum, item) => sum + item.count, 0)
 );
 
 const vulnerabilityTotalCount = computed(() =>
-  vulnerabilityCounts.value.reduce((sum, item) => sum + item.count, 0)
+  vulnerabilityCountsAll.value.reduce((sum, item) => sum + item.count, 0)
 );
 
 const topDomainStat = computed(() => domainStats.value[0] ?? null);
@@ -317,11 +352,23 @@ const columns: TableColumn<KevEntry>[] = [
       <div class="grid grid-cols-1 gap-3 max-w-7xl mx-auto">
         <UCard>
           <template #header>
-            <p
-              class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
-            >
-              Filters
-            </p>
+            <div class="flex items-center justify-between gap-3">
+              <p
+                class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
+              >
+                Filters
+              </p>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                @click="resetFilters"
+                :disabled="!hasActiveFilters"
+              >
+                Reset filters
+              </UButton>
+            </div>
           </template>
 
           <div class="grid gap-2 md:grid-cols-2">
@@ -366,10 +413,7 @@ const columns: TableColumn<KevEntry>[] = [
               />
             </UFormField>
 
-            <div
-              v-if="filters.domain || filters.exploit || filters.vulnerability || filters.text"
-              class="md:col-span-2"
-            >
+            <div v-if="hasActiveFilters" class="md:col-span-2">
               <UAlert
                 color="info"
                 variant="soft"
@@ -417,7 +461,12 @@ const columns: TableColumn<KevEntry>[] = [
                 <div
                   v-for="stat in domainStats"
                   :key="stat.name"
-                  class="space-y-2"
+                  :class="[
+                    'space-y-2 rounded-lg px-3 py-2 transition-colors ring-1 ring-transparent dark:ring-transparent',
+                    filters.domain === stat.name
+                      ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-emerald-200 dark:ring-emerald-500/40'
+                      : 'bg-transparent'
+                  ]"
                 >
                   <div
                     class="flex items-center justify-between gap-3 text-sm"
@@ -482,7 +531,12 @@ const columns: TableColumn<KevEntry>[] = [
                 <div
                   v-for="stat in exploitLayerStats"
                   :key="stat.name"
-                  class="space-y-2"
+                  :class="[
+                    'space-y-2 rounded-lg px-3 py-2 transition-colors ring-1 ring-transparent dark:ring-transparent',
+                    filters.exploit === stat.name
+                      ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/40'
+                      : 'bg-transparent'
+                  ]"
                 >
                   <div
                     class="flex items-center justify-between gap-3 text-sm"
@@ -548,7 +602,12 @@ const columns: TableColumn<KevEntry>[] = [
                 <div
                   v-for="stat in vulnerabilityStats"
                   :key="stat.name"
-                  class="space-y-2"
+                  :class="[
+                    'space-y-2 rounded-lg px-3 py-2 transition-colors ring-1 ring-transparent dark:ring-transparent',
+                    filters.vulnerability === stat.name
+                      ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
+                      : 'bg-transparent'
+                  ]"
                 >
                   <div
                     class="flex items-center justify-between gap-3 text-sm"
