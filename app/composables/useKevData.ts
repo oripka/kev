@@ -198,6 +198,15 @@ export const useKevData = () => {
   })
 
   const totalEntries = computed(() => filteredEntries.value.length)
+  const filteredDomainCategories = computed(() =>
+    aggregateCounts(filteredEntries.value, entry => entry.domainCategories as KevDomainCategory[])
+  )
+  const filteredVulnerabilityCategories = computed(() =>
+    aggregateCounts(
+      filteredEntries.value,
+      entry => entry.vulnerabilityCategories as KevVulnerabilityCategory[]
+    )
+  )
 
   const vendorTotal = computed(() => new Set(entries.value.map(entry => entry.vendor)).size)
   const productTotal = computed(() => new Set(entries.value.map(entry => entry.product)).size)
@@ -259,6 +268,8 @@ export const useKevData = () => {
     products,
     domainCategories,
     vulnerabilityCategories,
+    filteredDomainCategories,
+    filteredVulnerabilityCategories,
     vendorNames,
     productNames,
     categoryNames,

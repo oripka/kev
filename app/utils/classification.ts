@@ -110,7 +110,34 @@ const webProductPatterns: RegExp[] = [
   /(sonicwall)/i,
   /(md[a]?emon)/i,
   /(geovision)/i,
-  /(rails)/i
+  /(rails)/i,
+  /(jquery)/i,
+  /(cobalt strike)/i,
+  /(flash player)/i,
+  /(vcenter)/i,
+  /(imagemagick)/i,
+  /(connect secure|policy secure|neurons)/i,
+  /(n[- ]?central)/i,
+  /(aviatrix)/i,
+  /(beyondtrust)/i,
+  /(privileged remote access|remote support)/i,
+  /(cloud services appliance|csa)/i,
+  /(velo?cloud)/i,
+  /(sd[- ]?wan (?:edge|orchestrator|controller))/i,
+  /(spring (?:boot|framework|cloud|data|security|mvc|core|commons))/i,
+  /(adobe experience manager|aem forms|aem)/i,
+  /(draytek|vigor[0-9]+)/i,
+  /(sonicos)/i,
+  /(fortios)/i,
+  /(exchange (?:server)?)/i,
+  /(proxylogon)/i,
+  /(sophos)/i,
+  /(tp-?link|tplink)/i,
+  /(archer)/i,
+  /(d-?link)/i,
+  /(cisco (?:asa|adaptive security appliance))/i,
+  /\badaptive security appliance\b/i,
+  /\bwebvpn\b/i
 ]
 
 const webServerPatterns: RegExp[] = [
@@ -123,7 +150,11 @@ const webServerPatterns: RegExp[] = [
   /(caddy|openresty)/i
 ]
 
-const webDevicePatterns: RegExp[] = [/(ip camera|nvr|dvr|webcam|nas)/i]
+const webDevicePatterns: RegExp[] = [
+  /(ip camera|nvr|dvr|webcam|nas)/i,
+  /(router|gateway|access point|wireless controller|firewall|ap)/i,
+  /(security appliance|vpn appliance)/i
+]
 
 const webNegativePatterns: RegExp[] = [
   /(internet explorer)/i,
@@ -143,26 +174,41 @@ const webIndicatorPatterns: RegExp[] = [
   /(server[- ]?side request forgery|ssrf)/i,
   /(sql injection|sqli)/i,
   /(directory traversal|path traversal)/i,
+  /(?:\.\.\/){1,}/i,
   /(remote file inclusion|rfi)/i,
   /(open redirect|url redirect)/i,
   /(arbitrary (?:file|code) upload|file upload|file download)/i,
   /(command injection|os command)/i,
-  /(template injection|twig|freemarker)/i
+  /(template injection|twig|freemarker)/i,
+  /(cross[- ]?site request forgery|csrf)/i,
+  /\.(?:php|jsp|asp|aspx|cgi|pl|js)\b/i,
+  /(\/[a-z0-9._-]+){1,}\/[a-z0-9._-]+\.(?:php|jsp|asp|aspx|cgi|pl|js)/i,
+  /\bwebvpn\b/i
 ]
 
 const webStrongContextPatterns: RegExp[] = [
   /(web (?:interface|console|ui|portal|application|service|dashboard|admin|client))/i,
   /(management (?:interface|portal|console|ui|plane|dashboard|panel))/i,
   /(admin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel))/i,
+  /(administrative (?:interface|portal|console|ui|dashboard|panel))/i,
   /(super-?admin)/i,
   /(control panel|control plane|control center)/i,
   /(login (?:portal|page|interface|screen|panel))/i,
   /(server url)/i,
+  /(parental control page)/i,
   /(browser[- ]?based|web[- ]?based)/i,
+  /(web content)/i,
+  /(?:via|over)\s+https?/i,
   /https?:\/\//i,
   /\bhttp\b[^.]*\b(request|response|endpoint|header|parameter|query)\b/i,
   /https?\s*(?:request|requests|response|responses)/i,
   /(crafted[^.]{0,40}https?)/i,
+  /(cgi[-/]bin)/i,
+  /(\/userRpm\/)/i,
+  /(http post (?:request|handler))/i,
+  /\bwebvpn\b/i,
+  /(vpn (?:web )?portal)/i,
+  /(\/[a-z0-9_-]*api\b)/i,
   /(rest api|graphql|soap api|json-rpc)/i,
   /(csrf|cross[- ]?site request forgery)/i,
   /(deserialization|serialized object)/i,
@@ -187,11 +233,13 @@ const webDeviceContextPatterns: RegExp[] = [
 const webManagementPatterns: RegExp[] = [
   /(management (?:interface|portal|console|ui|plane|dashboard|panel))/i,
   /(admin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel))/i,
+  /(administrative (?:interface|portal|console|ui|dashboard|panel))/i,
   /(admin(?:istrator)? account)/i,
   /(super-?admin)/i,
   /(control panel|control plane|control center)/i,
   /(login (?:portal|page|interface|screen|panel))/i,
-  /(server url)/i
+  /(server url)/i,
+  /\bwebvpn\b/i
 ]
 
 const webApiPatterns: RegExp[] = [
@@ -202,7 +250,8 @@ const webApiPatterns: RegExp[] = [
   /(web api)/i,
   /(api endpoint)/i,
   /(api interface)/i,
-  /(api (?:request|response|call|gateway|server))/i
+  /(api (?:request|response|call|gateway|server))/i,
+  /\/api\b/i
 ]
 
 const nonWebProductPatterns: RegExp[] = [
@@ -214,7 +263,8 @@ const nonWebProductPatterns: RegExp[] = [
 const nonWebContextPatterns: RegExp[] = [
   /(physical access)/i,
   /(local privilege escalation|locally)/i,
-  /(stack[- ]?based buffer overflow|heap[- ]?based buffer overflow|buffer overflow|out[- ]?of[- ]?bounds|use[- ]?after[- ]?free|memory corruption)/i
+  /(stack[- ]?based buffer overflow|heap[- ]?based buffer overflow|buffer overflow|out[- ]?of[- ]?bounds|use[- ]?after[- ]?free|memory corruption)/i,
+  /(command line interface|\bcli\b)/i
 ]
 
 const vulnerabilityRules: Array<{
@@ -319,21 +369,35 @@ export const classifyDomainCategories = (entry: {
   const isMailServer = categories.has('Mail Servers')
   const isNetworkDevice = categories.has('Networking & VPN')
 
+  const hasStandaloneWebIndicator =
+    hasWebIndicators && !hasNonWebProductSignal && !hasNonWebContextSignal
+  const hasCombinedWebIndicator =
+    hasStandaloneWebIndicator ||
+    (hasWebIndicators &&
+      (hasStrongWebSignal ||
+        hasManagementSignal ||
+        hasApiSignal ||
+        isWebProduct ||
+        isWebDevice ||
+        isMailServer ||
+        isNetworkDevice))
+
+  const baseWebSignals =
+    isWebProduct ||
+    hasStrongWebSignal ||
+    hasManagementSignal ||
+    hasApiSignal ||
+    deviceHasWebSignal ||
+    (hasWebIndicators &&
+      (isWebProduct ||
+        isWebDevice ||
+        isMailServer ||
+        isNetworkDevice ||
+        hasManagementSignal ||
+        hasApiSignal))
+
   const shouldTagWeb =
-    !isBrowser &&
-    !isWebServer &&
-    (isWebProduct ||
-      hasStrongWebSignal ||
-      hasManagementSignal ||
-      hasApiSignal ||
-      deviceHasWebSignal ||
-      (hasWebIndicators &&
-        (isWebProduct ||
-          isWebDevice ||
-          isMailServer ||
-          isNetworkDevice ||
-          hasManagementSignal ||
-          hasApiSignal)))
+    ((!isBrowser && !isWebServer) && baseWebSignals) || hasCombinedWebIndicator
 
   const shouldPreferNonWeb =
     hasNonWebProductSignal ||
@@ -342,7 +406,8 @@ export const classifyDomainCategories = (entry: {
       !hasManagementSignal &&
       !hasApiSignal &&
       !isWebProduct &&
-      !deviceHasWebSignal)
+      !deviceHasWebSignal &&
+      !hasCombinedWebIndicator)
 
   if (shouldPreferNonWeb) {
     categories.delete('Web Applications')
