@@ -275,7 +275,30 @@ const privilegePatterns: RegExp[] = [
   /(privilege escalation|elevation of privilege|gain[s]? (?:administrative|root|privileges?)|eop)/i
 ]
 
-const rcePatterns: RegExp[] = [/(remote code execution|code execution|rce|arbitrary code)/i]
+const remoteExecutionPatterns: RegExp[] = [
+  /(remote code execution)/i,
+  /(execute code remotely)/i,
+  /(remote execution)/i,
+  /\bRCE\b/i
+]
+
+const codeExecutionPatterns: RegExp[] = [
+  /(execute arbitrary code)/i,
+  /(arbitrary code execution)/i,
+  /(run arbitrary code)/i,
+  /(code[- ]?execution)/i
+]
+
+const remoteContextPatterns: RegExp[] = [
+  /(remote (?:attacker|user|actor|threat))/i,
+  /(remote,? (?:unauthenticated|authenticated) attacker)/i,
+  /\bremotely\b/i,
+  /(over the network|across the network|network[- ]based attacker|network access)/i,
+  /(via (?:the )?network)/i,
+  /(via (?:http|https|smb|rpc|rdp|ftp|smtp|imap|pop3|dns|tcp|udp|ldap|snmp|modbus|dce\/?rpc))/i,
+  /(through (?:http|https|smb|rpc|rdp|ftp|smtp|imap|pop3|dns|tcp|udp|ldap|snmp|modbus|dce\/?rpc))/i,
+  /(crafted (?:request|packet|payload|network request|network traffic|network message))/i
+]
 
 const memoryCorruptionPatterns: RegExp[] = [
   /(memory corruption|buffer overflow|heap overflow|stack overflow|out-of-bounds|use-after-free|dangling pointer|double free|overflow)/i
@@ -509,11 +532,21 @@ export const classifyExploitLayers = (
   const text = normalise(`${entry.vulnerabilityName} ${entry.description}`)
   const layers = new Set<KevExploitLayer>()
 
-  if (privilegePatterns.some(pattern => pattern.test(text))) {
+  const hasPrivilegeSignal = privilegePatterns.some(pattern => pattern.test(text))
+
+  if (hasPrivilegeSignal) {
     layers.add('Privilege Escalation')
   }
 
-  if (!rcePatterns.some(pattern => pattern.test(text))) {
+  const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns)
+  const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns)
+  const hasRemoteContext =
+    hasExplicitRemoteRce || matchesAny(text, remoteContextPatterns)
+
+  const qualifiesForRce =
+    hasExplicitRemoteRce || (hasCodeExecutionSignal && hasRemoteContext)
+
+  if (!qualifiesForRce) {
     return Array.from(layers)
   }
 
