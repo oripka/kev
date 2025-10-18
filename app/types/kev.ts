@@ -1,5 +1,6 @@
 export interface KevFilterState {
   search: string
+  cvssRange: [number, number] | null
   vendor: string | null
   product: string | null
   category: string | null

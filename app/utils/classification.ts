@@ -28,7 +28,9 @@ const domainRules: Array<{
   },
   {
     category: 'Browsers',
-    patterns: [/(browser|chrome|firefox|edge|safari|webkit|chromium|brave|opera)/i]
+    patterns: [
+      /(browser|chrome|firefox|edge|safari|webkit|chromium|brave|opera|internet explorer|msie|trident)/i
+    ]
   },
   {
     category: 'Web Applications',
@@ -261,7 +263,8 @@ const webApiPatterns: RegExp[] = [
 const nonWebProductPatterns: RegExp[] = [
   /(kernel|driver|firmware|microcode|bootloader|hypervisor)/i,
   /(common log file system|clfs)/i,
-  /(sandbox escape)/i
+  /(sandbox escape)/i,
+  /(microsoft management console|\bmmc\b)/i
 ]
 
 const nonWebContextPatterns: RegExp[] = [
@@ -304,9 +307,13 @@ const memoryCorruptionPatterns: RegExp[] = [
   /(memory corruption|buffer overflow|heap overflow|stack overflow|out-of-bounds|use-after-free|dangling pointer|double free|overflow)/i
 ]
 
+const denialOfServicePatterns: RegExp[] = [
+  /(denial of service|dos attack|service disruption|resource exhaustion|crash)/i
+]
+
 const clientSignalPatterns: RegExp[] = [
   /(client[- ]?side)/i,
-  /(browser|chrome|firefox|edge|safari|webkit)/i,
+  /(browser|chrome|firefox|edge|safari|webkit|internet explorer|msie|trident)/i,
   /(desktop|workstation|endpoint|reader|viewer|player)/i,
   /(local user|user interaction)/i
 ]
@@ -505,6 +512,16 @@ export const classifyDomainCategories = (entry: {
       !deviceHasWebSignal &&
       !hasCombinedWebIndicator)
 
+  const productLooksLikeServer = matchesAny(source, webServerPatterns)
+
+  if (
+    categories.has('Web Applications') &&
+    categories.has('Web Servers') &&
+    !productLooksLikeServer
+  ) {
+    categories.delete('Web Servers')
+  }
+
   if (shouldPreferNonWeb) {
     categories.delete('Web Applications')
     categories.add('Non-Web Applications')
@@ -551,11 +568,8 @@ export const classifyExploitLayers = (
   const qualifiesForRce =
     hasExplicitRemoteRce || (hasCodeExecutionSignal && hasRemoteContext)
 
-  if (!qualifiesForRce) {
-    return Array.from(layers)
-  }
-
   const hasMemoryCorruption = memoryCorruptionPatterns.some(pattern => pattern.test(text))
+  const hasDosSignal = matchesAny(text, denialOfServicePatterns)
   const hasClientSignal = matchesAny(text, clientSignalPatterns)
   const hasClientApplicationSignal = matchesAny(text, clientApplicationPatterns)
   const hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns)
@@ -570,8 +584,6 @@ export const classifyExploitLayers = (
     serverDomainHints.has(category)
   )
 
-  let side: 'Client-side' | 'Server-side'
-
   const clientScore =
     (hasClientSignal ? 2 : 0) +
     (hasClientApplicationSignal ? 2 : 0) +
@@ -582,23 +594,47 @@ export const classifyExploitLayers = (
   const serverScore =
     (hasServerSignal ? 2 : 0) + (domainSuggestsServer ? 1 : 0)
 
-  if (clientScore > serverScore) {
-    side = 'Client-side'
-  } else if (serverScore > clientScore) {
-    side = 'Server-side'
-  } else if (hasClientFileSignal || hasClientApplicationSignal) {
-    side = 'Client-side'
-  } else if (domainSuggestsServer && !domainSuggestsClient) {
-    side = 'Server-side'
-  } else if (domainSuggestsClient && !domainSuggestsServer) {
-    side = 'Client-side'
-  } else if (hasServerSignal && !hasClientSignal) {
-    side = 'Server-side'
-  } else if (hasClientSignal && !hasServerSignal) {
-    side = 'Client-side'
-  } else {
-    side = 'Client-side'
+  const determineSide = (): 'Client-side' | 'Server-side' => {
+    if (clientScore > serverScore) {
+      return 'Client-side'
+    }
+
+    if (serverScore > clientScore) {
+      return 'Server-side'
+    }
+
+    if (hasClientFileSignal || hasClientApplicationSignal) {
+      return 'Client-side'
+    }
+
+    if (domainSuggestsServer && !domainSuggestsClient) {
+      return 'Server-side'
+    }
+
+    if (domainSuggestsClient && !domainSuggestsServer) {
+      return 'Client-side'
+    }
+
+    if (hasServerSignal && !hasClientSignal) {
+      return 'Server-side'
+    }
+
+    if (hasClientSignal && !hasServerSignal) {
+      return 'Client-side'
+    }
+
+    return 'Client-side'
   }
+
+  if (!qualifiesForRce) {
+    if (hasDosSignal) {
+      const dosSide = determineSide()
+      layers.add(dosSide === 'Client-side' ? 'DoS · Client-side' : 'DoS · Server-side')
+    }
+    return Array.from(layers)
+  }
+
+  const side = determineSide()
 
   const labelMap: Record<
     'Client-side' | 'Server-side',
@@ -619,6 +655,10 @@ export const classifyExploitLayers = (
     : labelMap[side].nonMemory
 
   layers.add(label)
+
+  if (hasDosSignal) {
+    layers.add(side === 'Client-side' ? 'DoS · Client-side' : 'DoS · Server-side')
+  }
 
   return Array.from(layers)
 }

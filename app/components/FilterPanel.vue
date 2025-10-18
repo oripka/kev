@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { KevFilterState } from '~/types'
 
 const props = defineProps<{
@@ -34,6 +35,62 @@ const setExploitLayer = (value: unknown) => update({ exploitLayer: coerceNullabl
 const setVulnerabilityType = (value: unknown) => update({ vulnerabilityType: coerceNullableString(value) })
 const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomwareOnly: value === true })
 const setWellKnownOnly = (value: boolean) => update({ wellKnownOnly: value })
+
+const CVSS_MIN = 0
+const CVSS_MAX = 10
+const defaultCvssRange = [CVSS_MIN, CVSS_MAX] as const
+
+const sliderRange = computed<[number, number]>(() => {
+  const value = props.filters.cvssRange
+  if (Array.isArray(value) && value.length === 2) {
+    const [from, to] = value as [number, number]
+    return [
+      Number.isFinite(from) ? from : defaultCvssRange[0],
+      Number.isFinite(to) ? to : defaultCvssRange[1]
+    ]
+  }
+  return [defaultCvssRange[0], defaultCvssRange[1]]
+})
+
+const clampCvss = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(CVSS_MAX, Math.max(CVSS_MIN, value))
+  }
+
+  const parsed = Number.parseFloat(String(value))
+  if (Number.isNaN(parsed)) {
+    return CVSS_MIN
+  }
+  return Math.min(CVSS_MAX, Math.max(CVSS_MIN, parsed))
+}
+
+const normaliseCvssRange = (value: number | number[]): [number, number] => {
+  if (Array.isArray(value)) {
+    const [start = CVSS_MIN, end = CVSS_MAX] = value
+    const first = clampCvss(start)
+    const second = clampCvss(end)
+    return first <= second ? [first, second] : [second, first]
+  }
+
+  const score = clampCvss(value)
+  return [score, score]
+}
+
+const setCvssRange = (value: number | number[]) => {
+  const [start, end] = normaliseCvssRange(value)
+  const isDefault = start === defaultCvssRange[0] && end === defaultCvssRange[1]
+  update({ cvssRange: isDefault ? null : [start, end] })
+}
+
+const formatCvss = (score: number) => score.toFixed(1).replace(/\.0$/, '')
+const isCvssFiltered = computed(
+  () => Array.isArray(props.filters.cvssRange) && props.filters.cvssRange.length === 2
+)
+const cvssRangeLabel = computed(() =>
+  isCvssFiltered.value
+    ? `${formatCvss(sliderRange.value[0])} – ${formatCvss(sliderRange.value[1])}`
+    : 'All scores'
+)
 </script>
 
 <template>
@@ -43,13 +100,32 @@ const setWellKnownOnly = (value: boolean) => update({ wellKnownOnly: value })
     </template>
     <template #body>
       <UForm>
-        <UFormField label="Search">
-          <UInput
-            :model-value="props.filters.search"
-            placeholder="Search by CVE, vendor, or product"
-            @update:model-value="(value) => update({ search: value })"
-          />
-        </UFormField>
+        <div class="flex flex-col gap-4 lg:flex-row">
+          <UFormField label="Search" class="lg:flex-1">
+            <UInput
+              :model-value="props.filters.search"
+              placeholder="Search by CVE, vendor, product, or description"
+              @update:model-value="(value) => update({ search: value })"
+            />
+          </UFormField>
+          <UFormField label="CVSS score" class="lg:flex-1">
+            <div class="flex items-center gap-3">
+              <USlider
+                class="flex-1"
+                :model-value="sliderRange"
+                :min="CVSS_MIN"
+                :max="CVSS_MAX"
+                :step="0.1"
+                :min-steps-between-thumbs="1"
+                tooltip
+                @update:model-value="setCvssRange"
+              />
+              <span class="w-20 text-right text-sm text-neutral-600 dark:text-neutral-300">
+                {{ cvssRangeLabel }}
+              </span>
+            </div>
+          </UFormField>
+        </div>
         <UFormField label="Vendor">
           <USelect
             :model-value="props.filters.vendor"

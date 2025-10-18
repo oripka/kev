@@ -25,6 +25,8 @@ export type KevExploitLayer =
   | 'RCE · Server-side Memory Corruption'
   | 'RCE · Client-side Non-memory'
   | 'RCE · Server-side Non-memory'
+  | 'DoS · Client-side'
+  | 'DoS · Server-side'
   | 'Privilege Escalation'
 
 export type KevVulnerabilityCategory =
@@ -58,9 +60,25 @@ export type KevEntry = {
   vulnerabilityCategories: KevVulnerabilityCategory[]
 }
 
+export type KevCountDatum = {
+  name: string
+  count: number
+}
+
 export type KevResponse = {
   updatedAt: string
   entries: KevEntry[]
+  counts: {
+    domain: KevCountDatum[]
+    exploit: KevCountDatum[]
+    vulnerability: KevCountDatum[]
+    vendor: KevCountDatum[]
+    product: KevCountDatum[]
+  }
+  catalogBounds: {
+    earliest: string | null
+    latest: string | null
+  }
 }
 
 export type { KevFilterState } from './kev'

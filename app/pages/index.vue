@@ -13,20 +13,6 @@ import type { SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import type { KevEntry } from "~/types";
 
-const {
-  entries,
-  getWellKnownCveName,
-  earliestDate,
-  lastAddedDate,
-  updatedAt,
-  importLatest,
-  importing,
-  importError,
-  lastImportSummary,
-} = useKevData();
-
-const totalEntries = computed(() => entries.value.length);
-
 const formatTimestamp = (value: string) => {
   const parsed = parseISO(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -34,30 +20,6 @@ const formatTimestamp = (value: string) => {
   }
 
   return format(parsed, "yyyy-MM-dd HH:mm");
-};
-
-const catalogUpdatedAt = computed(() => {
-  const value = updatedAt.value;
-  if (!value) {
-    return "No imports yet";
-  }
-
-  return formatTimestamp(value);
-});
-
-const importSummaryMessage = computed(() => {
-  const summary = lastImportSummary.value;
-  if (!summary) {
-    return null;
-  }
-
-  const importedAt = formatTimestamp(summary.importedAt);
-  const importedCount = summary.imported.toLocaleString();
-  return `Imported ${importedCount} entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.`;
-});
-
-const handleImport = async () => {
-  await importLatest();
 };
 
 const sliderMinYear = 1990;
@@ -73,14 +35,6 @@ const hasCustomYearRange = computed(
   () =>
     yearRange.value[0] !== defaultYearRange[0] ||
     yearRange.value[1] !== defaultYearRange[1]
-);
-
-const earliestDataYear = computed(
-  () => earliestDate.value?.getFullYear() ?? sliderMinYear
-);
-
-const latestDataYear = computed(
-  () => lastAddedDate.value?.getFullYear() ?? sliderMaxYear
 );
 
 type FilterKey = "domain" | "exploit" | "vulnerability" | "vendor" | "product";
@@ -129,52 +83,78 @@ onBeforeUnmount(() => {
   }
 });
 
-const filterByArray = (
-  items: KevEntry[],
-  accessor: (entry: KevEntry) => string[],
-  value: string | null
-) => {
+const filterParams = computed(() => {
+  const [startYear, endYear] = yearRange.value;
+
+  return {
+    search: debouncedSearch.value || undefined,
+    domain: filters.domain || undefined,
+    exploit: filters.exploit || undefined,
+    vulnerability: filters.vulnerability || undefined,
+    vendor: filters.vendor || undefined,
+    product: filters.product || undefined,
+    startYear,
+    endYear,
+    wellKnownOnly: showWellKnownOnly.value ? true : undefined,
+  };
+});
+
+const {
+  entries,
+  counts,
+  catalogBounds,
+  updatedAt,
+  importLatest,
+  importing,
+  importError,
+  lastImportSummary,
+  getWellKnownCveName,
+} = useKevData(filterParams);
+
+const totalEntries = computed(() => entries.value.length);
+
+const earliestDataYear = computed(() => {
+  const value = catalogBounds.value.earliest;
   if (!value) {
-    return items;
+    return sliderMinYear;
   }
 
-  return items.filter((entry) => accessor(entry).includes(value));
-};
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime()) ? sliderMinYear : parsed.getFullYear();
+});
 
-const filterByValue = (
-  items: KevEntry[],
-  accessor: (entry: KevEntry) => string,
-  value: string | null
-) => {
+const latestDataYear = computed(() => {
+  const value = catalogBounds.value.latest;
   if (!value) {
-    return items;
+    return sliderMaxYear;
   }
 
-  return items.filter((entry) => accessor(entry) === value);
-};
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime()) ? sliderMaxYear : parsed.getFullYear();
+});
 
-const computeCounts = (
-  items: KevEntry[],
-  accessor: (entry: KevEntry) => string | string[]
-) => {
-  const totals = new Map<string, number>();
-
-  for (const entry of items) {
-    const value = accessor(entry);
-    const keys = Array.isArray(value) ? value : [value];
-
-    for (const key of keys) {
-      if (!key || key === "Other") {
-        continue;
-      }
-
-      totals.set(key, (totals.get(key) ?? 0) + 1);
-    }
+const catalogUpdatedAt = computed(() => {
+  const value = updatedAt.value;
+  if (!value) {
+    return "No imports yet";
   }
 
-  return Array.from(totals.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
+  return formatTimestamp(value);
+});
+
+const importSummaryMessage = computed(() => {
+  const summary = lastImportSummary.value;
+  if (!summary) {
+    return null;
+  }
+
+  const importedAt = formatTimestamp(summary.importedAt);
+  const importedCount = summary.imported.toLocaleString();
+  return `Imported ${importedCount} entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.`;
+});
+
+const handleImport = async () => {
+  await importLatest();
 };
 
 const UBadge = resolveComponent("UBadge");
@@ -198,82 +178,35 @@ watch(showDetails, (value) => {
   }
 });
 
-const yearFilteredEntries = computed(() => {
-  const [startYear, endYear] = yearRange.value;
+const domainCounts = computed(() => counts.value.domain);
+
+const exploitCounts = computed(() => counts.value.exploit);
+
+const vulnerabilityCounts = computed(() => counts.value.vulnerability);
+
+const vendorCounts = computed(() => counts.value.vendor);
+
+const productCounts = computed(() => counts.value.product);
+
+const results = computed(() => {
+  const term = debouncedSearch.value.trim().toLowerCase();
+  if (!term) {
+    return entries.value;
+  }
+
+  const includesTerm = (value: string | null | undefined) =>
+    typeof value === "string" && value.toLowerCase().includes(term);
 
   return entries.value.filter((entry) => {
-    const parsed = parseISO(entry.dateAdded);
-    if (Number.isNaN(parsed.getTime())) {
-      return true;
-    }
-
-    const year = parsed.getFullYear();
-    return year >= startYear && year <= endYear;
+    return (
+      includesTerm(entry.cveId) ||
+      includesTerm(entry.vendor) ||
+      includesTerm(entry.product) ||
+      includesTerm(entry.vulnerabilityName) ||
+      includesTerm(entry.description)
+    );
   });
 });
-
-const textFilteredEntries = computed(() => {
-  const term = debouncedSearch.value.trim().toLowerCase();
-
-  return yearFilteredEntries.value.filter((entry) => {
-    if (showWellKnownOnly.value && !getWellKnownCveName(entry.cveId)) {
-      return false;
-    }
-
-    if (!term) {
-      return true;
-    }
-
-    const text = `${entry.cveId} ${entry.vendor} ${entry.product} ${entry.vulnerabilityName}`.toLowerCase();
-    return text.includes(term);
-  });
-});
-
-const domainCounts = computed(() =>
-  computeCounts(textFilteredEntries.value, (entry) => entry.domainCategories)
-);
-
-const domainFilteredEntries = computed(() =>
-  filterByArray(textFilteredEntries.value, (entry) => entry.domainCategories, filters.domain)
-);
-
-const exploitCounts = computed(() =>
-  computeCounts(domainFilteredEntries.value, (entry) => entry.exploitLayers)
-);
-
-const exploitFilteredEntries = computed(() =>
-  filterByArray(domainFilteredEntries.value, (entry) => entry.exploitLayers, filters.exploit)
-);
-
-const vulnerabilityCounts = computed(() =>
-  computeCounts(exploitFilteredEntries.value, (entry) => entry.vulnerabilityCategories)
-);
-
-const vulnerabilityFilteredEntries = computed(() =>
-  filterByArray(
-    exploitFilteredEntries.value,
-    (entry) => entry.vulnerabilityCategories,
-    filters.vulnerability
-  )
-);
-
-const vendorCounts = computed(() =>
-  computeCounts(vulnerabilityFilteredEntries.value, (entry) => entry.vendor)
-);
-
-const vendorFilteredEntries = computed(() =>
-  filterByValue(vulnerabilityFilteredEntries.value, (entry) => entry.vendor, filters.vendor)
-);
-
-const productCounts = computed(() =>
-  computeCounts(vendorFilteredEntries.value, (entry) => entry.product)
-);
-
-const productFilteredEntries = computed(() =>
-  filterByValue(vendorFilteredEntries.value, (entry) => entry.product, filters.product)
-);
-
-const results = computed(() => productFilteredEntries.value);
 
 const hasActiveFilters = computed(() =>
   Boolean(
@@ -313,128 +246,6 @@ type ProgressDatum = {
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
-});
-
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-const datedResults = computed(() =>
-  results.value.filter((entry) => {
-    const parsed = parseISO(entry.dateAdded);
-    return !Number.isNaN(parsed.getTime());
-  })
-);
-
-const undatedResultsCount = computed(
-  () => results.value.length - datedResults.value.length
-);
-
-type TimelineYearStat = { year: number; count: number };
-
-type TimelineStats = {
-  topYears: TimelineYearStat[];
-  topYear: TimelineYearStat | null;
-  yearSpan: string | null;
-  activeYears: number;
-  recentCount: number;
-  recentShare: string | null;
-  lastFiveYearsCount: number;
-  lastFiveYearsShare: string | null;
-  averageAgeYears: number | null;
-  withDateCount: number;
-};
-
-const timelineStats = computed<TimelineStats>(() => {
-  const withDate = datedResults.value;
-
-  if (!withDate.length) {
-    return {
-      topYears: [],
-      topYear: null,
-      yearSpan: null,
-      activeYears: 0,
-      recentCount: 0,
-      recentShare: null,
-      lastFiveYearsCount: 0,
-      lastFiveYearsShare: null,
-      averageAgeYears: null,
-      withDateCount: 0,
-    };
-  }
-
-  const counts = new Map<number, number>();
-  const now = new Date();
-  const lastYearCutoff = new Date(now);
-  lastYearCutoff.setFullYear(lastYearCutoff.getFullYear() - 1);
-  const fiveYearCutoff = now.getFullYear() - 4;
-  let recentCount = 0;
-  let lastFiveYearsCount = 0;
-  let totalDays = 0;
-
-  for (const entry of withDate) {
-    const parsed = parseISO(entry.dateAdded);
-    if (Number.isNaN(parsed.getTime())) {
-      continue;
-    }
-
-    const year = parsed.getFullYear();
-    const nextCount = (counts.get(year) ?? 0) + 1;
-    counts.set(year, nextCount);
-
-    if (parsed >= lastYearCutoff) {
-      recentCount += 1;
-    }
-
-    if (year >= fiveYearCutoff) {
-      lastFiveYearsCount += 1;
-    }
-
-    totalDays += (now.getTime() - parsed.getTime()) / MS_PER_DAY;
-  }
-
-  const items = Array.from(counts.entries()).map(([year, count]) => ({
-    year,
-    count,
-  }));
-
-  const topYears = items
-    .slice()
-    .sort((a, b) => (b.count - a.count) || (b.year - a.year))
-    .slice(0, 3);
-
-  const orderedByYear = items
-    .slice()
-    .sort((a, b) => a.year - b.year);
-
-  const yearSpan =
-    orderedByYear.length === 0
-      ? null
-      : orderedByYear.length === 1
-        ? `${orderedByYear[0].year}`
-        : `${orderedByYear[0].year} – ${
-            orderedByYear[orderedByYear.length - 1].year
-          }`;
-
-  const averageAgeYears = Number(
-    (totalDays / withDate.length / 365).toFixed(1)
-  );
-
-  const toPercent = (value: number) =>
-    withDate.length
-      ? percentFormatter.format((value / withDate.length) * 100)
-      : null;
-
-  return {
-    topYears,
-    topYear: topYears[0] ?? null,
-    yearSpan,
-    activeYears: counts.size,
-    recentCount,
-    recentShare: toPercent(recentCount),
-    lastFiveYearsCount,
-    lastFiveYearsShare: toPercent(lastFiveYearsCount),
-    averageAgeYears: Number.isFinite(averageAgeYears) ? averageAgeYears : null,
-    withDateCount: withDate.length,
-  };
 });
 
 const toProgressStats = (
@@ -835,7 +646,7 @@ const columns: TableColumn<KevEntry>[] = [
               <UInput
                 class="w-full"
                 v-model="searchInput"
-                placeholder="Filter by CVE, vendor, or product"
+                placeholder="Filter by CVE, vendor, product, or description"
               />
             </UFormField>
 
@@ -874,142 +685,6 @@ const columns: TableColumn<KevEntry>[] = [
                 icon="i-lucide-filters"
                 :title="`${results.length} matching vulnerabilities`"
               />
-            </div>
-          </div>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="space-y-1">
-                <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                  Timeline insights
-                </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  Understand when the current selection entered the KEV catalog
-                </p>
-              </div>
-              <UBadge color="neutral" variant="soft" class="shrink-0">
-                {{ results.length }} in view
-              </UBadge>
-            </div>
-          </template>
-
-          <div class="space-y-6">
-            <div class="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                  Active window
-                </p>
-                <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ timelineStats.yearSpan ?? "No dated records" }}
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ timelineStats.activeYears }} documented year{{ timelineStats.activeYears === 1 ? "" : "s" }} in this view
-                </p>
-              </div>
-              <div class="text-right">
-                <UBadge color="primary" variant="soft" class="justify-end">
-                  {{ timelineStats.withDateCount }} dated entries
-                </UBadge>
-                <p
-                  v-if="undatedResultsCount"
-                  class="mt-1 text-xs text-neutral-500 dark:text-neutral-400"
-                >
-                  {{ undatedResultsCount }} without a recorded date
-                </p>
-              </div>
-            </div>
-
-            <UAlert
-              v-if="undatedResultsCount"
-              color="warning"
-              variant="soft"
-              icon="i-lucide-alert-triangle"
-              title="Missing timeline data"
-              description="Entries without a recorded date remain visible even when you narrow the year range."
-            />
-
-            <div class="grid gap-4 md:grid-cols-3">
-              <div
-                class="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Most active year
-                </p>
-                <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ timelineStats.topYear ? timelineStats.topYear.year : "—" }}
-                </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  <template v-if="timelineStats.topYear">
-                    {{ timelineStats.topYear.count }} vulnerabilities recorded
-                  </template>
-                  <template v-else>
-                    No dated entries in range
-                  </template>
-                </p>
-              </div>
-
-              <div
-                class="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Last 12 months
-                </p>
-                <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ timelineStats.recentShare ? `${timelineStats.recentShare}%` : "—" }}
-                </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  {{ timelineStats.recentCount }} vulnerabilities added in the last 12 months
-                </p>
-              </div>
-
-              <div
-                class="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Aging profile
-                </p>
-                <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{
-                    timelineStats.averageAgeYears !== null
-                      ? `${timelineStats.averageAgeYears} yrs`
-                      : "—"
-                  }}
-                </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  <template v-if="timelineStats.lastFiveYearsShare">
-                    {{ timelineStats.lastFiveYearsShare }}% added in the last five years
-                  </template>
-                  <template v-else>
-                    Not enough dated entries to calculate
-                  </template>
-                </p>
-              </div>
-            </div>
-
-            <div v-if="timelineStats.topYears.length" class="space-y-2">
-              <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                Top activity years
-              </p>
-              <ul class="space-y-1">
-                <li
-                  v-for="item in timelineStats.topYears"
-                  :key="item.year"
-                  class="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2 text-sm text-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200"
-                >
-                  <span class="font-semibold text-neutral-900 dark:text-neutral-50">
-                    {{ item.year }}
-                  </span>
-                  <span class="text-neutral-500 dark:text-neutral-400">
-                    {{ item.count }} KEVs
-                  </span>
-                </li>
-              </ul>
-            </div>
-
-            <div v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-              No dated entries are available for the selected filters.
             </div>
           </div>
         </UCard>

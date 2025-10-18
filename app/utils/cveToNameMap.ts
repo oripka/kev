@@ -8,6 +8,9 @@ export const cveToNameMap: Record<string, string> = {
 
   // 2017
   'CVE-2017-0144': 'EternalBlue', // SMB / WannaCry
+  'CVE-2017-0143': 'EternalRomance / EternalSynergy', // Type confusion between WriteAndX and Transaction requests
+  'CVE-2017-0146': 'EternalChampion / EternalSynergy', // Race condition with Transaction requests
+  'CVE-2017-0147': 'EternalRomance', // Reference used in EternalRomance exploit
   'CVE-2017-5638': 'Struts2', // Apache Struts Jakarta (Equifax)
 
   // 2018
