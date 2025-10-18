@@ -5,7 +5,13 @@ import type { TableColumn } from '@nuxt/ui'
 import { useKevData } from '~/composables/useKevData'
 import type { KevEntry } from '~/types'
 
-const { entries, domainCategories, vulnerabilityCategories } = useKevData()
+const {
+  entries,
+  domainCategories,
+  vulnerabilityCategories,
+  categoryNames,
+  vulnerabilityTypeNames
+} = useKevData()
 
 const filters = reactive({
   domain: null as string | null,
@@ -13,10 +19,21 @@ const filters = reactive({
   text: ''
 })
 
-const domainOptions = computed(() => domainCategories.value.map(item => ({ label: item.name, value: item.name })))
-const vulnerabilityOptions = computed(() =>
-  vulnerabilityCategories.value.map(item => ({ label: item.name, value: item.name }))
-)
+const domainOptions = computed(() => {
+  const counts = new Map(domainCategories.value.map(item => [item.name, item.count]))
+  return categoryNames.value.map(name => ({
+    label: counts.has(name) ? `${name} (${counts.get(name)})` : name,
+    value: name
+  }))
+})
+
+const vulnerabilityOptions = computed(() => {
+  const counts = new Map(vulnerabilityCategories.value.map(item => [item.name, item.count]))
+  return vulnerabilityTypeNames.value.map(name => ({
+    label: counts.has(name) ? `${name} (${counts.get(name)})` : name,
+    value: name
+  }))
+})
 
 const UBadge = resolveComponent('UBadge')
 
