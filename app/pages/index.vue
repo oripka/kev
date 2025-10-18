@@ -1,82 +1,155 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { format, parseISO, subDays, subMonths, subYears } from 'date-fns'
 import { useKevData } from '~/composables/useKevData'
+import KevTimelineCard from '~/components/KevTimelineCard.vue'
+import type { Period, Range } from '~/types'
 
-const kev = useKevData()
+const {
+  entries,
+  total,
+  vendorTotal,
+  productTotal,
+  ransomwareCount,
+  lastAddedDate,
+  earliestDate,
+  updatedAt,
+  pending
+} = useKevData()
+
+const numberFormatter = new Intl.NumberFormat('en', { maximumFractionDigits: 0 })
 
 const summaryCards = computed(() => [
   {
-    title: 'Total KEV entries',
-    value: kev.formatNumber(kev.totalEntries.value),
-    description: 'All vulnerabilities tracked in the catalog.',
-    icon: 'i-lucide-list'
+    title: 'Catalog entries',
+    value: numberFormatter.format(total.value)
   },
   {
-    title: 'New this week',
-    value: kev.formatNumber(kev.newThisWeek.value),
-    description: 'Entries added in the last 7 days.',
-    icon: 'i-lucide-calendar-plus'
+    title: 'Vendors represented',
+    value: numberFormatter.format(vendorTotal.value)
   },
   {
-    title: 'Ransomware-related',
-    value: kev.formatNumber(kev.ransomwareTotal.value),
-    description: 'Known ransomware campaigns referencing the CVE.',
-    icon: 'i-lucide-shield-alert'
+    title: 'Products impacted',
+    value: numberFormatter.format(productTotal.value)
+  },
+  {
+    title: 'Known ransomware links',
+    value: numberFormatter.format(ransomwareCount.value)
   }
 ])
 
-const lastUpdatedText = computed(() => kev.lastUpdated.value ?? 'Unknown')
-const fetchedAtText = computed(() => kev.fetchedAt.value ?? 'Not fetched yet')
-const errorMessage = computed(() => {
-  const current = kev.error.value
-  if (!current) return ''
-  return current instanceof Error ? current.message : String(current)
+const period = ref<Period>('monthly')
+
+const rangePreset = ref('1y')
+
+const rangeOptions = [
+  { label: 'Last 90 days', value: '90d' },
+  { label: 'Last 6 months', value: '6m' },
+  { label: 'Last year', value: '1y' },
+  { label: 'All data', value: 'all' }
+]
+
+const updatedLabel = computed(() => {
+  if (!updatedAt.value) {
+    return 'Awaiting first sync'
+  }
+
+  const parsed = parseISO(updatedAt.value)
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Awaiting first sync'
+  }
+
+  return `Last synced ${format(parsed, 'PPpp')}`
 })
 
-function refreshData() {
-  kev.refresh()
+const resolveRange = (): Range => {
+  const end = lastAddedDate.value ?? new Date()
+  const earliest = earliestDate.value ?? end
+
+  let start: Date
+
+  switch (rangePreset.value) {
+    case '90d':
+      start = subDays(end, 89)
+      break
+    case '6m':
+      start = subMonths(end, 6)
+      break
+    case 'all':
+      start = earliest
+      break
+    case '1y':
+    default:
+      start = subYears(end, 1)
+      break
+  }
+
+  if (start < earliest) {
+    start = earliest
+  }
+
+  return {
+    start,
+    end
+  }
 }
+
+const range = computed<Range>(() => resolveRange())
 </script>
 
 <template>
-  <section>
-    <UCard>
-      <template #header>
-        <strong>Catalog status</strong>
-      </template>
-      <template #body>
-        <UText>Last release: {{ lastUpdatedText }}</UText>
-        <UText color="neutral" variant="subtle">Last fetched: {{ fetchedAtText }}</UText>
-        <UAlert
-          v-if="kev.error.value"
-          color="error"
-          variant="subtle"
-          title="Failed to update"
-          :description="errorMessage"
-          icon="i-lucide-alert-triangle"
-        />
-      </template>
-      <template #footer>
-        <UButton :loading="kev.pending.value" color="primary" icon="i-lucide-refresh-ccw" @click="refreshData">
-          Refresh from CISA
-        </UButton>
-      </template>
-    </UCard>
-  </section>
-
-  <section v-for="card in summaryCards" :key="card.title">
-    <StatCard :title="card.title" :value="card.value" :description="card.description" :icon="card.icon" />
-  </section>
-
-  <section>
-    <VendorChart :items="kev.topVendors.value" :total="kev.totalEntries.value" title="Top vendors by KEV count" />
-  </section>
-
-  <section>
-    <CategoryChart
-      :items="kev.topCategories.value"
-      :total="kev.totalEntries.value"
-      title="Top product categories"
+  <UPage>
+    <UPageHeader
+      title="KEV Overview"
+      :description="updatedLabel"
     />
-  </section>
+
+  <UPageBody>
+      <UPageSection>
+        <USkeleton v-if="pending" class="h-24" />
+        <template v-else>
+          <UPageGrid>
+            <UCard v-for="card in summaryCards" :key="card.title">
+              <template #header>
+                <UText size="sm" color="neutral">
+                  {{ card.title }}
+                </UText>
+              </template>
+              <UText size="3xl" weight="semibold">
+                {{ card.value }}
+              </UText>
+            </UCard>
+          </UPageGrid>
+        </template>
+      </UPageSection>
+
+      <UPageSection>
+        <UCard>
+          <template #header>
+            <div>
+              <UText size="lg" weight="semibold">
+                Activity trend
+              </UText>
+            </div>
+          </template>
+
+          <template #default>
+            <div class="space-y-4">
+              <UFormGroup label="Period">
+                <USelectMenu v-model="period" :options="[
+                  { label: 'Daily', value: 'daily' },
+                  { label: 'Weekly', value: 'weekly' },
+                  { label: 'Monthly', value: 'monthly' }
+                ]" />
+              </UFormGroup>
+              <UFormGroup label="Range">
+                <USelectMenu v-model="rangePreset" :options="rangeOptions" />
+              </UFormGroup>
+              <KevTimelineCard :entries="entries" :period="period" :range="range" />
+            </div>
+          </template>
+        </UCard>
+      </UPageSection>
+    </UPageBody>
+  </UPage>
 </template>

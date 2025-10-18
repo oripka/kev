@@ -1,43 +1,97 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import { VisAxis, VisBar, VisTooltip, VisXYContainer } from '@unovis/vue'
 import { useKevData } from '~/composables/useKevData'
 
-const kev = useKevData()
+const { vendors, products, domainCategories, vulnerabilityCategories } = useKevData()
 
-const typeColumns = computed<TableColumn<{ label: string; value: number }>[]>(() => [
-  {
-    accessorKey: 'label',
-    header: 'Vulnerability type'
-  },
-  {
-    accessorKey: 'value',
-    header: 'KEVs'
-  }
-])
+const vendorData = computed(() => vendors.value.slice(0, 10))
+const productData = computed(() => products.value.slice(0, 10))
+const domainData = computed(() => domainCategories.value.slice(0, 10))
+const vulnerabilityData = computed(() => vulnerabilityCategories.value.slice(0, 10))
+
+const x = (_: { count: number }, index: number) => index
+const y = (datum: { count: number }) => datum.count
+
+const vendorTicks = (index: number) => vendorData.value[index]?.name ?? ''
+const productTicks = (index: number) => productData.value[index]?.name ?? ''
+const domainTicks = (index: number) => domainData.value[index]?.name ?? ''
+const vulnerabilityTicks = (index: number) => vulnerabilityData.value[index]?.name ?? ''
+
+const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${datum.count}`
 </script>
 
 <template>
-  <section>
-    <VendorChart :items="kev.topVendors.value" :total="kev.totalEntries.value" title="Top vendors" />
-  </section>
+  <UPage>
+    <UPageHeader
+      title="Catalog statistics"
+      description="Explore the most impacted vendors, products, and categories"
+    />
 
-  <section>
-    <CategoryChart :items="kev.topCategories.value" :total="kev.totalEntries.value" title="Top categories" />
-  </section>
+    <UPageBody>
+      <UPageSection>
+        <UPageGrid>
+          <UCard>
+            <template #header>
+              <UText size="lg" weight="semibold">
+                Top vendors
+              </UText>
+            </template>
 
-  <section>
-    <TrendChart :items="kev.timeline.value" title="Monthly KEV growth" />
-  </section>
+            <VisXYContainer :data="vendorData" class="h-96">
+              <VisBar :x="x" :y="y" color="var(--ui-primary)" />
+              <VisAxis type="x" :x="x" :tick-format="vendorTicks" />
+              <VisAxis type="y" :y="y" />
+              <VisTooltip :template="tooltip" />
+            </VisXYContainer>
+          </UCard>
 
-  <section>
-    <UCard>
-      <template #header>
-        <strong>Leading vulnerability types</strong>
-      </template>
-      <template #body>
-        <UTable :data="kev.topVulnerabilityTypes.value" :columns="typeColumns" />
-      </template>
-    </UCard>
-  </section>
+          <UCard>
+            <template #header>
+              <UText size="lg" weight="semibold">
+                Top products
+              </UText>
+            </template>
+
+            <VisXYContainer :data="productData" class="h-96">
+              <VisBar :x="x" :y="y" color="var(--ui-secondary)" />
+              <VisAxis type="x" :x="x" :tick-format="productTicks" />
+              <VisAxis type="y" :y="y" />
+              <VisTooltip :template="tooltip" />
+            </VisXYContainer>
+          </UCard>
+
+          <UCard>
+            <template #header>
+              <UText size="lg" weight="semibold">
+                Domain categories
+              </UText>
+            </template>
+
+            <VisXYContainer :data="domainData" class="h-96">
+              <VisBar :x="x" :y="y" color="var(--ui-info)" />
+              <VisAxis type="x" :x="x" :tick-format="domainTicks" />
+              <VisAxis type="y" :y="y" />
+              <VisTooltip :template="tooltip" />
+            </VisXYContainer>
+          </UCard>
+
+          <UCard>
+            <template #header>
+              <UText size="lg" weight="semibold">
+                Vulnerability categories
+              </UText>
+            </template>
+
+            <VisXYContainer :data="vulnerabilityData" class="h-96">
+              <VisBar :x="x" :y="y" color="var(--ui-warning)" />
+              <VisAxis type="x" :x="x" :tick-format="vulnerabilityTicks" />
+              <VisAxis type="y" :y="y" />
+              <VisTooltip :template="tooltip" />
+            </VisXYContainer>
+          </UCard>
+        </UPageGrid>
+      </UPageSection>
+    </UPageBody>
+  </UPage>
 </template>
