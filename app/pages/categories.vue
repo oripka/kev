@@ -28,7 +28,8 @@ const resetFilters = () => {
 const toSelectItems = (
   counts: { name: string; count: number }[],
   names: string[],
-  allLabel: string
+  allLabel: string,
+  includeZero = true
 ): SelectMenuItem<string | null>[] => {
   const formatted = counts.map(({ name, count }) => ({
     label: `${name} (${count})`,
@@ -36,10 +37,12 @@ const toSelectItems = (
   }));
 
   const seen = new Set(counts.map((item) => item.name));
-  const zeroItems = names
-    .filter((name) => !seen.has(name))
-    .map((name) => ({ label: `${name} (0)`, value: name }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const zeroItems = includeZero
+    ? names
+        .filter((name) => !seen.has(name))
+        .map((name) => ({ label: `${name} (0)`, value: name }))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    : [];
 
   return [{ label: allLabel, value: null }, ...formatted, ...zeroItems];
 };
@@ -168,7 +171,8 @@ const exploitLayerItems = computed(() =>
   toSelectItems(
     exploitLayerCounts.value,
     exploitLayerNames.value,
-    "All exploit profiles"
+    "All exploit profiles",
+    !filters.domain
   )
 );
 
@@ -184,7 +188,8 @@ const vulnerabilityItems = computed(() =>
   toSelectItems(
     vulnerabilityCounts.value,
     vulnerabilityTypeNames.value,
-    "All vulnerability categories"
+    "All vulnerability categories",
+    !(filters.domain || filters.exploit)
   )
 );
 
@@ -227,6 +232,36 @@ const exploitLayerStats = computed(() =>
 );
 const vulnerabilityStats = computed(() =>
   toProgressStats(vulnerabilityCountsAll.value)
+);
+
+const vendorCounts = computed(() =>
+  computeCounts(results.value, (entry) => entry.vendor)
+);
+
+const productCounts = computed(() =>
+  computeCounts(results.value, (entry) => entry.product)
+);
+
+const vendorStats = computed(() => toProgressStats(vendorCounts.value));
+const productStats = computed(() => toProgressStats(productCounts.value));
+
+const topCountOptions = [5, 10, 15, 20];
+const topCountItems: SelectMenuItem<number>[] = topCountOptions.map((value) => ({
+  label: `Top ${value}`,
+  value,
+}));
+
+const topCount = ref<number>(5);
+
+const topVendorStats = computed(() => vendorStats.value.slice(0, topCount.value));
+const topProductStats = computed(() => productStats.value.slice(0, topCount.value));
+
+const vendorTotalCount = computed(() =>
+  vendorCounts.value.reduce((sum, item) => sum + item.count, 0)
+);
+
+const productTotalCount = computed(() =>
+  productCounts.value.reduce((sum, item) => sum + item.count, 0)
 );
 
 const domainProgressColor = (name: string) =>
@@ -645,6 +680,129 @@ const columns: TableColumn<KevEntry>[] = [
                   ({{ topVulnerabilityStat.percentLabel }}%)
                 </span>
               </div>
+            </div>
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="space-y-1">
+                <p
+                  class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
+                >
+                  Vendor & product leaders
+                </p>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Spot the most frequently affected suppliers in the current view
+                </p>
+              </div>
+              <UFormField label="Show" class="w-32">
+                <USelectMenu
+                  v-model="topCount"
+                  :items="topCountItems"
+                  value-key="value"
+                  size="sm"
+                />
+              </UFormField>
+            </div>
+          </template>
+
+          <div class="grid gap-6 md:grid-cols-2">
+            <div class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <p
+                    class="text-base font-semibold text-neutral-900 dark:text-neutral-50"
+                  >
+                    Top vendors
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Ranked by number of vulnerabilities
+                  </p>
+                </div>
+                <UBadge color="primary" variant="soft">
+                  {{ vendorTotalCount }}
+                </UBadge>
+              </div>
+
+              <div v-if="topVendorStats.length" class="space-y-4">
+                <div
+                  v-for="stat in topVendorStats"
+                  :key="stat.name"
+                  class="space-y-2 rounded-lg px-3 py-2 transition-colors bg-transparent ring-1 ring-transparent dark:ring-transparent"
+                >
+                  <div
+                    class="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span class="font-medium truncate text-neutral-900 dark:text-neutral-50">
+                      {{ stat.name }}
+                    </span>
+                    <span
+                      class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap"
+                    >
+                      {{ stat.count }} · {{ stat.percentLabel }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    :model-value="stat.percent"
+                    :max="100"
+                    color="primary"
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                No vendor data for this filter.
+              </p>
+            </div>
+
+            <div class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <p
+                    class="text-base font-semibold text-neutral-900 dark:text-neutral-50"
+                  >
+                    Top products
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Products appearing most often in the filtered results
+                  </p>
+                </div>
+                <UBadge color="secondary" variant="soft">
+                  {{ productTotalCount }}
+                </UBadge>
+              </div>
+
+              <div v-if="topProductStats.length" class="space-y-4">
+                <div
+                  v-for="stat in topProductStats"
+                  :key="stat.name"
+                  class="space-y-2 rounded-lg px-3 py-2 transition-colors bg-transparent ring-1 ring-transparent dark:ring-transparent"
+                >
+                  <div
+                    class="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span class="font-medium truncate text-neutral-900 dark:text-neutral-50">
+                      {{ stat.name }}
+                    </span>
+                    <span
+                      class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap"
+                    >
+                      {{ stat.count }} · {{ stat.percentLabel }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    :model-value="stat.percent"
+                    :max="100"
+                    color="secondary"
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                No product data for this filter.
+              </p>
             </div>
           </div>
         </UCard>

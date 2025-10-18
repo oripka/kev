@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { VisAxis, VisGroupedBar, VisTooltip, VisXYContainer } from '@unovis/vue'
 import { useKevData } from '~/composables/useKevData'
 
 const { vendors, products, domainCategories, exploitLayers, vulnerabilityCategories } = useKevData()
 
-const vendorData = computed(() => vendors.value.slice(0, 10))
-const productData = computed(() => products.value.slice(0, 10))
+const topCountOptions = [5, 10, 15, 20]
+const topCountItems = topCountOptions.map(value => ({
+  label: `Top ${value}`,
+  value
+}))
+
+const topCount = ref(5)
+
+const vendorData = computed(() => vendors.value.slice(0, topCount.value))
+const productData = computed(() => products.value.slice(0, topCount.value))
 const domainData = computed(() => domainCategories.value.slice(0, 10))
 const exploitLayerData = computed(() => exploitLayers.value.slice(0, 10))
 const vulnerabilityData = computed(() => vulnerabilityCategories.value.slice(0, 10))
@@ -31,6 +39,17 @@ const tooltip = (datum: { name: string; count: number }) => `${datum.name}: ${da
     />
 
     <UPageBody>
+      <div class="flex justify-end">
+        <UFormField label="Show">
+          <USelectMenu
+            v-model="topCount"
+            :items="topCountItems"
+            value-key="value"
+            size="sm"
+          />
+        </UFormField>
+      </div>
+
       <UPageSection>
         <UPageGrid>
           <UCard>

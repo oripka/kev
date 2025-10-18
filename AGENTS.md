@@ -1,5 +1,6 @@
 KEV Watch — a simple dashboard and analytics tool for CISA’s Known Exploited Vulnerabilities (KEV) list.
 
+- dont start a dev server , run builds or run tests just write the code
 ⸻
 
 1. Purpose
