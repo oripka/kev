@@ -1,0 +1,906 @@
+import type { Database as SqliteDatabase } from 'better-sqlite3'
+import { lookupCveName } from '~/utils/cveToNameMap'
+import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import type { CatalogSource, KevEntry, KevEntrySummary } from '~/types'
+import { ensureCatalogTables, setMetadata } from './sqlite'
+
+type KevRow = {
+  cve_id: string
+  vendor: string | null
+  product: string | null
+  vulnerability_name: string | null
+  description: string | null
+  required_action: string | null
+  date_added: string | null
+  due_date: string | null
+  ransomware_use: string | null
+  notes: string | null
+  cwes: string | null
+  cvss_score: number | null
+  cvss_vector: string | null
+  cvss_version: string | null
+  cvss_severity: string | null
+  domain_categories: string | null
+  exploit_layers: string | null
+  vulnerability_categories: string | null
+  internet_exposed: number | null
+  updated_at: string | null
+}
+
+type EnisaRow = {
+  enisa_id: string
+  cve_id: string | null
+  vendor: string | null
+  product: string | null
+  vulnerability_name: string | null
+  description: string | null
+  assigner: string | null
+  date_published: string | null
+  date_updated: string | null
+  exploited_since: string | null
+  cvss_score: number | null
+  cvss_vector: string | null
+  cvss_version: string | null
+  cvss_severity: string | null
+  epss_score: number | null
+  reference_links: string | null
+  aliases: string | null
+  domain_categories: string | null
+  exploit_layers: string | null
+  vulnerability_categories: string | null
+  source_url: string | null
+  internet_exposed: number | null
+  updated_at: string | null
+}
+
+type CatalogDimension = 'domain' | 'exploit' | 'vulnerability'
+
+export type CatalogEntryRow = {
+  cve_id: string
+  entry_id: string
+  sources: string
+  vendor: string
+  vendor_key: string
+  product: string
+  product_key: string
+  vulnerability_name: string
+  description: string
+  required_action: string | null
+  date_added: string | null
+  date_added_ts: number | null
+  date_added_year: number | null
+  due_date: string | null
+  ransomware_use: string | null
+  has_known_ransomware: number
+  notes: string
+  cwes: string
+  cvss_score: number | null
+  cvss_vector: string | null
+  cvss_version: string | null
+  cvss_severity: string | null
+  epss_score: number | null
+  assigner: string | null
+  date_published: string | null
+  date_updated: string | null
+  date_updated_ts: number | null
+  exploited_since: string | null
+  source_url: string | null
+  references: string
+  aliases: string
+  is_well_known: number
+  domain_categories: string
+  exploit_layers: string
+  vulnerability_categories: string
+  internet_exposed: number
+  has_source_kev: number
+  has_source_enisa: number
+}
+
+export type CatalogSummaryRow = {
+  cve_id: string
+  entry_id: string
+  sources: string
+  vendor: string
+  vendor_key: string
+  product: string
+  product_key: string
+  vulnerability_name: string
+  description: string
+  date_added: string | null
+  ransomware_use: string | null
+  cvss_score: number | null
+  cvss_severity: string | null
+  epss_score: number | null
+  domain_categories: string
+  exploit_layers: string
+  vulnerability_categories: string
+  internet_exposed: number
+}
+
+const DEFAULT_VENDOR = 'Unknown'
+const DEFAULT_PRODUCT = 'Unknown'
+const DEFAULT_VULNERABILITY = 'Unknown vulnerability'
+
+const parseJsonArray = (value: string | null): string[] => {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+const parseAliasArray = (value: string | null): string[] =>
+  parseJsonArray(value).map(alias => alias.toUpperCase())
+
+const normaliseCve = (value: string): string => value.toUpperCase()
+
+const ensureString = (value: string | null | undefined, fallback: string): string => {
+  const trimmed = value?.trim()
+  return trimmed && trimmed.length ? trimmed : fallback
+}
+
+const mergeUniqueStrings = (first: string[], second: string[]): string[] => {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const value of [...first, ...second]) {
+    const trimmed = value?.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+
+  return result
+}
+
+const mergeUniqueClassification = <T extends string>(first: T[], second: T[]): T[] => {
+  const seen = new Set<T>()
+  const result: T[] = []
+
+  for (const value of [...first, ...second]) {
+    if (!value || seen.has(value)) {
+      continue
+    }
+    seen.add(value)
+    result.push(value)
+  }
+
+  return result
+}
+
+const toTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date.getTime()
+}
+
+const pickEarliestString = (first: string | null, second: string | null): string | null => {
+  const firstTime = toTimestamp(first)
+  const secondTime = toTimestamp(second)
+
+  if (firstTime === null) {
+    return second ?? null
+  }
+
+  if (secondTime === null) {
+    return first ?? null
+  }
+
+  return firstTime <= secondTime ? first : second
+}
+
+const pickLatestString = (first: string | null, second: string | null): string | null => {
+  const firstTime = toTimestamp(first)
+  const secondTime = toTimestamp(second)
+
+  if (firstTime === null) {
+    return second ?? null
+  }
+
+  if (secondTime === null) {
+    return first ?? null
+  }
+
+  return firstTime >= secondTime ? first : second
+}
+
+const sortByChronology = (a: KevEntry, b: KevEntry): number => {
+  const aTime = toTimestamp(a.dateAdded) ?? Number.NEGATIVE_INFINITY
+  const bTime = toTimestamp(b.dateAdded) ?? Number.NEGATIVE_INFINITY
+
+  if (bTime !== aTime) {
+    return bTime - aTime
+  }
+
+  return a.cveId.localeCompare(b.cveId)
+}
+
+const toKevEntry = (row: KevRow): KevEntry => {
+  const cveId = normaliseCve(row.cve_id)
+  const notes = parseJsonArray(row.notes)
+  const cwes = parseJsonArray(row.cwes)
+  const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
+  const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
+  const vulnerabilityCategories = parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
+  const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
+
+  return {
+    id: `kev:${cveId}`,
+    cveId,
+    sources: ['kev'],
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
+    vulnerabilityName: ensureString(row.vulnerability_name, cveId || DEFAULT_VULNERABILITY),
+    description: row.description ?? '',
+    requiredAction: row.required_action ?? null,
+    dateAdded: row.date_added ?? '',
+    dueDate: row.due_date ?? null,
+    ransomwareUse: row.ransomware_use ?? null,
+    notes,
+    cwes,
+    cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
+    cvssVector: row.cvss_vector ?? null,
+    cvssVersion: row.cvss_version ?? null,
+    cvssSeverity:
+      typeof row.cvss_severity === 'string'
+        ? (row.cvss_severity as KevEntry['cvssSeverity'])
+        : null,
+    epssScore: null,
+    assigner: null,
+    datePublished: row.date_added ?? null,
+    dateUpdated: row.updated_at ?? null,
+    exploitedSince: row.date_added ?? null,
+    sourceUrl: null,
+    references: [],
+    aliases: [cveId],
+    domainCategories,
+    exploitLayers,
+    vulnerabilityCategories,
+    internetExposed: row.internet_exposed === 1
+  }
+}
+
+const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
+  if (!row.cve_id) {
+    return null
+  }
+
+  const cveId = normaliseCve(row.cve_id)
+  const references = parseJsonArray(row.reference_links)
+  const aliases = parseAliasArray(row.aliases)
+  const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
+  const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
+  const vulnerabilityCategories = parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
+  const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
+
+  return {
+    id: `enisa:${row.enisa_id}`,
+    cveId,
+    sources: ['enisa'],
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
+    vulnerabilityName: ensureString(row.vulnerability_name, aliases[0] ?? cveId ?? DEFAULT_VULNERABILITY),
+    description: row.description ?? '',
+    requiredAction: null,
+    dateAdded: row.exploited_since ?? row.date_published ?? '',
+    dueDate: null,
+    ransomwareUse: null,
+    notes: [],
+    cwes: [],
+    cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
+    cvssVector: row.cvss_vector ?? null,
+    cvssVersion: row.cvss_version ?? null,
+    cvssSeverity:
+      typeof row.cvss_severity === 'string'
+        ? (row.cvss_severity as KevEntry['cvssSeverity'])
+        : null,
+    epssScore: typeof row.epss_score === 'number' ? row.epss_score : null,
+    assigner: row.assigner ?? null,
+    datePublished: row.date_published ?? null,
+    dateUpdated: row.date_updated ?? null,
+    exploitedSince: row.exploited_since ?? null,
+    sourceUrl: row.source_url ?? null,
+    references,
+    aliases: aliases.length ? aliases : [cveId],
+    domainCategories,
+    exploitLayers,
+    vulnerabilityCategories,
+    internetExposed: row.internet_exposed === 1
+  }
+}
+
+const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
+  const sources = existing.sources.slice()
+  for (const source of incoming.sources) {
+    if (!sources.includes(source)) {
+      sources.push(source)
+    }
+  }
+
+  const vendor =
+    existing.vendor !== DEFAULT_VENDOR ? existing.vendor : incoming.vendor
+  const product =
+    existing.product !== DEFAULT_PRODUCT ? existing.product : incoming.product
+  const normalised = normaliseVendorProduct({ vendor, product })
+  const vulnerabilityName =
+    existing.vulnerabilityName !== DEFAULT_VULNERABILITY
+      ? existing.vulnerabilityName
+      : incoming.vulnerabilityName
+
+  const description =
+    existing.description?.length ?? 0 >= (incoming.description?.length ?? 0)
+      ? existing.description
+      : incoming.description
+
+  const requiredAction = existing.requiredAction ?? incoming.requiredAction ?? null
+  const dateAdded = pickEarliestString(existing.dateAdded, incoming.dateAdded) ?? ''
+  const dueDate = existing.dueDate ?? incoming.dueDate ?? null
+  const ransomwareUse = existing.ransomwareUse ?? incoming.ransomwareUse ?? null
+  const notes = mergeUniqueStrings(existing.notes, incoming.notes)
+  const cwes = mergeUniqueStrings(existing.cwes, incoming.cwes)
+
+  const cvssScore = existing.cvssScore ?? incoming.cvssScore ?? null
+  const cvssVector = existing.cvssVector ?? incoming.cvssVector ?? null
+  const cvssVersion = existing.cvssVersion ?? incoming.cvssVersion ?? null
+  const cvssSeverity = existing.cvssSeverity ?? incoming.cvssSeverity ?? null
+
+  const epssScore = existing.epssScore ?? incoming.epssScore ?? null
+  const assigner = existing.assigner ?? incoming.assigner ?? null
+
+  const datePublished = pickEarliestString(existing.datePublished, incoming.datePublished)
+  const dateUpdated = pickLatestString(existing.dateUpdated, incoming.dateUpdated)
+  const exploitedSince = pickEarliestString(existing.exploitedSince, incoming.exploitedSince)
+  const sourceUrl = existing.sourceUrl ?? incoming.sourceUrl ?? null
+  const references = mergeUniqueStrings(existing.references, incoming.references)
+  const aliases = mergeUniqueStrings(existing.aliases, incoming.aliases).map(alias => alias.toUpperCase())
+
+  const domainCategories = mergeUniqueClassification(
+    existing.domainCategories,
+    incoming.domainCategories
+  ) as KevEntry['domainCategories']
+
+  const exploitLayers = mergeUniqueClassification(
+    existing.exploitLayers,
+    incoming.exploitLayers
+  ) as KevEntry['exploitLayers']
+
+  const vulnerabilityCategories = mergeUniqueClassification(
+    existing.vulnerabilityCategories,
+    incoming.vulnerabilityCategories
+  ) as KevEntry['vulnerabilityCategories']
+
+  return {
+    ...existing,
+    sources,
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
+    vulnerabilityName,
+    description,
+    requiredAction,
+    dateAdded,
+    dueDate,
+    ransomwareUse,
+    notes,
+    cwes,
+    cvssScore,
+    cvssVector,
+    cvssVersion,
+    cvssSeverity,
+    epssScore,
+    assigner,
+    datePublished,
+    dateUpdated,
+    exploitedSince,
+    sourceUrl,
+    references,
+    aliases,
+    domainCategories,
+    exploitLayers,
+    vulnerabilityCategories,
+    internetExposed: existing.internetExposed || incoming.internetExposed
+  }
+}
+
+const buildCatalogEntries = (kevEntries: KevEntry[], enisaEntries: KevEntry[]): KevEntry[] => {
+  const merged = new Map<string, KevEntry>()
+
+  const add = (entry: KevEntry) => {
+    const key = entry.cveId.toUpperCase()
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, {
+        ...entry,
+        id: `catalog:${key}`,
+        cveId: key,
+        aliases: mergeUniqueStrings(entry.aliases, [key]).map(alias => alias.toUpperCase())
+      })
+      return
+    }
+
+    merged.set(key, mergeEntry(existing, entry))
+  }
+
+  kevEntries.forEach(add)
+  enisaEntries.forEach(add)
+
+  const entries = Array.from(merged.values())
+  entries.sort(sortByChronology)
+  return entries
+}
+
+const toDimensionTuples = (
+  entry: KevEntry,
+  dimension: CatalogDimension
+): Array<{ value: string; name: string }> => {
+  switch (dimension) {
+    case 'domain':
+      return entry.domainCategories.map(value => ({ value, name: value }))
+    case 'exploit':
+      return entry.exploitLayers.map(value => ({ value, name: value }))
+    case 'vulnerability':
+      return entry.vulnerabilityCategories.map(value => ({ value, name: value }))
+    default:
+      return []
+  }
+}
+
+const toJson = (value: unknown): string => JSON.stringify(value ?? [])
+
+const toYear = (timestamp: number | null): number | null => {
+  if (timestamp === null) {
+    return null
+  }
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return date.getUTCFullYear()
+}
+
+const extractBounds = (
+  entries: KevEntry[]
+): { earliest: string | null; latest: string | null } => {
+  let earliest: { ts: number; value: string } | null = null
+  let latest: { ts: number; value: string } | null = null
+
+  for (const entry of entries) {
+    if (!entry.dateAdded) {
+      continue
+    }
+    const timestamp = toTimestamp(entry.dateAdded)
+    if (timestamp === null) {
+      continue
+    }
+
+    if (!earliest || timestamp < earliest.ts) {
+      earliest = { ts: timestamp, value: entry.dateAdded }
+    }
+    if (!latest || timestamp > latest.ts) {
+      latest = { ts: timestamp, value: entry.dateAdded }
+    }
+  }
+
+  return {
+    earliest: earliest?.value ?? null,
+    latest: latest?.value ?? null
+  }
+}
+
+const toBooleanFlag = (value: boolean): number => (value ? 1 : 0)
+
+const toKnownRansomwareFlag = (value: string | null): number =>
+  value?.toLowerCase().includes('known') ? 1 : 0
+
+export const rebuildCatalog = (db: SqliteDatabase) => {
+  ensureCatalogTables(db)
+  const kevRows = db
+    .prepare<KevRow>(
+      `SELECT
+        cve_id,
+        vendor,
+        product,
+        vulnerability_name,
+        description,
+        required_action,
+        date_added,
+        due_date,
+        ransomware_use,
+        notes,
+        cwes,
+        cvss_score,
+        cvss_vector,
+        cvss_version,
+        cvss_severity,
+        domain_categories,
+        exploit_layers,
+        vulnerability_categories,
+        internet_exposed,
+        updated_at
+      FROM kev_entries`
+    )
+    .all() as KevRow[]
+
+  const enisaRows = db
+    .prepare<EnisaRow>(
+      `SELECT
+        enisa_id,
+        cve_id,
+        vendor,
+        product,
+        vulnerability_name,
+        description,
+        assigner,
+        date_published,
+        date_updated,
+        exploited_since,
+        cvss_score,
+        cvss_vector,
+        cvss_version,
+        cvss_severity,
+        epss_score,
+        reference_links,
+        aliases,
+        domain_categories,
+        exploit_layers,
+        vulnerability_categories,
+        source_url,
+        internet_exposed,
+        updated_at
+      FROM enisa_entries`
+    )
+    .all() as EnisaRow[]
+
+  const kevEntries = kevRows.map(toKevEntry)
+  const enisaEntries = enisaRows
+    .map(toEnisaEntry)
+    .filter((entry): entry is KevEntry => entry !== null)
+
+  const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries)
+
+  const deleteCatalog = db.prepare('DELETE FROM catalog_entries')
+  const deleteDimensions = db.prepare('DELETE FROM catalog_entry_dimensions')
+  const insertCatalog = db.prepare<{
+    cve_id: string
+    entry_id: string
+    sources: string
+    vendor: string
+    vendor_key: string
+    product: string
+    product_key: string
+    vulnerability_name: string
+    description: string
+    required_action: string | null
+    date_added: string | null
+    date_added_ts: number | null
+    date_added_year: number | null
+    due_date: string | null
+    ransomware_use: string | null
+    has_known_ransomware: number
+    notes: string
+    cwes: string
+    cvss_score: number | null
+    cvss_vector: string | null
+    cvss_version: string | null
+    cvss_severity: string | null
+    epss_score: number | null
+    assigner: string | null
+    date_published: string | null
+    date_updated: string | null
+    date_updated_ts: number | null
+    exploited_since: string | null
+    source_url: string | null
+    references: string
+    aliases: string
+    is_well_known: number
+    domain_categories: string
+    exploit_layers: string
+    vulnerability_categories: string
+    internet_exposed: number
+    has_source_kev: number
+    has_source_enisa: number
+  }>(
+    `INSERT INTO catalog_entries (
+      cve_id,
+      entry_id,
+      sources,
+      vendor,
+      vendor_key,
+      product,
+      product_key,
+      vulnerability_name,
+      description,
+      required_action,
+      date_added,
+      date_added_ts,
+      date_added_year,
+      due_date,
+      ransomware_use,
+      has_known_ransomware,
+      notes,
+      cwes,
+      cvss_score,
+      cvss_vector,
+      cvss_version,
+      cvss_severity,
+      epss_score,
+      assigner,
+      date_published,
+      date_updated,
+      date_updated_ts,
+      exploited_since,
+      source_url,
+      "references",
+      aliases,
+      is_well_known,
+      domain_categories,
+      exploit_layers,
+      vulnerability_categories,
+      internet_exposed,
+      has_source_kev,
+      has_source_enisa
+    ) VALUES (
+      @cve_id,
+      @entry_id,
+      @sources,
+      @vendor,
+      @vendor_key,
+      @product,
+      @product_key,
+      @vulnerability_name,
+      @description,
+      @required_action,
+      @date_added,
+      @date_added_ts,
+      @date_added_year,
+      @due_date,
+      @ransomware_use,
+      @has_known_ransomware,
+      @notes,
+      @cwes,
+      @cvss_score,
+      @cvss_vector,
+      @cvss_version,
+      @cvss_severity,
+      @epss_score,
+      @assigner,
+      @date_published,
+      @date_updated,
+      @date_updated_ts,
+      @exploited_since,
+      @source_url,
+      @references,
+      @aliases,
+      @is_well_known,
+      @domain_categories,
+      @exploit_layers,
+      @vulnerability_categories,
+      @internet_exposed,
+      @has_source_kev,
+      @has_source_enisa
+    )`
+  )
+
+  const insertDimension = db.prepare<{
+    cve_id: string
+    dimension: string
+    value: string
+    name: string
+  }>(
+    `INSERT INTO catalog_entry_dimensions (
+      cve_id,
+      dimension,
+      value,
+      name
+    ) VALUES (
+      @cve_id,
+      @dimension,
+      @value,
+      @name
+    )`
+  )
+
+  const transaction = db.transaction((entriesToSave: KevEntry[]) => {
+    deleteDimensions.run()
+    deleteCatalog.run()
+
+    for (const entry of entriesToSave) {
+      const dateAddedTs = toTimestamp(entry.dateAdded)
+      const dateUpdatedTs = toTimestamp(entry.dateUpdated)
+      const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
+      const hasKnownRansomware = toKnownRansomwareFlag(entry.ransomwareUse ?? null)
+      const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
+      const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
+
+      insertCatalog.run({
+        cve_id: entry.cveId,
+        entry_id: entry.id,
+        sources: toJson(entry.sources),
+        vendor: entry.vendor,
+        vendor_key: entry.vendorKey,
+        product: entry.product,
+        product_key: entry.productKey,
+        vulnerability_name: entry.vulnerabilityName,
+        description: entry.description,
+        required_action: entry.requiredAction,
+        date_added: entry.dateAdded,
+        date_added_ts: dateAddedTs,
+        date_added_year: toYear(dateAddedTs),
+        due_date: entry.dueDate,
+        ransomware_use: entry.ransomwareUse,
+        has_known_ransomware: hasKnownRansomware,
+        notes: toJson(entry.notes),
+        cwes: toJson(entry.cwes),
+        cvss_score: entry.cvssScore,
+        cvss_vector: entry.cvssVector,
+        cvss_version: entry.cvssVersion,
+        cvss_severity: entry.cvssSeverity,
+        epss_score: entry.epssScore,
+        assigner: entry.assigner,
+        date_published: entry.datePublished,
+        date_updated: entry.dateUpdated,
+        date_updated_ts: dateUpdatedTs,
+        exploited_since: entry.exploitedSince,
+        source_url: entry.sourceUrl,
+        references: toJson(entry.references),
+        aliases: toJson(entry.aliases),
+        is_well_known: isWellKnown,
+        domain_categories: toJson(entry.domainCategories),
+        exploit_layers: toJson(entry.exploitLayers),
+        vulnerability_categories: toJson(entry.vulnerabilityCategories),
+        internet_exposed: toBooleanFlag(entry.internetExposed),
+        has_source_kev: hasSourceKev,
+        has_source_enisa: hasSourceEnisa
+      })
+
+      const dimensions: CatalogDimension[] = ['domain', 'exploit', 'vulnerability']
+      for (const dimension of dimensions) {
+        const tuples = toDimensionTuples(entry, dimension)
+        for (const tuple of tuples) {
+          if (!tuple.value || tuple.name === 'Other') {
+            continue
+          }
+          insertDimension.run({
+            cve_id: entry.cveId,
+            dimension,
+            value: tuple.value,
+            name: tuple.name
+          })
+        }
+      }
+    }
+  })
+
+  transaction(catalogEntries)
+
+  const bounds = extractBounds(catalogEntries)
+
+  setMetadata('catalog.entryCount', String(catalogEntries.length))
+  setMetadata('catalog.earliestDate', bounds.earliest ?? '')
+  setMetadata('catalog.latestDate', bounds.latest ?? '')
+
+  return {
+    count: catalogEntries.length,
+    earliest: bounds.earliest,
+    latest: bounds.latest
+  }
+}
+
+const parseJsonStringArray = (value: string): string[] => {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.filter((item): item is string => typeof item === 'string')
+  } catch {
+    return []
+  }
+}
+
+export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
+  const sources = parseJsonStringArray(row.sources) as CatalogSource[]
+  const notes = parseJsonStringArray(row.notes)
+  const cwes = parseJsonStringArray(row.cwes)
+  const references = parseJsonStringArray(row.references)
+  const aliases = parseJsonStringArray(row.aliases)
+  const domainCategories = parseJsonStringArray(row.domain_categories) as KevEntry['domainCategories']
+  const exploitLayers = parseJsonStringArray(row.exploit_layers) as KevEntry['exploitLayers']
+  const vulnerabilityCategories = parseJsonStringArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
+
+  return {
+    id: row.entry_id,
+    cveId: row.cve_id,
+    sources,
+    vendor: row.vendor,
+    vendorKey: row.vendor_key,
+    product: row.product,
+    productKey: row.product_key,
+    vulnerabilityName: row.vulnerability_name,
+    description: row.description,
+    requiredAction: row.required_action,
+    dateAdded: row.date_added ?? '',
+    dueDate: row.due_date,
+    ransomwareUse: row.ransomware_use,
+    notes,
+    cwes,
+    cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
+    cvssVector: row.cvss_vector,
+    cvssVersion: row.cvss_version,
+    cvssSeverity:
+      typeof row.cvss_severity === 'string'
+        ? (row.cvss_severity as KevEntry['cvssSeverity'])
+        : null,
+    epssScore: typeof row.epss_score === 'number' ? row.epss_score : null,
+    assigner: row.assigner,
+    datePublished: row.date_published,
+    dateUpdated: row.date_updated,
+    exploitedSince: row.exploited_since,
+    sourceUrl: row.source_url,
+    references,
+    aliases,
+    domainCategories,
+    exploitLayers,
+    vulnerabilityCategories,
+    internetExposed: row.internet_exposed === 1
+  }
+}
+
+export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => {
+  const sources = parseJsonStringArray(row.sources) as CatalogSource[]
+  const domainCategories = parseJsonStringArray(
+    row.domain_categories
+  ) as KevEntrySummary['domainCategories']
+  const exploitLayers = parseJsonStringArray(
+    row.exploit_layers
+  ) as KevEntrySummary['exploitLayers']
+  const vulnerabilityCategories = parseJsonStringArray(
+    row.vulnerability_categories
+  ) as KevEntrySummary['vulnerabilityCategories']
+
+  return {
+    id: row.entry_id,
+    cveId: row.cve_id,
+    sources,
+    vendor: row.vendor,
+    vendorKey: row.vendor_key,
+    product: row.product,
+    productKey: row.product_key,
+    vulnerabilityName: row.vulnerability_name,
+    description: row.description,
+    dateAdded: row.date_added ?? '',
+    ransomwareUse: row.ransomware_use,
+    cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
+    cvssSeverity:
+      typeof row.cvss_severity === 'string'
+        ? (row.cvss_severity as KevEntrySummary['cvssSeverity'])
+        : null,
+    epssScore: typeof row.epss_score === 'number' ? row.epss_score : null,
+    domainCategories,
+    exploitLayers,
+    vulnerabilityCategories,
+    internetExposed: row.internet_exposed === 1
+  }
+}

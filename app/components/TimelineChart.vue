@@ -13,12 +13,12 @@ import {
 import { useElementSize } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 import { VisArea, VisAxis, VisCrosshair, VisLine, VisTooltip, VisXYContainer } from '@unovis/vue'
-import type { KevEntry, Period, Range } from '~/types'
+import type { KevEntrySummary, Period, Range } from '~/types'
 
 type DataRecord = { date: Date; amount: number }
 
 type Props = {
-  entries: KevEntry[]
+  entries: KevEntrySummary[]
   period: Period
   range: Range | null
   height?: string

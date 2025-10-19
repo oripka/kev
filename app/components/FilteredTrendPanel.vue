@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { differenceInDays, parseISO } from 'date-fns'
 import { computed } from 'vue'
-import type { KevEntry, Period, Range } from '~/types'
+import type { KevEntrySummary, Period, Range } from '~/types'
 import TimelineChart from './TimelineChart.vue'
 
-const props = defineProps<{ entries: KevEntry[] }>()
+const props = defineProps<{ entries: KevEntrySummary[] }>()
 
 const show = defineModel<boolean>({ default: false })
 

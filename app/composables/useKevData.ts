@@ -8,7 +8,7 @@ import {
   type MaybeRef,
   type Ref
 } from 'vue'
-import type { ImportProgress, KevCountDatum, KevEntry, KevResponse } from '~/types'
+import type { ImportProgress, KevCountDatum, KevEntrySummary, KevResponse } from '~/types'
 import { lookupCveName } from '~/utils/cveToNameMap'
 
 type KevQueryParams = Record<string, string | number | boolean | undefined>
@@ -32,7 +32,7 @@ type ImportOptions = {
 }
 
 type UseKevDataResult = {
-  entries: ComputedRef<KevEntry[]>
+  entries: ComputedRef<KevEntrySummary[]>
   counts: ComputedRef<{
     domain: KevCountDatum[]
     exploit: KevCountDatum[]

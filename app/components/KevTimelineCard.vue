@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { KevEntry, Period, Range } from '~/types'
+import type { KevEntrySummary, Period, Range } from '~/types'
 
 const props = defineProps<{
   period: Period
   range: Range
-  entries: KevEntry[]
+  entries: KevEntrySummary[]
 }>()
 
 const chartRef = useTemplateRef<InstanceType<typeof TimelineChart> | null>('chartRef')

@@ -15,6 +15,7 @@ import {
   startImportProgress,
   updateImportProgress
 } from '../utils/import-progress'
+import { rebuildCatalog } from '../utils/catalog'
 import { getDatabase } from '../utils/sqlite'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 
@@ -387,10 +388,11 @@ export default defineEventHandler(async event => {
       forceRefresh,
       allowStale
     })
+    const catalogSummary = rebuildCatalog(db)
     rebuildProductCatalog(db)
 
     completeImportProgress(
-      `Imported ${entries.length} KEV entries and ${enisaSummary.imported} ENISA entries`
+      `Imported ${entries.length} KEV entries and ${enisaSummary.imported} ENISA entries (catalog size: ${catalogSummary.count})`
     )
 
     return {

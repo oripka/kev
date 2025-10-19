@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { KevEntry } from '~/types'
+import type { KevEntrySummary } from '~/types'
 
 const props = defineProps<{
-  entries: KevEntry[]
+  entries: KevEntrySummary[]
   loading: boolean
   total: number
 }>()
@@ -12,7 +12,7 @@ const props = defineProps<{
 const UBadge = resolveComponent('UBadge')
 const ULink = resolveComponent('ULink')
 
-const severityColors: Record<Exclude<KevEntry['cvssSeverity'], null>, string> = {
+const severityColors: Record<Exclude<KevEntrySummary['cvssSeverity'], null>, string> = {
   None: 'success',
   Low: 'primary',
   Medium: 'warning',
@@ -20,7 +20,7 @@ const severityColors: Record<Exclude<KevEntry['cvssSeverity'], null>, string> = 
   Critical: 'error'
 }
 
-const sourceBadgeMap: Record<KevEntry['sources'][number], { label: string; color: string }> = {
+const sourceBadgeMap: Record<KevEntrySummary['sources'][number], { label: string; color: string }> = {
   kev: { label: 'CISA KEV', color: 'primary' },
   enisa: { label: 'ENISA', color: 'success' }
 }
@@ -32,7 +32,7 @@ const formatEpss = (score: number | null) =>
   typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : null
 
 const buildCvssLabel = (
-  severity: KevEntry['cvssSeverity'],
+  severity: KevEntrySummary['cvssSeverity'],
   score: number | null
 ) => {
   const parts: string[] = []
@@ -53,7 +53,7 @@ const buildCvssLabel = (
   return parts.join(' ')
 }
 
-const columns = computed<TableColumn<KevEntry>[]>(() => [
+const columns = computed<TableColumn<KevEntrySummary>[]>(() => [
   {
     accessorKey: 'cveId',
     header: 'CVE ID',

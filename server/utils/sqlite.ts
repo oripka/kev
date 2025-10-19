@@ -5,6 +5,70 @@ import { dirname, join } from 'node:path'
 
 let instance: SqliteDatabase | null = null
 
+const CATALOG_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS catalog_entries (
+  cve_id TEXT PRIMARY KEY,
+  entry_id TEXT NOT NULL,
+  sources TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  vendor_key TEXT NOT NULL,
+  product TEXT NOT NULL,
+  product_key TEXT NOT NULL,
+  vulnerability_name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  required_action TEXT,
+  date_added TEXT,
+  date_added_ts INTEGER,
+  date_added_year INTEGER,
+  due_date TEXT,
+  ransomware_use TEXT,
+  has_known_ransomware INTEGER NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL,
+  cwes TEXT NOT NULL,
+  cvss_score REAL,
+  cvss_vector TEXT,
+  cvss_version TEXT,
+  cvss_severity TEXT,
+  epss_score REAL,
+  assigner TEXT,
+  date_published TEXT,
+  date_updated TEXT,
+  date_updated_ts INTEGER,
+  exploited_since TEXT,
+  source_url TEXT,
+  "references" TEXT NOT NULL,
+  aliases TEXT NOT NULL,
+  is_well_known INTEGER NOT NULL DEFAULT 0,
+  domain_categories TEXT NOT NULL,
+  exploit_layers TEXT NOT NULL,
+  vulnerability_categories TEXT NOT NULL,
+  internet_exposed INTEGER NOT NULL DEFAULT 0,
+  has_source_kev INTEGER NOT NULL DEFAULT 0,
+  has_source_enisa INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_vendor_key ON catalog_entries(vendor_key);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_product_key ON catalog_entries(product_key);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_date_added_ts ON catalog_entries(date_added_ts);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_date_updated_ts ON catalog_entries(date_updated_ts);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_cvss_score ON catalog_entries(cvss_score);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_epss_score ON catalog_entries(epss_score);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_is_well_known ON catalog_entries(is_well_known);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_has_known_ransomware ON catalog_entries(has_known_ransomware);
+CREATE INDEX IF NOT EXISTS idx_catalog_entries_internet_exposed ON catalog_entries(internet_exposed);
+
+CREATE TABLE IF NOT EXISTS catalog_entry_dimensions (
+  cve_id TEXT NOT NULL,
+  dimension TEXT NOT NULL,
+  value TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (cve_id, dimension, value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_entry_dimensions_dimension_value
+  ON catalog_entry_dimensions(dimension, value);
+`
+
 const MIGRATIONS = `
 CREATE TABLE IF NOT EXISTS kev_entries (
   cve_id TEXT PRIMARY KEY,
@@ -99,6 +163,10 @@ const ensureColumn = (db: SqliteDatabase, table: string, column: string, definit
   }
 }
 
+const ensureCatalogSchema = (db: SqliteDatabase) => {
+  db.exec(CATALOG_SCHEMA_SQL)
+}
+
 export const getDatabase = () => {
   if (instance) {
     return instance
@@ -115,6 +183,7 @@ export const getDatabase = () => {
   instance.pragma('journal_mode = WAL')
   instance.pragma('busy_timeout = 5000')
   instance.exec(MIGRATIONS)
+  ensureCatalogSchema(instance)
 
   ensureColumn(instance, 'kev_entries', 'cvss_score', 'REAL')
   ensureColumn(instance, 'kev_entries', 'cvss_vector', 'TEXT')
@@ -150,6 +219,11 @@ export const getDatabase = () => {
   ensureColumn(instance, 'product_catalog', 'search_terms', 'TEXT NOT NULL DEFAULT ""')
 
   return instance
+}
+
+export const ensureCatalogTables = (db?: SqliteDatabase) => {
+  const database = db ?? getDatabase()
+  ensureCatalogSchema(database)
 }
 
 export const getMetadata = (key: string): string | null => {

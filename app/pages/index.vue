@@ -13,7 +13,7 @@ import { format, parseISO } from "date-fns";
 import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
-import type { KevCountDatum, KevEntry } from "~/types";
+import type { KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
 import FilteredTrendPanel from "~/components/FilteredTrendPanel.vue";
 import TrackedSoftwareSummary from "~/components/TrackedSoftwareSummary.vue";
 
@@ -305,7 +305,7 @@ const catalogUpdatedAt = computed(() => {
 const UBadge = resolveComponent("UBadge");
 const UButton = resolveComponent("UButton");
 
-const cvssSeverityColors: Record<Exclude<KevEntry["cvssSeverity"], null>, string> = {
+const cvssSeverityColors: Record<Exclude<KevEntrySummary["cvssSeverity"], null>, string> = {
   None: "success",
   Low: "primary",
   Medium: "warning",
@@ -313,7 +313,7 @@ const cvssSeverityColors: Record<Exclude<KevEntry["cvssSeverity"], null>, string
   Critical: "error",
 };
 
-const sourceBadgeMap: Record<KevEntry["sources"][number], { label: string; color: string }> = {
+const sourceBadgeMap: Record<KevEntrySummary["sources"][number], { label: string; color: string }> = {
   kev: { label: "CISA KEV", color: "primary" },
   enisa: { label: "ENISA", color: "success" },
 };
@@ -337,7 +337,7 @@ const formatOptionalTimestamp = (value: string | null) => {
 };
 
 const buildCvssLabel = (
-  severity: KevEntry["cvssSeverity"],
+  severity: KevEntrySummary["cvssSeverity"],
   score: number | null
 ) => {
   const parts: string[] = [];
@@ -360,10 +360,53 @@ const buildCvssLabel = (
 
 const showDetails = ref(false);
 const detailEntry = ref<KevEntry | null>(null);
+const detailLoading = ref(false);
+const detailError = ref<string | null>(null);
+const detailCache = new Map<string, KevEntry>();
 
-const openDetails = (entry: KevEntry) => {
-  detailEntry.value = entry;
+const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
+  ...entry,
+  requiredAction: null,
+  dueDate: null,
+  notes: [],
+  cwes: [],
+  cvssVector: null,
+  cvssVersion: null,
+  assigner: null,
+  datePublished: null,
+  dateUpdated: null,
+  exploitedSince: null,
+  sourceUrl: null,
+  references: [],
+  aliases: [],
+});
+
+const openDetails = async (entry: KevEntrySummary) => {
+  detailError.value = null;
+
+  const cached = detailCache.get(entry.id);
+  if (cached) {
+    detailEntry.value = cached;
+    showDetails.value = true;
+    return;
+  }
+
+  detailEntry.value = createDetailPlaceholder(entry);
   showDetails.value = true;
+  detailLoading.value = true;
+
+  try {
+    const response = await $fetch<KevEntry>(`/api/kev/${entry.id}`);
+    detailCache.set(entry.id, response);
+    detailEntry.value = response;
+  } catch (exception) {
+    detailError.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to load vulnerability details.";
+  } finally {
+    detailLoading.value = false;
+  }
 };
 
 const closeDetails = () => {
@@ -373,6 +416,8 @@ const closeDetails = () => {
 watch(showDetails, (value) => {
   if (!value) {
     detailEntry.value = null;
+    detailError.value = null;
+    detailLoading.value = false;
   }
 });
 
@@ -503,11 +548,11 @@ type AggregatedMetrics = {
   cvssCount: number;
   severeCount: number;
   internetExposedCount: number;
-  latestEntry: KevEntry | null;
+  latestEntry: KevEntrySummary | null;
   latestTimestamp: number;
 };
 
-type SeverityKey = NonNullable<KevEntry["cvssSeverity"]> | "Unknown";
+type SeverityKey = NonNullable<KevEntrySummary["cvssSeverity"]> | "Unknown";
 
 type SeverityDistributionDatum = {
   key: SeverityKey;
@@ -530,7 +575,7 @@ const severityDisplayMeta: Record<SeverityKey, { label: string; color: string }>
 type DerivedResultSnapshot = {
   aggregated: AggregatedMetrics;
   severityDistribution: SeverityDistributionDatum[];
-  latestEntries: KevEntry[];
+  latestEntries: KevEntrySummary[];
 };
 
 const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
@@ -545,7 +590,7 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
   };
 
   const severityCounts = new Map<SeverityKey, number>();
-  const latestEntries: Array<{ entry: KevEntry; timestamp: number }> = [];
+  const latestEntries: Array<{ entry: KevEntrySummary; timestamp: number }> = [];
 
   for (const entry of results.value) {
     const severity = entry.cvssSeverity;
@@ -1014,7 +1059,7 @@ const clearFilter = (
   resetDownstreamFilters(key);
 };
 
-const columns: TableColumn<KevEntry>[] = [
+const columns: TableColumn<KevEntrySummary>[] = [
   {
     id: "summary",
     header: "Description",
@@ -1242,7 +1287,7 @@ const columns: TableColumn<KevEntry>[] = [
           color: "neutral",
           variant: "ghost",
           "aria-label": `View ${row.original.cveId} details`,
-          onClick: () => openDetails(row.original),
+          onClick: () => void openDetails(row.original),
         })
       ),
   },
@@ -1753,7 +1798,8 @@ const columns: TableColumn<KevEntry>[] = [
         }"
       >
         <template #body>
-          <UCard v-if="detailEntry">
+          <div v-if="detailEntry" class="relative space-y-4">
+            <UCard>
             <template #header>
               <div class="space-y-1">
                 <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
@@ -2051,7 +2097,30 @@ const columns: TableColumn<KevEntry>[] = [
               </div>
             </template>
           </UCard>
-        </template>
+          <div
+            v-if="detailLoading"
+            class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-white/75 backdrop-blur dark:bg-neutral-950/80"
+          >
+            <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-primary-500" />
+            <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+              Loading vulnerability details…
+            </p>
+          </div>
+          <p
+            v-if="detailError"
+            class="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-500/50 dark:bg-error-500/10 dark:text-error-200"
+          >
+            {{ detailError }}
+          </p>
+        </div>
+        <div
+          v-else
+          class="flex flex-col items-center gap-3 py-10 text-sm text-neutral-500 dark:text-neutral-400"
+        >
+          <UIcon name="i-lucide-search" class="size-6 text-neutral-400 dark:text-neutral-500" />
+          <p>Select a vulnerability to view details.</p>
+        </div>
+      </template>
       </UModal>
     </div>
 

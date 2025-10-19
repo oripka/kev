@@ -82,6 +82,28 @@ export type KevEntry = {
   internetExposed: boolean
 }
 
+export type KevEntrySummary = Pick<
+  KevEntry,
+  | 'id'
+  | 'cveId'
+  | 'sources'
+  | 'vendor'
+  | 'vendorKey'
+  | 'product'
+  | 'productKey'
+  | 'vulnerabilityName'
+  | 'description'
+  | 'dateAdded'
+  | 'ransomwareUse'
+  | 'cvssScore'
+  | 'cvssSeverity'
+  | 'epssScore'
+  | 'domainCategories'
+  | 'exploitLayers'
+  | 'vulnerabilityCategories'
+  | 'internetExposed'
+>
+
 export type KevCountDatum = {
   key: string
   name: string
@@ -99,7 +121,7 @@ export type TrackedProduct = {
 
 export type KevResponse = {
   updatedAt: string
-  entries: KevEntry[]
+  entries: KevEntrySummary[]
   counts: {
     domain: KevCountDatum[]
     exploit: KevCountDatum[]

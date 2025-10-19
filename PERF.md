@@ -1,14 +1,21 @@
-wright now performacne of initial showing the index page is very slow the statistics take time to load. when i click on Domain coverage
+## Optmize
 
- or any of the others to filter it takes time or if i do nay of the other filters by year, kev list, cis , cvss, epss, plaintext search. my software, ransomware, internet exposure, named cve. focus on my software etc.
+-Database Schema
+- [ ] You can drop all existing data and reinitialize the tables. No need for database migrations at this stage — just add a button to perform the reset. Keep the schema clean and free of legacy code.
+- [ ] Avoid storing categorical data such as exploit categories, domain categories, or vulnerability categories as plain strings.
+- [ ] This severely impacts query performance. Normalize the database structure for better performance, consistency, and easier imports/queries.
+- [ ]  merge the kev_entries and enisa_entries tables into a single table with a source field ('KEV' or 'ENISA').
+- [ ] This avoids duplication and makes querying simpler.
+- [ ] Avoid using reserved SQL keywords (e.g., references) as column names to prevent conflicts with SQLite.
+- [ ] fix any other bugs
 
- we want to make this blazingly fast by doing the following. on data import / cached or otherwise you should run all the classifications as far as possible on everything and save that info strcuted in the database.
+## Optmize
 
- so then we can mostly just do sql querries and no heavy lifting. any joining of the data or so should also be done on import. bascially never should you load the hwole kev list or cisa list or a merge of it into the app. any query should only be done against the database.. add the columns or tables necessary to make that happen.
- 
+if you did the above this should be easy:
 
- the end goal is that eveytifg loads and reactis blatzingly fast and we do all the heavy lifting on import
-
- also add another button that does the reclassifcaiton and so on of the cached data files so we can update ther databse when our algoruthsm for classifaiton or filters changed. 
- 
- remoe any unecssary code that we dont need anymore make it well structued clean and highly performant
+- [ ] Optimize queries such as:
+http://localhost:3001/api/kev?domain=Non-Web+Applications&startYear=2021&endYear=2025
+These currently fetch too much data from the database. For the listing view, we only need the fields shown in the table. Load detailed information only when the user opens the modal for a specific vulnerability.
+	•	On initial load or when filters are applied, fetch only the data required for the table display.
+	•	Add a “Reclassify Cached Data” button to the admin dashboard.
+Show the classification progress in real time.

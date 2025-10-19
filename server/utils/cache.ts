@@ -77,6 +77,13 @@ export const getCachedData = async <T>(
             stale: !isFresh
           }
         }
+      } else if (allowStale) {
+        return {
+          data: entry.data,
+          cacheHit: true,
+          cachedAt: null,
+          stale: true
+        }
       }
     }
   }
