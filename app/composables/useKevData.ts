@@ -25,6 +25,12 @@ type ImportSummary = {
   importedAt: string
 }
 
+type ImportMode = 'auto' | 'force' | 'cache'
+
+type ImportOptions = {
+  mode?: ImportMode
+}
+
 type UseKevDataResult = {
   entries: ComputedRef<KevEntry[]>
   counts: ComputedRef<{
@@ -39,7 +45,7 @@ type UseKevDataResult = {
   pending: Ref<boolean>
   error: Ref<Error | null>
   refresh: () => Promise<void>
-  importLatest: () => Promise<ImportSummary | null>
+  importLatest: (options?: ImportOptions) => Promise<ImportSummary | null>
   importing: Ref<boolean>
   importError: Ref<string | null>
   lastImportSummary: Ref<ImportSummary | null>
@@ -157,7 +163,8 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     }
   }
 
-  const importLatest = async () => {
+  const importLatest = async (options: ImportOptions = {}) => {
+    const mode: ImportMode = options.mode ?? 'auto'
     importing.value = true
     importError.value = null
 
@@ -167,7 +174,8 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
       }
 
       const response = await $fetch<ImportSummary>('/api/fetchKev', {
-        method: 'POST'
+        method: 'POST',
+        body: { mode }
       })
 
       lastImportSummary.value = response

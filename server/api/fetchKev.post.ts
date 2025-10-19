@@ -1,8 +1,11 @@
+import { readBody } from 'h3'
+import { ofetch } from 'ofetch'
 import { z } from 'zod'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { KevEntry } from '~/types'
+import { getCachedData } from '../utils/cache'
 import { fetchCvssMetrics } from '../utils/cvss'
 import { importEnisaCatalog } from '../utils/enisa'
 import {
@@ -77,13 +80,42 @@ type CvssMetric = {
   severity: KevEntry['cvssSeverity'] | null
 }
 
-export default defineEventHandler(async () => {
+const ONE_DAY_MS = 86_400_000
+
+type ImportMode = 'auto' | 'force' | 'cache'
+
+export default defineEventHandler(async event => {
   startImportProgress('Starting KEV import')
 
   try {
-    setImportPhase('preparing', { message: 'Downloading latest KEV catalog' })
-    const response = await $fetch(SOURCE_URL)
-    const parsed = kevSchema.safeParse(response)
+    const body = await readBody<{ mode?: ImportMode }>(event).catch(
+      () => ({}) as { mode?: ImportMode }
+    )
+    const mode = body?.mode ?? 'auto'
+    const forceRefresh = mode === 'force'
+    const allowStale = mode === 'cache'
+
+    setImportPhase('preparing', { message: 'Checking KEV cache', completed: 0, total: 0 })
+    const kevDataset = await getCachedData(
+      'kev-feed',
+      async () => {
+        setImportPhase('preparing', { message: 'Downloading latest KEV catalog', completed: 0, total: 0 })
+        return ofetch(SOURCE_URL)
+      },
+      { ttlMs: ONE_DAY_MS, forceRefresh, allowStale }
+    )
+
+    if (kevDataset.cacheHit) {
+      setImportPhase('preparing', {
+        message: 'Using cached KEV catalog',
+        completed: 0,
+        total: 0
+      })
+    } else {
+      setImportPhase('preparing', { message: 'Downloaded latest KEV catalog', completed: 0, total: 0 })
+    }
+
+    const parsed = kevSchema.safeParse(kevDataset.data)
 
     if (!parsed.success) {
       throw createError({
@@ -350,7 +382,11 @@ export default defineEventHandler(async () => {
       importedAt
     })
 
-    const enisaSummary = await importEnisaCatalog(db)
+    const enisaSummary = await importEnisaCatalog(db, {
+      ttlMs: ONE_DAY_MS,
+      forceRefresh,
+      allowStale
+    })
     rebuildProductCatalog(db)
 
     completeImportProgress(

@@ -111,7 +111,15 @@ const columns = computed<TableColumn<(ProductCatalogItem & { sourceSummary: stri
     {
       accessorKey: 'productName',
       header: 'Product',
-      cell: ({ row }) => row.original.productName
+      cell: ({ row }) =>
+        h(
+          'div',
+          {
+            class: 'max-w-xs truncate',
+            title: row.original.productName
+          },
+          row.original.productName
+        )
     },
     {
       accessorKey: 'vendorName',

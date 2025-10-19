@@ -29,6 +29,7 @@ some of these might already be implmented if yes just check - [x] them . if not 
 
 
 ## Duplicates
+- [x] Normalise catalog product names to strip patch-level version suffixes so the software selection list avoids Chrome/Windows duplicates.
 - there seesm to be a lot of duplciates e.g. this shouod be just Google Chrome not so many versions in the software slection list
 Chrome 137.0.7151.68 <137.0.7151.68	Google	0	ENISA	Add to focus
 Chrome 138.0.7204.157 <138.0.7204.157	Google	0	ENISA	Add to focus
@@ -49,7 +50,7 @@ we want to concentraton products and major versions not evdry little thing
 Office/WordPad Office 2007 SP3, Microsoft Office 2010 SP2, Microsoft Office 2013 SP1, Microsoft Office 2016, Microsoft Windows Vista SP2, Windows Server 2008 SP2, Windows 7 SP1, And Windows 8.1	
 
 ## Layout
-- [ ] add a max-w-xs to the software title table column if not we have to scrol lto see the add button and son it should fit neatla
+- [x] add a max-w-xs to the software title table column if not we have to scrol lto see the add button and son it should fit neatla
 
 - [ ] Revise the layout especiall the fitlering stuff. it seems to me it takes too much space aawafr om show ign the actually results
 - [ ] can weh show a floating roudned long pill that shwos the current active fitlers and allows to remove them and shiws somw dense statistixs?
@@ -67,6 +68,6 @@ Last imported release: 2025-10-19 14:58
 
 ## Performance
 
+- [x] cache the downloaded data from enisa and kev for one day so we dont need to redownlaod durign the development all the time but can do a fast reimport add a second button for just reimporting
 - [ ] enhance performance by precalculating as much as possibel. when i switch my software it takes a long time to rerender. show a laoding incdicator or somethign at least or make it blatzing fast 
 - [x] make the bade from focus on my software just show the title not twice the title orasomeith Focus on my software
-

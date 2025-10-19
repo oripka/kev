@@ -3,6 +3,7 @@ import type { Database as SqliteDatabase } from 'better-sqlite3'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry, KevEntry } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import { getCachedData } from './cache'
 import { setMetadata } from './sqlite'
 import { setImportPhase } from './import-progress'
 
@@ -200,42 +201,81 @@ const fetchPage = async (page: number, size: number): Promise<EnisaApiResponse> 
   })
 }
 
+type EnisaCacheBundle = {
+  total: number
+  items: EnisaApiItem[]
+}
+
+type ImportOptions = {
+  ttlMs?: number
+  forceRefresh?: boolean
+  allowStale?: boolean
+}
+
 export const importEnisaCatalog = async (
-  db: SqliteDatabase
+  db: SqliteDatabase,
+  options: ImportOptions = {}
 ): Promise<{ imported: number; lastUpdated: string | null }> => {
+  const { ttlMs = 86_400_000, forceRefresh = false, allowStale = false } = options
+
   setImportPhase('fetchingEnisa', {
-    message: 'Fetching exploited ENISA vulnerabilities',
+    message: 'Checking ENISA cache',
     completed: 0,
     total: 0
   })
 
-  let page = 0
-  const items: EnisaApiItem[] = []
-  let total = 0
+  const dataset = await getCachedData<EnisaCacheBundle>(
+    'enisa-feed',
+    async () => {
+      setImportPhase('fetchingEnisa', {
+        message: 'Fetching exploited ENISA vulnerabilities',
+        completed: 0,
+        total: 0
+      })
 
-  // Fetch paginated results
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const response = await fetchPage(page, PAGE_SIZE)
+      let page = 0
+      const items: EnisaApiItem[] = []
+      let total = 0
 
-    if (page === 0) {
-      total = response.total
-    }
+      // Fetch paginated results
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await fetchPage(page, PAGE_SIZE)
 
-    items.push(...response.items)
+        if (page === 0) {
+          total = response.total
+        }
 
+        items.push(...response.items)
+
+        setImportPhase('fetchingEnisa', {
+          message: `Fetching exploited ENISA vulnerabilities (${Math.min(items.length, total)} of ${total})`,
+          completed: Math.min(items.length, total),
+          total
+        })
+
+        if (items.length >= total || response.items.length === 0) {
+          break
+        }
+
+        page += 1
+      }
+
+      return { total, items }
+    },
+    { ttlMs, forceRefresh, allowStale }
+  )
+
+  if (dataset.cacheHit) {
+    const cachedCount = dataset.data.items.length
     setImportPhase('fetchingEnisa', {
-      message: `Fetching exploited ENISA vulnerabilities (${Math.min(items.length, total)} of ${total})`,
-      completed: Math.min(items.length, total),
-      total
+      message: `Using cached ENISA vulnerabilities (${cachedCount})`,
+      completed: cachedCount,
+      total: cachedCount
     })
-
-    if (items.length >= total || response.items.length === 0) {
-      break
-    }
-
-    page += 1
   }
+
+  const { items } = dataset.data
 
   const entryById = new Map<string, KevBaseEntry>()
 

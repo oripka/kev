@@ -369,7 +369,11 @@ const hasProgressValue = computed(() => {
 });
 
 const handleImport = async () => {
-  await importLatest();
+  await importLatest({ mode: "force" });
+};
+
+const handleCachedReimport = async () => {
+  await importLatest({ mode: "cache" });
 };
 
 const UBadge = resolveComponent("UBadge");
@@ -1508,6 +1512,15 @@ const columns: TableColumn<KevEntry>[] = [
                 @click="handleImport"
               >
                 {{ importing ? "Importing…" : "Import latest data" }}
+              </UButton>
+              <UButton
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-refresh-ccw"
+                :disabled="importing"
+                @click="handleCachedReimport"
+              >
+                Reimport cached data
               </UButton>
               <UAlert
                 v-if="importError"

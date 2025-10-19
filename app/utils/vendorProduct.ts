@@ -80,6 +80,17 @@ const stripVendorFromProduct = (product: string, vendor: string): string => {
   return product.replace(pattern, "").trim();
 };
 
+const stripComparatorSuffix = (value: string): string =>
+  value.replace(/\s*(?:<=|>=|<|>|=)\s*.+$/g, "").trim();
+
+const stripVersionSegments = (value: string): string =>
+  value
+    .replace(/\b\d+(?:\.\d+){1,}\b/g, "")
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/\bbuild\s+\d+\b/gi, " ")
+    .replace(/\brelease\s+\d+\b/gi, " ")
+    .replace(/\bpatch\s+\d+\b/gi, " ");
+
 const normaliseProductLabel = (
   value: string | null | undefined,
   vendorLabel: string
@@ -91,14 +102,18 @@ const normaliseProductLabel = (
 
   const withoutVendor = stripVendorFromProduct(trimmed, vendorLabel);
 
-  const withoutVersion = withoutVendor.replace(
+  const withoutComparators = stripComparatorSuffix(withoutVendor);
+
+  const withoutVersionKeywords = withoutComparators.replace(
     /(\bversion\b|\bver\.?\b|\bv\d[\w.-]*|\bbuild\b|\brelease\b)/gi,
     ""
   );
 
-  const cleaned = cleanWhitespace(withoutVersion);
+  const withoutSegments = stripVersionSegments(withoutVersionKeywords);
+
+  const cleaned = cleanWhitespace(withoutSegments);
   if (!cleaned) {
-    return toTitleCase(withoutVendor);
+    return toTitleCase(cleanWhitespace(withoutComparators || withoutVendor));
   }
 
   return toTitleCase(cleaned);
