@@ -61,6 +61,7 @@ const showFocusSlideover = ref(false);
 const showTrendSlideover = ref(false);
 const showMySoftwareSlideover = ref(false);
 const showRiskDetails = ref(false);
+const showAllResults = ref(false);
 type QuickActionButton = {
   id: QuickActionKey;
   icon: string;
@@ -292,6 +293,10 @@ const filterParams = computed(() => {
     params.epssMax = epssEnd;
   }
 
+  if (showAllResults.value) {
+    params.limit = 500;
+  }
+
   return params;
 });
 
@@ -303,6 +308,8 @@ const {
   catalogBounds,
   updatedAt,
   getWellKnownCveName,
+  totalEntries,
+  entryLimit,
   pending: dataPending,
 } = useKevData(filterParams);
 
@@ -591,6 +598,28 @@ watch(
 
 const isBusy = computed(() => dataPending.value || isFiltering.value);
 
+const shownResultCount = computed(() => results.value.length);
+const totalMatchCount = computed(() => totalEntries.value);
+const hasLimitedResults = computed(
+  () => totalMatchCount.value > entryLimit.value || (showAllResults.value && shownResultCount.value < totalMatchCount.value)
+);
+const canShowAllResults = computed(() => hasLimitedResults.value || showAllResults.value);
+const resultCountLabel = computed(() => {
+  const shown = shownResultCount.value;
+  const total = totalMatchCount.value;
+
+  if (total === 0) {
+    return "No matches found.";
+  }
+
+  const shownLabel = `${shown.toLocaleString()} match${shown === 1 ? "" : "es"}`;
+  if (total <= shown) {
+    return `Showing ${shownLabel}.`;
+  }
+
+  return `Showing ${shown.toLocaleString()} of ${total.toLocaleString()} matches.`;
+});
+
 watch(showTrendSlideover, (value) => {
   if (value) {
     showTrendLines.value = true;
@@ -613,6 +642,7 @@ const resetFilters = () => {
   showWellKnownOnly.value = false;
   showInternetExposedOnly.value = false;
   showOwnedOnly.value = false;
+  showAllResults.value = false;
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
   selectedSource.value = "all";
@@ -1436,17 +1466,23 @@ const columns: TableColumn<KevEntrySummary>[] = [
             </p>
           </template>
 
-          <div class="relative">
-            <UTable :data="results" :columns="columns" />
-            <div
-              v-if="isBusy"
-              class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-white/70 backdrop-blur dark:bg-neutral-950/70"
-            >
-              <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-primary-500" />
-              <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                Refreshing view…
+          <div>
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                {{ resultCountLabel }}
               </p>
+              <div v-if="canShowAllResults" class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                <span class="font-medium">Show all results</span>
+                <USwitch v-model="showAllResults" aria-label="Toggle show all results" />
+              </div>
             </div>
+            <UProgress
+              v-if="isBusy"
+              class="mb-4"
+              animation="swing"
+              color="primary"
+            />
+            <UTable :data="results" :columns="columns" />
           </div>
         </UCard>
       </div>
