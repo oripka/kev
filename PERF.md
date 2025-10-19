@@ -11,3 +11,4 @@ wright now performacne of initial showing the index page is very slow the statis
 
  also add another button that does the reclassifcaiton and so on of the cached data files so we can update ther databse when our algoruthsm for classifaiton or filters changed. 
  
+ remoe any unecssary code that we dont need anymore make it well structued clean and highly performant
