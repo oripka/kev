@@ -1,12 +1,10 @@
 import { eq } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { useDrizzle, resetDatabase as reset, tables, useSqlite } from '../database/client'
+import { useDrizzle, resetDatabase as reset, tables } from '../database/client'
 
 export type DrizzleDatabase = BetterSQLite3Database<typeof tables>
 
 export const getDatabase = (): DrizzleDatabase => useDrizzle()
-
-export const getSqlite = useSqlite
 
 export const ensureCatalogTables = (_db?: DrizzleDatabase) => {
   // Tables are created automatically on initialisation via server/database/client.

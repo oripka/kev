@@ -1,5 +1,6 @@
 import { getQuery } from 'h3'
-import { and, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/sqlite-core'
 import type {
   CatalogSource,
   KevCountDatum,
@@ -11,7 +12,9 @@ import type {
 } from '~/types'
 import { tables } from '../database/client'
 import { catalogRowToSummary, type CatalogSummaryRow } from '../utils/catalog'
-import { getDatabase, getMetadata, type DrizzleDatabase } from '../utils/sqlite'
+import { tables } from '../database/client'
+import { getDatabase, getMetadata } from '../utils/sqlite'
+import type { DrizzleDatabase } from '../utils/sqlite'
 
 type CatalogQuery = {
   search?: string
@@ -39,6 +42,8 @@ type CatalogQuery = {
   internetExposedOnly?: boolean
   limit?: number
 }
+
+type Condition = SQL<unknown>
 
 const toTimestamp = (value?: string): number | null => {
   if (!value) {
@@ -246,157 +251,131 @@ const omitFilters = (
   return next
 }
 
-const catalogEntries = tables.catalogEntries
-const catalogEntryDimensions = tables.catalogEntryDimensions
-
-const buildFilterExpression = (filters: CatalogQuery): SQL<unknown> | undefined => {
-  const conditions: SQL<unknown>[] = []
+const buildConditions = (filters: CatalogQuery): Condition[] => {
+  const ce = tables.catalogEntries
+  const conditions: Condition[] = []
 
   if (filters.search) {
     const pattern = `%${filters.search.toLowerCase()}%`
     conditions.push(
       sql`(
-        lower(${catalogEntries.cveId}) LIKE ${pattern}
-        OR lower(${catalogEntries.vendor}) LIKE ${pattern}
-        OR lower(${catalogEntries.product}) LIKE ${pattern}
-        OR lower(${catalogEntries.vulnerabilityName}) LIKE ${pattern}
-        OR lower(${catalogEntries.description}) LIKE ${pattern}
+        lower(${ce.cveId}) LIKE ${pattern}
+        OR lower(${ce.vendor}) LIKE ${pattern}
+        OR lower(${ce.product}) LIKE ${pattern}
+        OR lower(${ce.vulnerabilityName}) LIKE ${pattern}
+        OR lower(${ce.description}) LIKE ${pattern}
       )`
     )
   }
 
   if (filters.source === 'kev') {
-    conditions.push(eq(catalogEntries.hasSourceKev, 1))
+    conditions.push(eq(ce.hasSourceKev, 1))
   } else if (filters.source === 'enisa') {
-    conditions.push(eq(catalogEntries.hasSourceEnisa, 1))
+    conditions.push(eq(ce.hasSourceEnisa, 1))
   }
 
   if (filters.internetExposedOnly) {
-    conditions.push(eq(catalogEntries.internetExposed, 1))
+    conditions.push(eq(ce.internetExposed, 1))
   }
 
   const vendorKeys = filters.vendorKeys ?? (filters.vendor ? [filters.vendor] : [])
   if (vendorKeys.length) {
-    conditions.push(inArray(catalogEntries.vendorKey, vendorKeys))
+    conditions.push(inArray(ce.vendorKey, vendorKeys))
   }
 
   const productKeys = filters.productKeys ?? (filters.product ? [filters.product] : [])
   if (productKeys.length) {
-    conditions.push(inArray(catalogEntries.productKey, productKeys))
+    conditions.push(inArray(ce.productKey, productKeys))
   }
 
+  const dimensionCondition = (dimension: string, value: string) =>
+    sql`exists (
+      select 1
+      from catalog_entry_dimensions d
+      where d.cve_id = ${ce.cveId}
+        and d.dimension = ${dimension}
+        and d.value = ${value}
+    )`
+
   if (filters.domain) {
-    conditions.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${catalogEntryDimensions}
-        WHERE ${catalogEntryDimensions.cveId} = ${catalogEntries.cveId}
-          AND ${catalogEntryDimensions.dimension} = 'domain'
-          AND ${catalogEntryDimensions.value} = ${filters.domain}
-      )`
-    )
+    conditions.push(dimensionCondition('domain', filters.domain))
   }
 
   if (filters.exploit) {
-    conditions.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${catalogEntryDimensions}
-        WHERE ${catalogEntryDimensions.cveId} = ${catalogEntries.cveId}
-          AND ${catalogEntryDimensions.dimension} = 'exploit'
-          AND ${catalogEntryDimensions.value} = ${filters.exploit}
-      )`
-    )
+    conditions.push(dimensionCondition('exploit', filters.exploit))
   }
 
   if (filters.vulnerability) {
-    conditions.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${catalogEntryDimensions}
-        WHERE ${catalogEntryDimensions.cveId} = ${catalogEntries.cveId}
-          AND ${catalogEntryDimensions.dimension} = 'vulnerability'
-          AND ${catalogEntryDimensions.value} = ${filters.vulnerability}
-      )`
-    )
+    conditions.push(dimensionCondition('vulnerability', filters.vulnerability))
   }
 
   if (filters.ransomwareOnly) {
-    conditions.push(eq(catalogEntries.hasKnownRansomware, 1))
+    conditions.push(eq(ce.hasKnownRansomware, 1))
   }
 
   if (filters.wellKnownOnly) {
-    conditions.push(eq(catalogEntries.isWellKnown, 1))
+    conditions.push(eq(ce.isWellKnown, 1))
   }
 
   if (typeof filters.startYear === 'number' && typeof filters.endYear === 'number') {
     conditions.push(
-      sql`(${catalogEntries.dateAddedYear} IS NULL OR (${catalogEntries.dateAddedYear} >= ${filters.startYear} AND ${catalogEntries.dateAddedYear} <= ${filters.endYear}))`
+      sql`(${ce.dateAddedYear} IS NULL OR (${ce.dateAddedYear} >= ${filters.startYear} AND ${ce.dateAddedYear} <= ${filters.endYear}))`
     )
   }
 
-  if (filters.fromDate) {
-    const timestamp = toTimestamp(filters.fromDate)
-    if (timestamp !== null) {
-      conditions.push(
-        sql`(${catalogEntries.dateAddedTs} IS NOT NULL AND ${catalogEntries.dateAddedTs} >= ${timestamp})`
-      )
+  const addTimestampCondition = (
+    column: typeof ce.dateAddedTs,
+    comparison: 'gte' | 'lte',
+    value?: string
+  ) => {
+    if (!value) {
+      return
+    }
+    const timestamp = toTimestamp(value)
+    if (timestamp === null) {
+      return
+    }
+    if (comparison === 'gte') {
+      conditions.push(sql`${column} IS NOT NULL AND ${column} >= ${timestamp}`)
+    } else {
+      conditions.push(sql`${column} IS NOT NULL AND ${column} <= ${timestamp}`)
     }
   }
 
-  if (filters.toDate) {
-    const timestamp = toTimestamp(filters.toDate)
-    if (timestamp !== null) {
-      conditions.push(
-        sql`(${catalogEntries.dateAddedTs} IS NOT NULL AND ${catalogEntries.dateAddedTs} <= ${timestamp})`
-      )
-    }
-  }
-
-  if (filters.fromUpdatedDate) {
-    const timestamp = toTimestamp(filters.fromUpdatedDate)
-    if (timestamp !== null) {
-      conditions.push(
-        sql`(${catalogEntries.dateUpdatedTs} IS NOT NULL AND ${catalogEntries.dateUpdatedTs} >= ${timestamp})`
-      )
-    }
-  }
-
-  if (filters.toUpdatedDate) {
-    const timestamp = toTimestamp(filters.toUpdatedDate)
-    if (timestamp !== null) {
-      conditions.push(
-        sql`(${catalogEntries.dateUpdatedTs} IS NOT NULL AND ${catalogEntries.dateUpdatedTs} <= ${timestamp})`
-      )
-    }
-  }
+  addTimestampCondition(ce.dateAddedTs, 'gte', filters.fromDate)
+  addTimestampCondition(ce.dateAddedTs, 'lte', filters.toDate)
+  addTimestampCondition(ce.dateUpdatedTs, 'gte', filters.fromUpdatedDate)
+  addTimestampCondition(ce.dateUpdatedTs, 'lte', filters.toUpdatedDate)
 
   if (filters.cvssMin !== undefined) {
-    conditions.push(
-      sql`(${catalogEntries.cvssScore} IS NOT NULL AND ${catalogEntries.cvssScore} >= ${filters.cvssMin})`
-    )
+    conditions.push(sql`${ce.cvssScore} IS NOT NULL AND ${ce.cvssScore} >= ${filters.cvssMin}`)
   }
 
   if (filters.cvssMax !== undefined) {
-    conditions.push(
-      sql`(${catalogEntries.cvssScore} IS NOT NULL AND ${catalogEntries.cvssScore} <= ${filters.cvssMax})`
-    )
+    conditions.push(sql`${ce.cvssScore} IS NOT NULL AND ${ce.cvssScore} <= ${filters.cvssMax}`)
   }
 
   if (filters.epssMin !== undefined) {
-    conditions.push(
-      sql`(${catalogEntries.epssScore} IS NOT NULL AND ${catalogEntries.epssScore} >= ${filters.epssMin})`
-    )
+    conditions.push(sql`${ce.epssScore} IS NOT NULL AND ${ce.epssScore} >= ${filters.epssMin}`)
   }
 
   if (filters.epssMax !== undefined) {
-    conditions.push(
-      sql`(${catalogEntries.epssScore} IS NOT NULL AND ${catalogEntries.epssScore} <= ${filters.epssMax})`
-    )
+    conditions.push(sql`${ce.epssScore} IS NOT NULL AND ${ce.epssScore} <= ${filters.epssMax}`)
   }
 
+  return conditions
+}
+
+const combineConditions = (conditions: Condition[]): Condition | undefined => {
   if (!conditions.length) {
     return undefined
   }
 
-  return and(...conditions)
+  if (conditions.length === 1) {
+    return conditions[0]
+  }
+
+  return and(...(conditions as [Condition, Condition, ...Condition[]]))
 }
 
 const queryEntries = (
@@ -404,7 +383,9 @@ const queryEntries = (
   filters: CatalogQuery,
   limitOverride?: number
 ): KevEntrySummary[] => {
-  const where = buildFilterExpression(filters)
+  const ce = tables.catalogEntries
+  const conditions = buildConditions(filters)
+  const whereCondition = combineConditions(conditions)
   const limit = Math.max(
     1,
     Math.min(MAX_ENTRY_LIMIT, limitOverride ?? filters.limit ?? DEFAULT_ENTRY_LIMIT)
@@ -412,38 +393,34 @@ const queryEntries = (
 
   let query = db
     .select({
-      cve_id: catalogEntries.cveId,
-      entry_id: catalogEntries.entryId,
-      sources: catalogEntries.sources,
-      vendor: catalogEntries.vendor,
-      vendor_key: catalogEntries.vendorKey,
-      product: catalogEntries.product,
-      product_key: catalogEntries.productKey,
-      vulnerability_name: catalogEntries.vulnerabilityName,
-      description: catalogEntries.description,
-      due_date: catalogEntries.dueDate,
-      date_added: catalogEntries.dateAdded,
-      ransomware_use: catalogEntries.ransomwareUse,
-      cvss_score: catalogEntries.cvssScore,
-      cvss_severity: catalogEntries.cvssSeverity,
-      epss_score: catalogEntries.epssScore,
-      domain_categories: catalogEntries.domainCategories,
-      exploit_layers: catalogEntries.exploitLayers,
-      vulnerability_categories: catalogEntries.vulnerabilityCategories,
-      internet_exposed: catalogEntries.internetExposed
+      cve_id: ce.cveId,
+      entry_id: ce.entryId,
+      sources: ce.sources,
+      vendor: ce.vendor,
+      vendor_key: ce.vendorKey,
+      product: ce.product,
+      product_key: ce.productKey,
+      vulnerability_name: ce.vulnerabilityName,
+      description: ce.description,
+      due_date: ce.dueDate,
+      date_added: ce.dateAdded,
+      ransomware_use: ce.ransomwareUse,
+      cvss_score: ce.cvssScore,
+      cvss_severity: ce.cvssSeverity,
+      epss_score: ce.epssScore,
+      domain_categories: ce.domainCategories,
+      exploit_layers: ce.exploitLayers,
+      vulnerability_categories: ce.vulnerabilityCategories,
+      internet_exposed: ce.internetExposed
     })
-    .from(catalogEntries)
+    .from(ce)
 
-  if (where) {
-    query = query.where(where)
+  if (whereCondition) {
+    query = query.where(whereCondition)
   }
 
   const rows = query
-    .orderBy(
-      sql`(${catalogEntries.dateAddedTs} IS NULL) ASC`,
-      sql`${catalogEntries.dateAddedTs} DESC`,
-      sql`${catalogEntries.cveId} ASC`
-    )
+    .orderBy(sql`${ce.dateAddedTs} IS NULL`, desc(ce.dateAddedTs), asc(ce.cveId))
     .limit(limit)
     .all() as CatalogSummaryRow[]
 
@@ -455,122 +432,134 @@ const queryDimensionCounts = (
   filters: CatalogQuery,
   dimension: 'domain' | 'exploit' | 'vulnerability'
 ): KevCountDatum[] => {
-  const where = buildFilterExpression(filters)
+  const ce = tables.catalogEntries
+  const conditions = buildConditions(filters)
+  const whereCondition = combineConditions(conditions)
 
-  let filteredQuery = db.select({ cve_id: catalogEntries.cveId }).from(catalogEntries)
-  if (where) {
-    filteredQuery = filteredQuery.where(where)
+  let filteredBase = db.select({ cveId: ce.cveId }).from(ce)
+  if (whereCondition) {
+    filteredBase = filteredBase.where(whereCondition)
   }
 
-  const filtered = filteredQuery.as('filtered')
-  const countExpr = sql<number>`COUNT(*)`.as('count')
+  const filtered = db.$with('filtered_entries').as(filteredBase)
+  const dim = alias(tables.catalogEntryDimensions, 'dim')
+  const countExpr = sql<number>`count(*)`
 
   const rows = db
+    .with(filtered)
     .select({
-      key: catalogEntryDimensions.value,
-      name: catalogEntryDimensions.name,
+      key: dim.value,
+      name: dim.name,
       count: countExpr
     })
-    .from(catalogEntryDimensions)
-    .innerJoin(filtered, eq(filtered.cve_id, catalogEntryDimensions.cveId))
-    .where(eq(catalogEntryDimensions.dimension, dimension))
-    .groupBy(catalogEntryDimensions.value, catalogEntryDimensions.name)
-    .orderBy(sql`count DESC`, sql`${catalogEntryDimensions.name} ASC`)
+    .from(dim)
+    .innerJoin(filtered, eq(filtered.cveId, dim.cveId))
+    .where(eq(dim.dimension, dimension))
+    .groupBy(dim.value, dim.name)
+    .orderBy(sql`count(*) DESC`, asc(dim.name))
     .all()
 
-  return rows.map(row => ({ key: row.key, name: row.name, count: row.count }))
+  return rows.map(row => ({ key: row.key, name: row.name, count: Number(row.count) }))
 }
 
 const queryVendorCounts = (
   db: DrizzleDatabase,
   filters: CatalogQuery
 ): KevCountDatum[] => {
-  const where = buildFilterExpression(filters)
+  const ce = tables.catalogEntries
+  const conditions = buildConditions(filters)
+  const whereCondition = combineConditions(conditions)
 
-  let filteredQuery = db
-    .select({ vendor_key: catalogEntries.vendorKey, vendor: catalogEntries.vendor })
-    .from(catalogEntries)
-
-  if (where) {
-    filteredQuery = filteredQuery.where(where)
+  let filteredBase = db.select({ vendorKey: ce.vendorKey, vendor: ce.vendor }).from(ce)
+  if (whereCondition) {
+    filteredBase = filteredBase.where(whereCondition)
   }
 
-  const filtered = filteredQuery.as('filtered')
-  const countExpr = sql<number>`COUNT(*)`.as('count')
-  const nameExpr = sql<string>`MAX(${filtered.vendor})`.as('name')
+  const filtered = db.$with('filtered_vendors').as(filteredBase)
+  const countExpr = sql<number>`count(*)`
 
   const rows = db
-    .select({ key: filtered.vendor_key, name: nameExpr, count: countExpr })
+    .with(filtered)
+    .select({
+      key: filtered.vendorKey,
+      name: sql<string>`max(${filtered.vendor})`,
+      count: countExpr
+    })
     .from(filtered)
-    .where(ne(filtered.vendor_key, ''))
-    .groupBy(filtered.vendor_key)
-    .having(sql`MAX(${filtered.vendor}) != 'Other'`)
-    .orderBy(sql`count DESC`, sql`name ASC`)
+    .where(ne(filtered.vendorKey, ''))
+    .groupBy(filtered.vendorKey)
+    .having(sql`max(${filtered.vendor}) != 'Other'`)
+    .orderBy(sql`count(*) DESC`, sql`max(${filtered.vendor}) ASC`)
     .all()
 
-  return rows.map(row => ({ key: row.key, name: row.name, count: row.count }))
+  return rows.map(row => ({
+    key: row.key,
+    name: row.name ?? row.key,
+    count: Number(row.count)
+  }))
 }
 
 const queryProductCounts = (
   db: DrizzleDatabase,
   filters: CatalogQuery
 ): KevCountDatum[] => {
-  const where = buildFilterExpression(filters)
+  const ce = tables.catalogEntries
+  const conditions = buildConditions(filters)
+  const whereCondition = combineConditions(conditions)
 
-  let filteredQuery = db
+  let filteredBase = db
     .select({
-      product_key: catalogEntries.productKey,
-      product: catalogEntries.product,
-      vendor_key: catalogEntries.vendorKey,
-      vendor: catalogEntries.vendor
+      productKey: ce.productKey,
+      product: ce.product,
+      vendorKey: ce.vendorKey,
+      vendor: ce.vendor
     })
-    .from(catalogEntries)
-
-  if (where) {
-    filteredQuery = filteredQuery.where(where)
+    .from(ce)
+  if (whereCondition) {
+    filteredBase = filteredBase.where(whereCondition)
   }
 
-  const filtered = filteredQuery.as('filtered')
-  const countExpr = sql<number>`COUNT(*)`.as('count')
-  const nameExpr = sql<string>`MAX(${filtered.product})`.as('name')
-  const vendorKeyExpr = sql<string>`MAX(${filtered.vendor_key})`.as('vendorKey')
-  const vendorNameExpr = sql<string>`MAX(${filtered.vendor})`.as('vendorName')
+  const filtered = db.$with('filtered_products').as(filteredBase)
+  const countExpr = sql<number>`count(*)`
 
   const rows = db
+    .with(filtered)
     .select({
-      key: filtered.product_key,
-      name: nameExpr,
-      vendorKey: vendorKeyExpr,
-      vendorName: vendorNameExpr,
+      key: filtered.productKey,
+      name: sql<string>`max(${filtered.product})`,
+      vendorKey: sql<string>`max(${filtered.vendorKey})`,
+      vendorName: sql<string>`max(${filtered.vendor})`,
       count: countExpr
     })
     .from(filtered)
-    .where(ne(filtered.product_key, ''))
-    .groupBy(filtered.product_key)
-    .having(sql`MAX(${filtered.product}) != 'Other'`)
-    .orderBy(sql`count DESC`, sql`name ASC`)
+    .where(ne(filtered.productKey, ''))
+    .groupBy(filtered.productKey)
+    .having(sql`max(${filtered.product}) != 'Other'`)
+    .orderBy(sql`count(*) DESC`, sql`max(${filtered.product}) ASC`)
     .all()
 
   return rows.map(row => ({
     key: row.key,
-    name: row.name,
-    count: row.count,
-    vendorKey: row.vendorKey,
-    vendorName: row.vendorName
+    name: row.name ?? row.key,
+    count: Number(row.count),
+    vendorKey: row.vendorKey ?? '',
+    vendorName: row.vendorName ?? ''
   }))
 }
 
 const countEntries = (db: DrizzleDatabase, filters: CatalogQuery): number => {
-  const where = buildFilterExpression(filters)
-  const countExpr = sql<number>`COUNT(*)`.as('count')
+  const ce = tables.catalogEntries
+  const conditions = buildConditions(filters)
+  const whereCondition = combineConditions(conditions)
+  const countExpr = sql<number>`count(*)`
 
-  let query = db.select({ count: countExpr }).from(catalogEntries)
-  if (where) {
-    query = query.where(where)
+  let query = db.select({ count: countExpr }).from(ce)
+  if (whereCondition) {
+    query = query.where(whereCondition)
   }
 
   const row = query.get()
-  return row?.count ?? 0
+  return row?.count ? Number(row.count) : 0
 }
 
 const getCatalogBounds = (
@@ -586,12 +575,13 @@ const getCatalogBounds = (
     }
   }
 
+  const ce = tables.catalogEntries
   const row = db
     .select({
-      earliest: sql<string | null>`MIN(${catalogEntries.dateAdded})`,
-      latest: sql<string | null>`MAX(${catalogEntries.dateAdded})`
+      earliest: sql<string | null>`min(${ce.dateAdded})`,
+      latest: sql<string | null>`max(${ce.dateAdded})`
     })
-    .from(catalogEntries)
+    .from(ce)
     .get()
 
   return {
@@ -613,11 +603,12 @@ const computeUpdatedAt = (db: DrizzleDatabase): string => {
     return candidates[candidates.length - 1] ?? ''
   }
 
+  const ce = tables.catalogEntries
   const row = db
     .select({
-      latest: sql<string | null>`MAX(COALESCE(${catalogEntries.dateUpdated}, ${catalogEntries.dateAdded}))`
+      latest: sql<string | null>`max(coalesce(${ce.dateUpdated}, ${ce.dateAdded}))`
     })
-    .from(catalogEntries)
+    .from(ce)
     .get()
 
   return row?.latest ?? ''
@@ -679,8 +670,14 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       omitFilters(filters, ['vulnerability', 'vendor', 'vendorKeys', 'product', 'productKeys']),
       'vulnerability'
     ),
-    vendor: queryVendorCounts(db, omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])),
-    product: queryProductCounts(db, omitFilters(filters, ['product', 'productKeys']))
+    vendor: queryVendorCounts(
+      db,
+      omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])
+    ),
+    product: queryProductCounts(
+      db,
+      omitFilters(filters, ['product', 'productKeys'])
+    )
   }
 
   const catalogBounds = getCatalogBounds(db)
