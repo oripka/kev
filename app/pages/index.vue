@@ -54,6 +54,7 @@ const filters = reactive<FilterState>({ ...defaultFilters });
 const searchInput = ref("");
 const debouncedSearch = ref("");
 const showWellKnownOnly = ref(false);
+const showRansomwareOnly = ref(false);
 const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
 const defaultCvssRange = [0, 10] as const;
@@ -155,6 +156,7 @@ const filterParams = computed(() => {
     startYear,
     endYear,
     wellKnownOnly: showWellKnownOnly.value ? true : undefined,
+    ransomwareOnly: showRansomwareOnly.value ? true : undefined,
     ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
     internetExposedOnly: showInternetExposedOnly.value ? true : undefined,
   };
@@ -887,6 +889,10 @@ const activeFilters = computed<ActiveFilter[]>(() => {
 
   if (showWellKnownOnly.value) {
     items.push({ key: "wellKnown", label: "Focus", value: "Well-known CVEs" });
+  }
+
+  if (showRansomwareOnly.value) {
+    items.push({ key: "ransomware", label: "Focus", value: "Ransomware-linked CVEs" });
   }
 
   if (showInternetExposedOnly.value) {
