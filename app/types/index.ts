@@ -144,7 +144,7 @@ export type ProductCatalogItem = {
   vendorKey: string
   vendorName: string
   sources: CatalogSource[]
-  kevCount: number
+  matchCount: number
 }
 
 export type ProductCatalogResponse = {

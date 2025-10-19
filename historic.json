@@ -1,0 +1,128 @@
+[
+  {
+    "cve": "CVE-2008-4250",
+    "title": "MS08-067 / Windows Server Service RCE",
+    "year": 2008,
+    "context": "Remote code execution in the Windows Server service (path canonicalization).",
+    "notes": "Exploited by Conficker; wormable and widely used against Windows 2003 / XP with many language-pack targets."
+  },
+  {
+    "cve": "CVE-2017-0144",
+    "title": "EternalBlue (SMBv1 remote code execution)",
+    "year": 2017,
+    "context": "SMBv1 remote code execution vulnerability exploited by leaked NSA tooling.",
+    "notes": "Used in WannaCry and NotPetya campaigns; patch released before public exploit release."
+  },
+  {
+    "cve": "CVE-2014-0160",
+    "title": "Heartbleed (OpenSSL heartbeat over-read)",
+    "year": 2014,
+    "context": "OpenSSL heartbeat implementation allowed reading server memory, leaking keys and secrets.",
+    "notes": "Wide impact on TLS-enabled services; required key rotation and OpenSSL updates."
+  },
+  {
+    "cve": "CVE-2014-6271",
+    "title": "Shellshock (Bash environment function parsing)",
+    "year": 2014,
+    "context": "Bash parsing flaw allowing code execution via crafted environment variables.",
+    "notes": "Affected many Unix-like systems where Bash was used; multiple follow-up fixes required."
+  },
+  {
+    "cve": "CVE-2017-5638",
+    "title": "Apache Struts Jakarta Multipart parser RCE",
+    "year": 2017,
+    "context": "Crafted Content-Type (or related header) allowed command execution in Struts 2.",
+    "notes": "Instrumental in the 2017 Equifax breach when an internet-facing instance went unpatched."
+  },
+  {
+    "cve": "CVE-2019-0708",
+    "title": "BlueKeep (RDP Remote Code Execution)",
+    "year": 2019,
+    "context": "Critical RDP remote code execution in Remote Desktop Services with wormable potential.",
+    "notes": "Microsoft issued patches and guidance; high concern for legacy, unpatched systems."
+  },
+  {
+    "cve": "CVE-2020-0796",
+    "title": "SMBGhost (SMBv3 compression RCE)",
+    "year": 2020,
+    "context": "SMBv3 handling vulnerability (compression) allowing remote code execution on vulnerable hosts.",
+    "notes": "Patch and mitigations published; noted for potential wormability."
+  },
+  {
+    "cve": "CVE-2010-2568",
+    "title": "Windows LNK Shortcut Parsing Vulnerability",
+    "year": 2010,
+    "context": "Processing of specially crafted LNK shortcut files leading to arbitrary code execution when icons were rendered.",
+    "notes": "Used by Stuxnet and other campaigns to propagate via USB to air-gapped systems."
+  },
+  {
+    "cve": "CVE-2020-1472",
+    "title": "ZeroLogon (Netlogon Elevation of Privilege)",
+    "year": 2020,
+    "context": "Cryptographic flaw in Netlogon allowing an attacker to impersonate machines and set empty domain passwords via Netlogon RPC.",
+    "notes": "High severity; enables domain takeover if domain controllers are reachable and unpatched."
+  },
+  {
+    "cve": "CVE-2012-0002",
+    "title": "MS12-020 / RDP Use-After-Free (DoS, implied RCE attempts)",
+    "year": 2012,
+    "context": "RDP use-after-free causing DoS; public discussion and Metasploit research explored potential RCE paths but public, reliable RCE was not documented.",
+    "notes": "Popular Metasploit module due to community interest and research activity; primarily a DoS in public disclosures."
+  },
+  {
+    "cve": "CVE-2006-3439",
+    "title": "MS06-040 / NetpwPathCanonicalize Overflow",
+    "year": 2006,
+    "context": "Server service path canonicalization overflow allowing remote code execution on older Windows versions.",
+    "notes": "No official patch for NT4; useful against legacy systems where NT4 is still present."
+  },
+  {
+    "cve": "CVE-2003-0352",
+    "title": "MS03-026 / RPC DCOM Interface Overflow",
+    "year": 2003,
+    "context": "RPC DCOM buffer overflow enabling remote code execution on older Windows systems.",
+    "notes": "Used by Blaster and Nachi worms; historically the de-facto reliable exploit for many NT-era machines."
+  },
+  {
+    "cve": "CVE-2010-0017",
+    "title": "MS10-006 / SMB Client Infinite Loop (Windows 7 / Server 2008 R2)",
+    "year": 2010,
+    "context": "SMB client bug that can cause an infinite loop / crash when a client connects to a malicious SMB server.",
+    "notes": "Client-side DoS demonstrated against Windows 7 / Server 2008 R2; not an RCE."
+  },
+  {
+    "cve": "CVE-2010-1240",
+    "title": "Adobe Reader Embedded EXE (social engineering)",
+    "year": 2010,
+    "context": "Technique embedding and executing a PE inside a PDF to achieve code execution when the PDF is opened.",
+    "notes": "Used in social-engineering style attacks; popular meterpreter/embedded-PE module for Adobe Reader."
+  },
+  {
+    "cve": "CVE-2010-0425",
+    "title": "Apache mod_isapi <= 2.2.14 Dangling Pointer",
+    "year": 2010,
+    "context": "Dangling pointer vulnerability in mod_isapi leading to DoS on Windows hosts running vulnerable Apache/mod_isapi.",
+    "notes": "Windows-only impact; generally a DoS rather than RCE."
+  },
+  {
+    "cve": "CVE-2012-0507",
+    "title": "Java AtomicReferenceArray Type Violation",
+    "year": 2012,
+    "context": "Type violation in Java's AtomicReferenceArray exploited as a cross-platform Java RCE affecting vulnerable Java runtimes.",
+    "notes": "Public exploit demonstrated Meterpreter sessions on Windows, Linux, and macOS for affected Java versions."
+  },
+  {
+    "cve": "CVE-1999-0504",
+    "title": "Authenticated Windows Code Execution (PSExec-style utility use)",
+    "year": 1999,
+    "context": "Post-authenticated remote execution via administrative services (utility module pattern rather than a single bug).",
+    "notes": "PSExec and similar techniques allow remote command execution when valid credentials with sufficient privileges are available; common in post-exploitation and testing."
+  },
+  {
+    "cve": "CVE-2005-1983",
+    "title": "MS05-039 / Plug and Play Service Overflow",
+    "year": 2005,
+    "context": "Plug and Play service overflow exploited to gain code execution on Windows 2000-era systems.",
+    "notes": "Used by Zotob and other early worms; historically important for Windows 2000 exploitation."
+  }
+]

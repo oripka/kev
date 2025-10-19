@@ -13,7 +13,7 @@ interface ProductCatalogRow {
   sources: string
 }
 
-interface KevCountRow {
+interface MatchCountRow {
   vendor: string | null
   product: string | null
   count: number
@@ -56,20 +56,20 @@ export default defineEventHandler((event): ProductCatalogResponse => {
   const limit = normaliseLimit(query.limit)
 
   const db = getDatabase()
-  const kevCountRows = db.all(
-    sql<KevCountRow>`
+  const matchCountRows = db.all(
+    sql<MatchCountRow>`
       SELECT vendor, product, COUNT(*) as count
       FROM ${tables.vulnerabilityEntries}
-      WHERE source = 'kev'
+      WHERE source IN ('kev', 'enisa')
       GROUP BY vendor, product
     `
   )
 
-  const kevCountByProduct = new Map<string, number>()
+  const matchCountByProduct = new Map<string, number>()
 
-  for (const row of kevCountRows) {
+  for (const row of matchCountRows) {
     const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
-    kevCountByProduct.set(normalised.product.key, row.count ?? 0)
+    matchCountByProduct.set(normalised.product.key, row.count ?? 0)
   }
 
   let rows: ProductCatalogRow[]
@@ -81,12 +81,10 @@ export default defineEventHandler((event): ProductCatalogResponse => {
         SELECT product_key, product_name, vendor_key, vendor_name, sources
         FROM ${tables.productCatalog}
         WHERE search_terms LIKE ${pattern} ESCAPE '\\'
-        ORDER BY product_name ASC
-        LIMIT ${limit}
       `
     )
   } else {
-    const fetched = db
+    rows = db
       .select({
         product_key: tables.productCatalog.productKey,
         product_name: tables.productCatalog.productName,
@@ -97,28 +95,28 @@ export default defineEventHandler((event): ProductCatalogResponse => {
       .from(tables.productCatalog)
       .orderBy(tables.productCatalog.productName)
       .all()
-
-    rows = fetched
-      .sort((a, b) => {
-        const countA = kevCountByProduct.get(a.product_key) ?? 0
-        const countB = kevCountByProduct.get(b.product_key) ?? 0
-
-        if (countA !== countB) {
-          return countB - countA
-        }
-
-        return a.product_name.localeCompare(b.product_name)
-      })
-      .slice(0, limit)
   }
 
-  const items: ProductCatalogItem[] = rows.map(row => ({
+  const sortedRows = rows
+    .sort((a, b) => {
+      const countA = matchCountByProduct.get(a.product_key) ?? 0
+      const countB = matchCountByProduct.get(b.product_key) ?? 0
+
+      if (countA !== countB) {
+        return countB - countA
+      }
+
+      return a.product_name.localeCompare(b.product_name)
+    })
+    .slice(0, limit)
+
+  const items: ProductCatalogItem[] = sortedRows.map(row => ({
     productKey: row.product_key,
     productName: row.product_name,
     vendorKey: row.vendor_key,
     vendorName: row.vendor_name,
     sources: toSources(row.sources),
-    kevCount: kevCountByProduct.get(row.product_key) ?? 0
+    matchCount: matchCountByProduct.get(row.product_key) ?? 0
   }))
 
   return { items }

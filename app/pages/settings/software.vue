@@ -144,9 +144,9 @@ const columns = computed<
       cell: ({ row }) => row.original.vendorName,
     },
     {
-      accessorKey: "kevCount",
-      header: "KEV matches",
-      cell: ({ row }) => numberFormatter.format(row.original.kevCount),
+      accessorKey: "matchCount",
+      header: "Matches",
+      cell: ({ row }) => numberFormatter.format(row.original.matchCount),
       meta: {
         align: "end",
       },
@@ -240,7 +240,7 @@ const columns = computed<
                       v-if="isTopLimited"
                       class="rounded-full bg-primary-100/60 px-2 py-1 text-[11px] font-semibold text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
                     >
-                      Top 15 most exploited vulnerabilities
+                      Top 15 products with the most matches
                     </span>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
