@@ -2060,7 +2060,7 @@ const columns: TableColumn<KevEntry>[] = [
       title="Filters"
       description="Refine the KEV catalog with precise search, score, and time controls."
       :ui="{ content: 'max-w-2xl' }"
-      :transition="false"
+      :unmount-on-hide="false"
     >
       <template #body>
         <div class="space-y-6">
@@ -2201,10 +2201,15 @@ const columns: TableColumn<KevEntry>[] = [
       title="Focus controls"
       description="Highlight the vulnerabilities that matter most to your organisation."
       :ui="{ content: 'max-w-lg' }"
-      :transition="false"
+      :unmount-on-hide="false"
     >
       <template #body>
-        <div class="space-y-5">
+        <div class="relative space-y-5">
+          <div
+            v-if="!trackedProductsReady"
+            class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
+          />
+
           <div class="space-y-3">
             <div class="flex items-center justify-between gap-3">
               <div>
@@ -2260,19 +2265,25 @@ const columns: TableColumn<KevEntry>[] = [
       title="My software focus"
       description="Adjust tracked products and the owned-only view without leaving the table."
       :ui="{ content: 'max-w-3xl' }"
-      :transition="false"
+      :unmount-on-hide="false"
     >
       <template #body>
-        <TrackedSoftwareSummary
-          v-model="showOwnedOnly"
-          :tracked-products="trackedProducts"
-          :tracked-product-count="trackedProductCount"
-          :has-tracked-products="hasTrackedProducts"
-          :saving="savingTrackedProducts"
-          :save-error="trackedProductError"
-          @remove="removeTrackedProduct"
-          @clear="clearTrackedProducts"
-        />
+        <div class="relative">
+          <div
+            v-if="!trackedProductsReady"
+            class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
+          />
+          <TrackedSoftwareSummary
+            v-model="showOwnedOnly"
+            :tracked-products="trackedProducts"
+            :tracked-product-count="trackedProductCount"
+            :has-tracked-products="hasTrackedProducts"
+            :saving="savingTrackedProducts"
+            :save-error="trackedProductError"
+            @remove="removeTrackedProduct"
+            @clear="clearTrackedProducts"
+          />
+        </div>
       </template>
     </USlideover>
 
@@ -2281,10 +2292,15 @@ const columns: TableColumn<KevEntry>[] = [
       title="Trend explorer"
       description="Visualise how the filtered vulnerabilities accumulate over time."
       :ui="{ content: 'max-w-4xl' }"
-      :transition="false"
+      :unmount-on-hide="false"
     >
       <template #body>
-        <div class="space-y-6">
+        <div class="relative space-y-6">
+          <div
+            v-if="isBusy"
+            class="pointer-events-none absolute inset-0 z-10 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
+          />
+
           <UCard>
             <template #header>
               <div class="flex flex-wrap items-center justify-between gap-3">
