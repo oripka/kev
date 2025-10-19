@@ -236,10 +236,14 @@ const dedupeAdjacentTokens = (value: string): string => {
 const normaliseLinuxLabel = (value: string, vendorLabel: string): string => {
   const vendorLower = vendorLabel.toLowerCase();
   const productLower = value.toLowerCase();
+  const vendorMentionsLinux = vendorLower.includes("linux") || vendorLower === "kernel";
+  const vendorMentionsKernel = vendorLower.includes("kernel") || vendorLower === "kernel";
+  const productMentionsKernel = /\bkernel\b/i.test(productLower);
+  const canonicalLinuxLabel = vendorMentionsKernel || productMentionsKernel ? "Linux Kernel" : "Linux";
 
-  if (vendorLower.includes("linux") || vendorLower === "kernel") {
+  if (vendorMentionsLinux || productMentionsKernel) {
     if (!productLower || /^(patch|n\/a|unknown|unspecified)$/i.test(productLower)) {
-      return "Linux";
+      return canonicalLinuxLabel;
     }
 
     if (/^kernel$/i.test(productLower)) {
@@ -251,7 +255,24 @@ const normaliseLinuxLabel = (value: string, vendorLabel: string): string => {
     }
 
     if (/^linux$/i.test(productLower)) {
-      return "Linux";
+      return canonicalLinuxLabel;
+    }
+
+    const compactProduct = productLower.replace(/\s+/g, "");
+    const looksLikeHash = /^[0-9a-f]{7,40}$/i.test(compactProduct);
+    const isPatchDescriptor = /^patch(?:[:\s-]*(?:[0-9a-f]{7,40}|v?\d+(?:\.\d+)*))?$/i.test(productLower);
+    const isNumericOnly = /^\d+(?:\.\d+)*$/i.test(productLower);
+    const isZero = productLower === "0";
+    const isLinuxWithNumericSuffix = /^linux(?:\s+kernel)?(?:\s+[0-9]+(?:[._-][0-9]+)*)?$/i.test(productLower);
+
+    if (
+      looksLikeHash ||
+      isPatchDescriptor ||
+      isNumericOnly ||
+      isZero ||
+      isLinuxWithNumericSuffix
+    ) {
+      return canonicalLinuxLabel;
     }
   }
 
