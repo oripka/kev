@@ -1,11 +1,13 @@
+import { eq } from 'drizzle-orm'
 import { ofetch } from 'ofetch'
-import type { Database as SqliteDatabase } from 'better-sqlite3'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry, KevEntry } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { getCachedData } from './cache'
 import { setMetadata } from './sqlite'
 import { setImportPhase } from './import-progress'
+import { tables } from '../database/client'
+import type { DrizzleDatabase } from './sqlite'
 
 type EnisaApiProduct = {
   product?: {
@@ -213,7 +215,7 @@ type ImportOptions = {
 }
 
 export const importEnisaCatalog = async (
-  db: SqliteDatabase,
+  db: DrizzleDatabase,
   options: ImportOptions = {}
 ): Promise<{ imported: number; lastUpdated: string | null }> => {
   const { ttlMs = 86_400_000, forceRefresh = false, allowStale = false } = options
@@ -306,142 +308,76 @@ export const importEnisaCatalog = async (
     total: entries.length
   })
 
-  const deleteEntries = db.prepare(`DELETE FROM vulnerability_entries WHERE source = 'enisa'`)
-  const insertEntry = db.prepare(
-    `INSERT INTO vulnerability_entries (
-      id,
-      cve_id,
-      source,
-      vendor,
-      product,
-      vulnerability_name,
-      description,
-      required_action,
-      date_added,
-      due_date,
-      ransomware_use,
-      notes,
-      cwes,
-      cvss_score,
-      cvss_vector,
-      cvss_version,
-      cvss_severity,
-      epss_score,
-      assigner,
-      date_published,
-      date_updated,
-      exploited_since,
-      source_url,
-      reference_links,
-      aliases,
-      internet_exposed
-    ) VALUES (
-      @id,
-      @cve_id,
-      @source,
-      @vendor,
-      @product,
-      @vulnerability_name,
-      @description,
-      @required_action,
-      @date_added,
-      @due_date,
-      @ransomware_use,
-      @notes,
-      @cwes,
-      @cvss_score,
-      @cvss_vector,
-      @cvss_version,
-      @cvss_severity,
-      @epss_score,
-      @assigner,
-      @date_published,
-      @date_updated,
-      @exploited_since,
-      @source_url,
-      @reference_links,
-      @aliases,
-      @internet_exposed
-    )`
-  )
-  const insertCategory = db.prepare(
-    `INSERT INTO vulnerability_entry_categories (
-      entry_id,
-      category_type,
-      value,
-      name
-    ) VALUES (
-      @entry_id,
-      @category_type,
-      @value,
-      @name
-    )`
-  )
+  db.transaction(tx => {
+    tx.delete(tables.vulnerabilityEntries)
+      .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
+      .run()
 
-  const transaction = db.transaction((itemsToSave: KevEntry[]) => {
-    deleteEntries.run()
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index]
 
-    const pushCategories = (
-      entryId: string,
-      values: string[],
-      type: 'domain' | 'exploit' | 'vulnerability'
-    ) => {
-      for (const value of values) {
-        insertCategory.run({
-          entry_id: entryId,
-          category_type: type,
-          value,
-          name: value
+      tx
+        .insert(tables.vulnerabilityEntries)
+        .values({
+          id: entry.id,
+          cveId: entry.cveId,
+          source: 'enisa',
+          vendor: entry.vendor,
+          product: entry.product,
+          vulnerabilityName: entry.vulnerabilityName,
+          description: entry.description,
+          requiredAction: entry.requiredAction,
+          dateAdded: entry.dateAdded,
+          dueDate: entry.dueDate,
+          ransomwareUse: entry.ransomwareUse,
+          notes: toJson(entry.notes),
+          cwes: toJson(entry.cwes),
+          cvssScore: entry.cvssScore,
+          cvssVector: entry.cvssVector,
+          cvssVersion: entry.cvssVersion,
+          cvssSeverity: entry.cvssSeverity,
+          epssScore: entry.epssScore,
+          assigner: entry.assigner,
+          datePublished: entry.datePublished,
+          dateUpdated: entry.dateUpdated,
+          exploitedSince: entry.exploitedSince,
+          sourceUrl: entry.sourceUrl,
+          referenceLinks: toJson(entry.references),
+          aliases: toJson(entry.aliases),
+          internetExposed: entry.internetExposed ? 1 : 0
         })
+        .run()
+
+      const categoryRecords: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
+
+      const pushCategories = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
+        for (const value of values) {
+          categoryRecords.push({
+            entryId: entry.id,
+            categoryType: type,
+            value,
+            name: value
+          })
+        }
       }
-    }
 
-    for (let index = 0; index < itemsToSave.length; index += 1) {
-      const entry = itemsToSave[index]
-      insertEntry.run({
-        id: entry.id,
-        cve_id: entry.cveId,
-        source: 'enisa',
-        vendor: entry.vendor,
-        product: entry.product,
-        vulnerability_name: entry.vulnerabilityName,
-        description: entry.description,
-        required_action: entry.requiredAction,
-        date_added: entry.dateAdded,
-        due_date: entry.dueDate,
-        ransomware_use: entry.ransomwareUse,
-        notes: toJson(entry.notes),
-        cwes: toJson(entry.cwes),
-        cvss_score: entry.cvssScore,
-        cvss_vector: entry.cvssVector,
-        cvss_version: entry.cvssVersion,
-        cvss_severity: entry.cvssSeverity,
-        epss_score: entry.epssScore,
-        assigner: entry.assigner,
-        date_published: entry.datePublished,
-        date_updated: entry.dateUpdated,
-        exploited_since: entry.exploitedSince,
-        source_url: entry.sourceUrl,
-        reference_links: toJson(entry.references),
-        aliases: toJson(entry.aliases),
-        internet_exposed: entry.internetExposed ? 1 : 0
-      })
+      pushCategories(entry.domainCategories, 'domain')
+      pushCategories(entry.exploitLayers, 'exploit')
+      pushCategories(entry.vulnerabilityCategories, 'vulnerability')
 
-      pushCategories(entry.id, entry.domainCategories, 'domain')
-      pushCategories(entry.id, entry.exploitLayers, 'exploit')
-      pushCategories(entry.id, entry.vulnerabilityCategories, 'vulnerability')
+      if (categoryRecords.length) {
+        tx.insert(tables.vulnerabilityEntryCategories).values(categoryRecords).run()
+      }
 
-      if ((index + 1) % 25 === 0 || index + 1 === itemsToSave.length) {
+      if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
         setImportPhase('savingEnisa', {
-          message: `Saving ENISA entries (${index + 1} of ${itemsToSave.length})`,
+          message: `Saving ENISA entries to the local cache (${index + 1} of ${entries.length})`,
           completed: index + 1,
-          total: itemsToSave.length
+          total: entries.length
         })
       }
     }
   })
-
-  transaction(entries)
 
   const importedAt = new Date().toISOString()
   setMetadata('enisa.lastImportAt', importedAt)

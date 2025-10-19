@@ -1,7 +1,9 @@
-import type { Database as SqliteDatabase } from 'better-sqlite3'
+import { sql } from 'drizzle-orm'
 import { lookupCveName } from '~/utils/cveToNameMap'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { CatalogSource, KevEntry, KevEntrySummary } from '~/types'
+import { tables } from '../database/client'
+import type { DrizzleDatabase } from './sqlite'
 import { ensureCatalogTables, setMetadata } from './sqlite'
 
 type RebuildCatalogOptions = {
@@ -542,14 +544,11 @@ const toBooleanFlag = (value: boolean): number => (value ? 1 : 0)
 const toKnownRansomwareFlag = (value: string | null): number =>
   value?.toLowerCase().includes('known') ? 1 : 0
 
-export const rebuildCatalog = (
-  db: SqliteDatabase,
-  options: RebuildCatalogOptions = {}
-) => {
+export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptions = {}) => {
   ensureCatalogTables(db)
-  const entryRows = db
-    .prepare<VulnerabilityEntryRow>(
-      `SELECT
+  const entryRows = db.all(
+    sql<VulnerabilityEntryRow>`
+      SELECT
         id,
         cve_id,
         source,
@@ -577,15 +576,15 @@ export const rebuildCatalog = (
         aliases,
         internet_exposed,
         updated_at
-      FROM vulnerability_entries`
-    )
-    .all() as VulnerabilityEntryRow[]
+      FROM ${tables.vulnerabilityEntries}
+    `
+  )
 
-  const categoryRows = db
-    .prepare<EntryCategoryRow>(
-      `SELECT entry_id, category_type, value, name FROM vulnerability_entry_categories`
-    )
-    .all() as EntryCategoryRow[]
+  const categoryRows = db.all(
+    sql<EntryCategoryRow>`
+      SELECT entry_id, category_type, value, name FROM ${tables.vulnerabilityEntryCategories}
+    `
+  )
 
   const categoryMap = new Map<string, EntryCategories>()
 
@@ -625,156 +624,14 @@ export const rebuildCatalog = (
 
   const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries)
 
-  const deleteCatalog = db.prepare('DELETE FROM catalog_entries')
-  const deleteDimensions = db.prepare('DELETE FROM catalog_entry_dimensions')
-  const insertCatalog = db.prepare<{
-    cve_id: string
-    entry_id: string
-    sources: string
-    vendor: string
-    vendor_key: string
-    product: string
-    product_key: string
-    vulnerability_name: string
-    description: string
-    required_action: string | null
-    date_added: string | null
-    date_added_ts: number | null
-    date_added_year: number | null
-    due_date: string | null
-    ransomware_use: string | null
-    has_known_ransomware: number
-    notes: string
-    cwes: string
-    cvss_score: number | null
-    cvss_vector: string | null
-    cvss_version: string | null
-    cvss_severity: string | null
-    epss_score: number | null
-    assigner: string | null
-    date_published: string | null
-    date_updated: string | null
-    date_updated_ts: number | null
-    exploited_since: string | null
-    source_url: string | null
-    references: string
-    aliases: string
-    is_well_known: number
-    domain_categories: string
-    exploit_layers: string
-    vulnerability_categories: string
-    internet_exposed: number
-    has_source_kev: number
-    has_source_enisa: number
-  }>(
-    `INSERT INTO catalog_entries (
-      cve_id,
-      entry_id,
-      sources,
-      vendor,
-      vendor_key,
-      product,
-      product_key,
-      vulnerability_name,
-      description,
-      required_action,
-      date_added,
-      date_added_ts,
-      date_added_year,
-      due_date,
-      ransomware_use,
-      has_known_ransomware,
-      notes,
-      cwes,
-      cvss_score,
-      cvss_vector,
-      cvss_version,
-      cvss_severity,
-      epss_score,
-      assigner,
-      date_published,
-      date_updated,
-      date_updated_ts,
-      exploited_since,
-      source_url,
-      reference_links,
-      aliases,
-      is_well_known,
-      domain_categories,
-      exploit_layers,
-      vulnerability_categories,
-      internet_exposed,
-      has_source_kev,
-      has_source_enisa
-    ) VALUES (
-      @cve_id,
-      @entry_id,
-      @sources,
-      @vendor,
-      @vendor_key,
-      @product,
-      @product_key,
-      @vulnerability_name,
-      @description,
-      @required_action,
-      @date_added,
-      @date_added_ts,
-      @date_added_year,
-      @due_date,
-      @ransomware_use,
-      @has_known_ransomware,
-      @notes,
-      @cwes,
-      @cvss_score,
-      @cvss_vector,
-      @cvss_version,
-      @cvss_severity,
-      @epss_score,
-      @assigner,
-      @date_published,
-      @date_updated,
-      @date_updated_ts,
-      @exploited_since,
-      @source_url,
-      @reference_links,
-      @aliases,
-      @is_well_known,
-      @domain_categories,
-      @exploit_layers,
-      @vulnerability_categories,
-      @internet_exposed,
-      @has_source_kev,
-      @has_source_enisa
-    )`
-  )
+  db.transaction(tx => {
+    tx.delete(tables.catalogEntryDimensions).run()
+    tx.delete(tables.catalogEntries).run()
 
-  const insertDimension = db.prepare<{
-    cve_id: string
-    dimension: string
-    value: string
-    name: string
-  }>(
-    `INSERT INTO catalog_entry_dimensions (
-      cve_id,
-      dimension,
-      value,
-      name
-    ) VALUES (
-      @cve_id,
-      @dimension,
-      @value,
-      @name
-    )`
-  )
+    options.onStart?.(catalogEntries.length)
 
-  const transaction = db.transaction((entriesToSave: KevEntry[]) => {
-    deleteDimensions.run()
-    deleteCatalog.run()
-
-    options.onStart?.(entriesToSave.length)
-
-    for (let index = 0; index < entriesToSave.length; index += 1) {
-      const entry = entriesToSave[index]
+    for (let index = 0; index < catalogEntries.length; index += 1) {
+      const entry = catalogEntries[index]
       const dateAddedTs = toTimestamp(entry.dateAdded)
       const dateUpdatedTs = toTimestamp(entry.dateUpdated)
       const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
@@ -782,56 +639,61 @@ export const rebuildCatalog = (
       const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
       const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
 
-      insertCatalog.run({
-        cve_id: entry.cveId,
-        entry_id: entry.id,
-        sources: toJson(entry.sources),
-        vendor: entry.vendor,
-        vendor_key: entry.vendorKey,
-        product: entry.product,
-        product_key: entry.productKey,
-        vulnerability_name: entry.vulnerabilityName,
-        description: entry.description,
-        required_action: entry.requiredAction,
-        date_added: entry.dateAdded,
-        date_added_ts: dateAddedTs,
-        date_added_year: toYear(dateAddedTs),
-        due_date: entry.dueDate,
-        ransomware_use: entry.ransomwareUse,
-        has_known_ransomware: hasKnownRansomware,
-        notes: toJson(entry.notes),
-        cwes: toJson(entry.cwes),
-        cvss_score: entry.cvssScore,
-        cvss_vector: entry.cvssVector,
-        cvss_version: entry.cvssVersion,
-        cvss_severity: entry.cvssSeverity,
-        epss_score: entry.epssScore,
-        assigner: entry.assigner,
-        date_published: entry.datePublished,
-        date_updated: entry.dateUpdated,
-        date_updated_ts: dateUpdatedTs,
-        exploited_since: entry.exploitedSince,
-        source_url: entry.sourceUrl,
-        reference_links: toJson(entry.references),
-        aliases: toJson(entry.aliases),
-        is_well_known: isWellKnown,
-        domain_categories: toJson(entry.domainCategories),
-        exploit_layers: toJson(entry.exploitLayers),
-        vulnerability_categories: toJson(entry.vulnerabilityCategories),
-        internet_exposed: toBooleanFlag(entry.internetExposed),
-        has_source_kev: hasSourceKev,
-        has_source_enisa: hasSourceEnisa
-      })
+      tx
+        .insert(tables.catalogEntries)
+        .values({
+          cveId: entry.cveId,
+          entryId: entry.id,
+          sources: toJson(entry.sources),
+          vendor: entry.vendor,
+          vendorKey: entry.vendorKey,
+          product: entry.product,
+          productKey: entry.productKey,
+          vulnerabilityName: entry.vulnerabilityName,
+          description: entry.description,
+          requiredAction: entry.requiredAction,
+          dateAdded: entry.dateAdded,
+          dateAddedTs,
+          dateAddedYear: toYear(dateAddedTs),
+          dueDate: entry.dueDate,
+          ransomwareUse: entry.ransomwareUse,
+          hasKnownRansomware,
+          notes: toJson(entry.notes),
+          cwes: toJson(entry.cwes),
+          cvssScore: entry.cvssScore,
+          cvssVector: entry.cvssVector,
+          cvssVersion: entry.cvssVersion,
+          cvssSeverity: entry.cvssSeverity,
+          epssScore: entry.epssScore,
+          assigner: entry.assigner,
+          datePublished: entry.datePublished,
+          dateUpdated: entry.dateUpdated,
+          dateUpdatedTs,
+          exploitedSince: entry.exploitedSince,
+          sourceUrl: entry.sourceUrl,
+          referenceLinks: toJson(entry.references),
+          aliases: toJson(entry.aliases),
+          isWellKnown,
+          domainCategories: toJson(entry.domainCategories),
+          exploitLayers: toJson(entry.exploitLayers),
+          vulnerabilityCategories: toJson(entry.vulnerabilityCategories),
+          internetExposed: toBooleanFlag(entry.internetExposed),
+          hasSourceKev,
+          hasSourceEnisa
+        })
+        .run()
 
       const dimensions: CatalogDimension[] = ['domain', 'exploit', 'vulnerability']
+      const dimensionRecords: Array<{ cveId: string; dimension: string; value: string; name: string }> = []
+
       for (const dimension of dimensions) {
         const tuples = toDimensionTuples(entry, dimension)
         for (const tuple of tuples) {
           if (!tuple.value || tuple.name === 'Other') {
             continue
           }
-          insertDimension.run({
-            cve_id: entry.cveId,
+          dimensionRecords.push({
+            cveId: entry.cveId,
             dimension,
             value: tuple.value,
             name: tuple.name
@@ -839,13 +701,15 @@ export const rebuildCatalog = (
         }
       }
 
-      if ((index + 1) % 25 === 0 || index + 1 === entriesToSave.length) {
-        options.onProgress?.(index + 1, entriesToSave.length)
+      if (dimensionRecords.length) {
+        tx.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
+      }
+
+      if ((index + 1) % 25 === 0 || index + 1 === catalogEntries.length) {
+        options.onProgress?.(index + 1, catalogEntries.length)
       }
     }
   })
-
-  transaction(catalogEntries)
 
   options.onComplete?.(catalogEntries.length)
 

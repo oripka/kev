@@ -5,6 +5,7 @@ import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { KevEntry } from '~/types'
+import { eq, sql } from 'drizzle-orm'
 import { getCachedData } from '../utils/cache'
 import { fetchCvssMetrics } from '../utils/cvss'
 import { importEnisaCatalog } from '../utils/enisa'
@@ -17,6 +18,7 @@ import {
 } from '../utils/import-progress'
 import { rebuildCatalog } from '../utils/catalog'
 import { getDatabase } from '../utils/sqlite'
+import { tables } from '../database/client'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 
 const kevSchema = z.object({
@@ -179,17 +181,15 @@ export default defineEventHandler(async event => {
     if (baseCveIds.length > 0) {
       const baseCveIdSet = new Set(baseCveIds)
       const existingRows = db
-        .prepare<ExistingCvssRow>(
-          `SELECT cve_id, cvss_score, cvss_vector, cvss_version, cvss_severity
-          FROM vulnerability_entries
-          WHERE source = 'kev'
-            AND (
-              cvss_score IS NOT NULL
-              OR cvss_vector IS NOT NULL
-              OR cvss_version IS NOT NULL
-              OR cvss_severity IS NOT NULL
-            )`
-        )
+        .select({
+          cve_id: tables.vulnerabilityEntries.cveId,
+          cvss_score: tables.vulnerabilityEntries.cvssScore,
+          cvss_vector: tables.vulnerabilityEntries.cvssVector,
+          cvss_version: tables.vulnerabilityEntries.cvssVersion,
+          cvss_severity: tables.vulnerabilityEntries.cvssSeverity
+        })
+        .from(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'kev'))
         .all() as ExistingCvssRow[]
 
       for (const row of existingRows) {
@@ -274,168 +274,102 @@ export default defineEventHandler(async event => {
       return enrichEntry(enrichedBase)
     })
 
-    const deleteEntries = db.prepare(`DELETE FROM vulnerability_entries WHERE source = 'kev'`)
-    const insertEntry = db.prepare(
-      `INSERT INTO vulnerability_entries (
-        id,
-        cve_id,
-        source,
-        vendor,
-        product,
-        vulnerability_name,
-        description,
-        required_action,
-        date_added,
-        due_date,
-        ransomware_use,
-        notes,
-        cwes,
-        cvss_score,
-        cvss_vector,
-        cvss_version,
-        cvss_severity,
-        epss_score,
-        assigner,
-        date_published,
-        date_updated,
-        exploited_since,
-        source_url,
-        reference_links,
-        aliases,
-        internet_exposed
-      ) VALUES (
-        @id,
-        @cve_id,
-        @source,
-        @vendor,
-        @product,
-        @vulnerability_name,
-        @description,
-        @required_action,
-        @date_added,
-        @due_date,
-        @ransomware_use,
-        @notes,
-        @cwes,
-        @cvss_score,
-        @cvss_vector,
-        @cvss_version,
-        @cvss_severity,
-        @epss_score,
-        @assigner,
-        @date_published,
-        @date_updated,
-        @exploited_since,
-        @source_url,
-        @reference_links,
-        @aliases,
-        @internet_exposed
-      )`
-    )
-    const insertCategory = db.prepare(
-      `INSERT INTO vulnerability_entry_categories (
-        entry_id,
-        category_type,
-        value,
-        name
-      ) VALUES (
-        @entry_id,
-        @category_type,
-        @value,
-        @name
-      )`
-    )
-    const upsertMetadata = db.prepare(
-      `INSERT INTO kev_metadata (key, value) VALUES (@key, @value)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-    )
+    const importedAt = new Date().toISOString()
 
-    const transaction = db.transaction(
-      (
-        items: KevEntry[],
-        meta: { dateReleased: string; catalogVersion: string; count: number; importedAt: string }
-      ) => {
-        deleteEntries.run()
+    db.transaction(tx => {
+      tx.delete(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'kev'))
+        .run()
 
-        setImportPhase('saving', {
-          message: 'Saving entries to the local cache',
-          completed: 0,
-          total: items.length
-        })
+      setImportPhase('saving', {
+        message: 'Saving entries to the local cache',
+        completed: 0,
+        total: entries.length
+      })
 
-        for (let index = 0; index < items.length; index += 1) {
-          const entry = items[index]
-          const entryId = entry.id
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index]
+        const entryId = entry.id
 
-          insertEntry.run({
+        tx
+          .insert(tables.vulnerabilityEntries)
+          .values({
             id: entryId,
-            cve_id: entry.cveId,
+            cveId: entry.cveId,
             source: 'kev',
             vendor: entry.vendor,
             product: entry.product,
-            vulnerability_name: entry.vulnerabilityName,
+            vulnerabilityName: entry.vulnerabilityName,
             description: entry.description,
-            required_action: entry.requiredAction,
-            date_added: entry.dateAdded,
-            due_date: entry.dueDate,
-            ransomware_use: entry.ransomwareUse,
+            requiredAction: entry.requiredAction,
+            dateAdded: entry.dateAdded,
+            dueDate: entry.dueDate,
+            ransomwareUse: entry.ransomwareUse,
             notes: toJson(entry.notes),
             cwes: toJson(entry.cwes),
-            cvss_score: entry.cvssScore,
-            cvss_vector: entry.cvssVector,
-            cvss_version: entry.cvssVersion,
-            cvss_severity: entry.cvssSeverity,
-            epss_score: null,
+            cvssScore: entry.cvssScore,
+            cvssVector: entry.cvssVector,
+            cvssVersion: entry.cvssVersion,
+            cvssSeverity: entry.cvssSeverity,
+            epssScore: null,
             assigner: null,
-            date_published: entry.datePublished,
-            date_updated: entry.dateUpdated,
-            exploited_since: entry.exploitedSince,
-            source_url: entry.sourceUrl ?? null,
-            reference_links: toJson(entry.references),
+            datePublished: entry.datePublished,
+            dateUpdated: entry.dateUpdated,
+            exploitedSince: entry.exploitedSince,
+            sourceUrl: entry.sourceUrl ?? null,
+            referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
-            internet_exposed: entry.internetExposed ? 1 : 0
+            internetExposed: entry.internetExposed ? 1 : 0
           })
+          .run()
 
-          const pushCategories = (
-            values: string[],
-            type: 'domain' | 'exploit' | 'vulnerability'
-          ) => {
-            for (const value of values) {
-              insertCategory.run({
-                entry_id: entryId,
-                category_type: type,
-                value,
-                name: value
-              })
-            }
-          }
+        const dimensionRecords: Array<{
+          entryId: string
+          categoryType: string
+          value: string
+          name: string
+        }> = []
 
-          pushCategories(entry.domainCategories, 'domain')
-          pushCategories(entry.exploitLayers, 'exploit')
-          pushCategories(entry.vulnerabilityCategories, 'vulnerability')
-
-          if ((index + 1) % 25 === 0 || index + 1 === items.length) {
-            setImportPhase('saving', {
-              completed: index + 1,
-              total: items.length,
-              message: `Saving entries to the local cache (${index + 1} of ${items.length})`
-            })
+        const pushCategories = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
+          for (const value of values) {
+            dimensionRecords.push({ entryId, categoryType: type, value, name: value })
           }
         }
 
-        upsertMetadata.run({ key: 'dateReleased', value: meta.dateReleased })
-        upsertMetadata.run({ key: 'catalogVersion', value: meta.catalogVersion })
-        upsertMetadata.run({ key: 'entryCount', value: String(meta.count) })
-        upsertMetadata.run({ key: 'lastImportAt', value: meta.importedAt })
-      }
-    )
+        pushCategories(entry.domainCategories, 'domain')
+        pushCategories(entry.exploitLayers, 'exploit')
+        pushCategories(entry.vulnerabilityCategories, 'vulnerability')
 
-    const importedAt = new Date().toISOString()
-    transaction(entries, {
-      dateReleased: parsed.data.dateReleased,
-      catalogVersion: parsed.data.catalogVersion,
-      count: entries.length,
-      importedAt
+        if (dimensionRecords.length) {
+          tx.insert(tables.vulnerabilityEntryCategories).values(dimensionRecords).run()
+        }
+
+        if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
+          setImportPhase('saving', {
+            completed: index + 1,
+            total: entries.length,
+            message: `Saving entries to the local cache (${index + 1} of ${entries.length})`
+          })
+        }
+      }
+
+      const metadataRows = [
+        { key: 'dateReleased', value: parsed.data.dateReleased },
+        { key: 'catalogVersion', value: parsed.data.catalogVersion },
+        { key: 'entryCount', value: String(entries.length) },
+        { key: 'lastImportAt', value: importedAt }
+      ]
+
+      for (const record of metadataRows) {
+        tx
+          .insert(tables.kevMetadata)
+          .values(record)
+          .onConflictDoUpdate({
+            target: tables.kevMetadata.key,
+            set: { value: sql`excluded.value` }
+          })
+          .run()
+      }
     })
 
     const enisaSummary = await importEnisaCatalog(db, {

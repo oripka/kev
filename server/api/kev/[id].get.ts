@@ -1,4 +1,6 @@
 import { createError, getRouterParam } from 'h3'
+import { sql } from 'drizzle-orm'
+import { tables } from '../../database/client'
 import type { CatalogEntryRow } from '../../utils/catalog'
 import { catalogRowToEntry } from '../../utils/catalog'
 import { getDatabase } from '../../utils/sqlite'
@@ -14,9 +16,9 @@ export default defineEventHandler(async event => {
   }
 
   const db = getDatabase()
-  const row = db
-    .prepare<CatalogEntryRow>(
-      `SELECT
+  const row = db.get(
+    sql<CatalogEntryRow>`
+      SELECT
         ce.cve_id,
         ce.entry_id,
         ce.sources,
@@ -55,11 +57,11 @@ export default defineEventHandler(async event => {
         ce.internet_exposed,
         ce.has_source_kev,
         ce.has_source_enisa
-      FROM catalog_entries ce
-      WHERE ce.entry_id = @id
-      LIMIT 1`
-    )
-    .get({ id }) as CatalogEntryRow | undefined
+      FROM ${tables.catalogEntries} ce
+      WHERE ce.entry_id = ${id}
+      LIMIT 1
+    `
+  ) as CatalogEntryRow | undefined
 
   if (!row) {
     throw createError({

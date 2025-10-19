@@ -1,6 +1,8 @@
-import type { Database as SqliteDatabase } from 'better-sqlite3'
+import { eq } from 'drizzle-orm'
 import type { CatalogSource } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import { tables } from '../database/client'
+import type { DrizzleDatabase } from './sqlite'
 
 const toSearchTerms = (vendorName: string, productName: string) =>
   `${vendorName} ${productName}`.toLowerCase()
@@ -15,11 +17,7 @@ type CatalogRecord = {
   sources: Set<CatalogSource>
 }
 
-const updateRecord = (
-  record: CatalogRecord,
-  vendorName: string,
-  productName: string
-) => {
+const updateRecord = (record: CatalogRecord, vendorName: string, productName: string) => {
   if (productName && productName.length > record.productName.length) {
     record.productName = productName
   }
@@ -28,11 +26,7 @@ const updateRecord = (
   }
 }
 
-const collectProducts = (
-  rows: ProductRow[],
-  source: CatalogSource,
-  target: Map<string, CatalogRecord>
-) => {
+const collectProducts = (rows: ProductRow[], source: CatalogSource, target: Map<string, CatalogRecord>) => {
   for (const row of rows) {
     const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
     const { key: productKey, label: productName } = normalised.product
@@ -59,64 +53,41 @@ const collectProducts = (
   }
 }
 
-export const rebuildProductCatalog = (db: SqliteDatabase) => {
+export const rebuildProductCatalog = (db: DrizzleDatabase) => {
   const kevRows = db
-    .prepare<ProductRow>(
-      `SELECT DISTINCT vendor, product FROM vulnerability_entries WHERE source = 'kev'`
-    )
-    .all() as ProductRow[]
+    .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
+    .from(tables.vulnerabilityEntries)
+    .where(eq(tables.vulnerabilityEntries.source, 'kev'))
+    .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
+    .all()
 
   const enisaRows = db
-    .prepare<ProductRow>(
-      `SELECT DISTINCT vendor, product FROM vulnerability_entries WHERE source = 'enisa'`
-    )
-    .all() as ProductRow[]
+    .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
+    .from(tables.vulnerabilityEntries)
+    .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
+    .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
+    .all()
 
   const catalog = new Map<string, CatalogRecord>()
 
   collectProducts(kevRows, 'kev', catalog)
   collectProducts(enisaRows, 'enisa', catalog)
 
-  const deleteAll = db.prepare('DELETE FROM product_catalog')
-  const insert = db.prepare<{
-    productKey: string
-    productName: string
-    vendorKey: string
-    vendorName: string
-    sources: string
-    searchTerms: string
-  }>(
-    `INSERT INTO product_catalog (
-      product_key,
-      product_name,
-      vendor_key,
-      vendor_name,
-      sources,
-      search_terms
-    ) VALUES (
-      @productKey,
-      @productName,
-      @vendorKey,
-      @vendorName,
-      @sources,
-      @searchTerms
-    )`
-  )
-
-  const transaction = db.transaction(() => {
-    deleteAll.run()
+  db.transaction(tx => {
+    tx.delete(tables.productCatalog).run()
 
     for (const record of catalog.values()) {
-      insert.run({
-        productKey: record.productKey,
-        productName: record.productName,
-        vendorKey: record.vendorKey,
-        vendorName: record.vendorName,
-        sources: JSON.stringify(Array.from(record.sources)),
-        searchTerms: toSearchTerms(record.vendorName, record.productName)
-      })
+      tx
+        .insert(tables.productCatalog)
+        .values({
+          productKey: record.productKey,
+          productName: record.productName,
+          vendorKey: record.vendorKey,
+          vendorName: record.vendorName,
+          sources: JSON.stringify(Array.from(record.sources)),
+          searchTerms: toSearchTerms(record.vendorName, record.productName)
+        })
+        .run()
     }
   })
-
-  transaction()
 }

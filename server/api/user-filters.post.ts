@@ -1,4 +1,7 @@
+import { and, eq, inArray, not, sql } from 'drizzle-orm'
+import { createError, readBody } from 'h3'
 import { z } from 'zod'
+import { tables } from '../database/client'
 import { getDatabase } from '../utils/sqlite'
 
 const productSchema = z.object({
@@ -25,74 +28,69 @@ export default defineEventHandler(async event => {
   }
 
   const { sessionId, products } = parsed.data
-  const uniqueProducts = Array.from(
-    new Map(products.map(item => [item.productKey, item])).values()
-  )
+  const uniqueProducts = Array.from(new Map(products.map(item => [item.productKey, item])).values())
   const db = getDatabase()
 
-  const ensureSession = db.prepare('INSERT INTO user_sessions (id) VALUES (?) ON CONFLICT(id) DO NOTHING')
-  ensureSession.run(sessionId)
+  db
+    .insert(tables.userSessions)
+    .values({ id: sessionId })
+    .onConflictDoNothing()
+    .run()
 
-  const upsert = db.prepare(`
-    INSERT INTO user_product_filters (
-      session_id,
-      vendor_key,
-      vendor_name,
-      product_key,
-      product_name,
-      created_at,
-      updated_at
-    ) VALUES (
-      @sessionId,
-      @vendorKey,
-      @vendorName,
-      @productKey,
-      @productName,
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    )
-    ON CONFLICT(session_id, product_key) DO UPDATE SET
-      vendor_key = excluded.vendor_key,
-      vendor_name = excluded.vendor_name,
-      product_name = excluded.product_name,
-      updated_at = CURRENT_TIMESTAMP
-  `)
+  const transaction = db.transaction(tx => {
+    const items = uniqueProducts
 
-  const deleteAll = db.prepare('DELETE FROM user_product_filters WHERE session_id = ?')
-
-  const transaction = db.transaction((items: typeof uniqueProducts) => {
     if (!items.length) {
-      deleteAll.run(sessionId)
+      tx.delete(tables.userProductFilters)
+        .where(eq(tables.userProductFilters.sessionId, sessionId))
+        .run()
       return
     }
 
-    const placeholders = items.map(() => '?').join(', ')
-    const deleteMissing = db.prepare(
-      `DELETE FROM user_product_filters
-       WHERE session_id = ?
-         AND product_key NOT IN (${placeholders})`
-    )
-    deleteMissing.run(sessionId, ...items.map(item => item.productKey))
+    const keys = items.map(item => item.productKey)
+
+    tx
+      .delete(tables.userProductFilters)
+      .where(
+        and(
+          eq(tables.userProductFilters.sessionId, sessionId),
+          not(inArray(tables.userProductFilters.productKey, keys))
+        )
+      )
+      .run()
 
     for (const item of items) {
-      upsert.run({
-        sessionId,
-        vendorKey: item.vendorKey,
-        vendorName: item.vendorName,
-        productKey: item.productKey,
-        productName: item.productName
-      })
+      tx
+        .insert(tables.userProductFilters)
+        .values({
+          sessionId,
+          vendorKey: item.vendorKey,
+          vendorName: item.vendorName,
+          productKey: item.productKey,
+          productName: item.productName
+        })
+        .onConflictDoUpdate({
+          target: [tables.userProductFilters.sessionId, tables.userProductFilters.productKey],
+          set: {
+            vendorKey: item.vendorKey,
+            vendorName: item.vendorName,
+            productName: item.productName,
+            updatedAt: sql`CURRENT_TIMESTAMP`
+          }
+        })
+        .run()
     }
   })
 
-  transaction(uniqueProducts)
+  transaction()
 
-  const countStatement = db.prepare(
-    'SELECT COUNT(*) as count FROM user_product_filters WHERE session_id = ?'
-  )
-  const { count } = countStatement.get(sessionId) as { count: number }
+  const result = db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(tables.userProductFilters)
+    .where(eq(tables.userProductFilters.sessionId, sessionId))
+    .get()
 
   return {
-    saved: count
+    saved: result?.count ?? 0
   }
 })

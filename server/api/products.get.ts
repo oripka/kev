@@ -1,9 +1,11 @@
 import { getQuery } from 'h3'
+import { sql } from 'drizzle-orm'
+import { tables } from '../database/client'
 import { getDatabase } from '../utils/sqlite'
 import type { CatalogSource, ProductCatalogItem, ProductCatalogResponse } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 
-type ProductCatalogRow = {
+interface ProductCatalogRow {
   product_key: string
   product_name: string
   vendor_key: string
@@ -11,7 +13,7 @@ type ProductCatalogRow = {
   sources: string
 }
 
-type KevCountRow = {
+interface KevCountRow {
   vendor: string | null
   product: string | null
   count: number
@@ -54,14 +56,14 @@ export default defineEventHandler((event): ProductCatalogResponse => {
   const limit = normaliseLimit(query.limit)
 
   const db = getDatabase()
-  const kevCountRows = db
-    .prepare<KevCountRow>(
-      `SELECT vendor, product, COUNT(*) as count
-       FROM vulnerability_entries
-       WHERE source = 'kev'
-       GROUP BY vendor, product`
-    )
-    .all() as KevCountRow[]
+  const kevCountRows = db.all(
+    sql<KevCountRow>`
+      SELECT vendor, product, COUNT(*) as count
+      FROM ${tables.vulnerabilityEntries}
+      WHERE source = 'kev'
+      GROUP BY vendor, product
+    `
+  )
 
   const kevCountByProduct = new Map<string, number>()
 
@@ -73,21 +75,28 @@ export default defineEventHandler((event): ProductCatalogResponse => {
   let rows: ProductCatalogRow[]
 
   if (search) {
-    const statement = db.prepare<ProductCatalogRow>(String.raw`
-      SELECT product_key, product_name, vendor_key, vendor_name, sources
-      FROM product_catalog
-      WHERE search_terms LIKE ? ESCAPE '\'
-      ORDER BY product_name ASC
-      LIMIT ?
-    `)
-    rows = statement.all(`%${escapeLike(search)}%`, limit) as ProductCatalogRow[]
+    const pattern = `%${escapeLike(search)}%`
+    rows = db.all(
+      sql<ProductCatalogRow>`
+        SELECT product_key, product_name, vendor_key, vendor_name, sources
+        FROM ${tables.productCatalog}
+        WHERE search_terms LIKE ${pattern} ESCAPE '\\'
+        ORDER BY product_name ASC
+        LIMIT ${limit}
+      `
+    )
   } else {
-    const statement = db.prepare<ProductCatalogRow>(`
-      SELECT product_key, product_name, vendor_key, vendor_name, sources
-      FROM product_catalog
-      ORDER BY product_name ASC
-    `)
-    const fetched = statement.all() as ProductCatalogRow[]
+    const fetched = db
+      .select({
+        product_key: tables.productCatalog.productKey,
+        product_name: tables.productCatalog.productName,
+        vendor_key: tables.productCatalog.vendorKey,
+        vendor_name: tables.productCatalog.vendorName,
+        sources: tables.productCatalog.sources
+      })
+      .from(tables.productCatalog)
+      .orderBy(tables.productCatalog.productName)
+      .all()
 
     rows = fetched
       .sort((a, b) => {

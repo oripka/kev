@@ -1,3 +1,5 @@
+import { sql } from 'drizzle-orm'
+import { tables } from '../../database/client'
 import { getDatabase } from '../../utils/sqlite'
 
 type ProductRow = {
@@ -42,31 +44,31 @@ type AdminSoftwareResponse = {
 export default defineEventHandler<AdminSoftwareResponse>(() => {
   const db = getDatabase()
 
-  const productRows = db
-    .prepare<ProductRow>(
-      `SELECT vendor_key, vendor_name, product_key, product_name, COUNT(*) as count
-       FROM user_product_filters
-       GROUP BY vendor_key, vendor_name, product_key, product_name
-       ORDER BY count DESC`
-    )
-    .all() as ProductRow[]
+  const productRows = db.all(
+    sql<ProductRow>`
+      SELECT vendor_key, vendor_name, product_key, product_name, COUNT(*) as count
+      FROM ${tables.userProductFilters}
+      GROUP BY vendor_key, vendor_name, product_key, product_name
+      ORDER BY count DESC
+    `
+  )
 
-  const vendorRows = db
-    .prepare<VendorRow>(
-      `SELECT vendor_key, vendor_name, COUNT(*) as count
-       FROM user_product_filters
-       GROUP BY vendor_key, vendor_name
-       ORDER BY count DESC`
-    )
-    .all() as VendorRow[]
+  const vendorRows = db.all(
+    sql<VendorRow>`
+      SELECT vendor_key, vendor_name, COUNT(*) as count
+      FROM ${tables.userProductFilters}
+      GROUP BY vendor_key, vendor_name
+      ORDER BY count DESC
+    `
+  )
 
-  const sessionCount = db
-    .prepare<TotalRow>('SELECT COUNT(*) as count FROM user_sessions')
-    .get() as TotalRow | undefined
+  const sessionCount = db.get(
+    sql<TotalRow>`SELECT COUNT(*) as count FROM ${tables.userSessions}`
+  )
 
-  const selectionCount = db
-    .prepare<TotalRow>('SELECT COUNT(*) as count FROM user_product_filters')
-    .get() as TotalRow | undefined
+  const selectionCount = db.get(
+    sql<TotalRow>`SELECT COUNT(*) as count FROM ${tables.userProductFilters}`
+  )
 
   return {
     totals: {

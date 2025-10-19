@@ -9,7 +9,9 @@ import type {
   KevVulnerabilityCategory
 } from '~/types'
 import { catalogRowToSummary, type CatalogSummaryRow } from '../utils/catalog'
-import { getDatabase, getMetadata } from '../utils/sqlite'
+import { getMetadata, getSqlite } from '../utils/sqlite'
+
+type SqliteClient = ReturnType<typeof getSqlite>
 
 type CatalogQuery = {
   search?: string
@@ -411,7 +413,7 @@ const buildWhereClause = (where: string[]): string => {
 }
 
 const queryEntries = (
-  db: ReturnType<typeof getDatabase>,
+  db: SqliteClient,
   filters: CatalogQuery,
   limitOverride?: number
 ): KevEntrySummary[] => {
@@ -454,7 +456,7 @@ const queryEntries = (
 }
 
 const queryDimensionCounts = (
-  db: ReturnType<typeof getDatabase>,
+  db: SqliteClient,
   filters: CatalogQuery,
   dimension: 'domain' | 'exploit' | 'vulnerability'
 ): KevCountDatum[] => {
@@ -479,7 +481,7 @@ const queryDimensionCounts = (
 }
 
 const queryVendorCounts = (
-  db: ReturnType<typeof getDatabase>,
+  db: SqliteClient,
   filters: CatalogQuery
 ): KevCountDatum[] => {
   const { where, params } = buildSqlFilter(filters)
@@ -504,7 +506,7 @@ const queryVendorCounts = (
 }
 
 const queryProductCounts = (
-  db: ReturnType<typeof getDatabase>,
+  db: SqliteClient,
   filters: CatalogQuery
 ): KevCountDatum[] => {
   const { where, params } = buildSqlFilter(filters)
@@ -552,7 +554,7 @@ const queryProductCounts = (
 }
 
 const countEntries = (
-  db: ReturnType<typeof getDatabase>,
+  db: SqliteClient,
   filters: CatalogQuery
 ): number => {
   const { where, params } = buildSqlFilter(filters)
@@ -567,7 +569,7 @@ const countEntries = (
 }
 
 const getCatalogBounds = (
-  db: ReturnType<typeof getDatabase>
+  db: SqliteClient
 ): { earliest: string | null; latest: string | null } => {
   const earliest = getMetadata('catalog.earliestDate')
   const latest = getMetadata('catalog.latestDate')
@@ -591,7 +593,7 @@ const getCatalogBounds = (
   }
 }
 
-const computeUpdatedAt = (db: ReturnType<typeof getDatabase>): string => {
+const computeUpdatedAt = (db: SqliteClient): string => {
   const candidates = [
     getMetadata('dateReleased'),
     getMetadata('lastImportAt'),
@@ -620,7 +622,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
 
   if (filters.ownedOnly && !(filters.productKeys?.length ?? 0)) {
     return {
-      updatedAt: computeUpdatedAt(db),
+      updatedAt: computeUpdatedAt(sqlite),
       entries: [],
       counts: {
         domain: [],
@@ -629,18 +631,18 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         vendor: [],
         product: []
       },
-      catalogBounds: getCatalogBounds(db),
+      catalogBounds: getCatalogBounds(sqlite),
       totalEntries: 0,
       entryLimit
     }
   }
 
-  const entries = queryEntries(db, filters, entryLimit)
-  const totalEntries = countEntries(db, filters)
+  const entries = queryEntries(sqlite, filters, entryLimit)
+  const totalEntries = countEntries(sqlite, filters)
 
   const counts = {
     domain: queryDimensionCounts(
-      db,
+      sqlite,
       omitFilters(filters, [
         'domain',
         'exploit',
@@ -653,7 +655,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       'domain'
     ),
     exploit: queryDimensionCounts(
-      db,
+      sqlite,
       omitFilters(filters, [
         'exploit',
         'vulnerability',
@@ -665,22 +667,22 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       'exploit'
     ),
     vulnerability: queryDimensionCounts(
-      db,
+      sqlite,
       omitFilters(filters, ['vulnerability', 'vendor', 'vendorKeys', 'product', 'productKeys']),
       'vulnerability'
     ),
     vendor: queryVendorCounts(
-      db,
+      sqlite,
       omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])
     ),
     product: queryProductCounts(
-      db,
+      sqlite,
       omitFilters(filters, ['product', 'productKeys'])
     )
   }
 
-  const catalogBounds = getCatalogBounds(db)
-  const updatedAt = computeUpdatedAt(db)
+  const catalogBounds = getCatalogBounds(sqlite)
+  const updatedAt = computeUpdatedAt(sqlite)
 
   return {
     updatedAt,
