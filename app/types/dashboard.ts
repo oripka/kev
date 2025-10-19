@@ -1,0 +1,56 @@
+import type { KevEntrySummary } from "~/types";
+
+export type FilterKey = "domain" | "exploit" | "vulnerability" | "vendor" | "product";
+
+export type FilterState = {
+  domain: string | null;
+  exploit: string | null;
+  vulnerability: string | null;
+  vendor: string | null;
+  product: string | null;
+};
+
+export type ActiveFilterKey =
+  | FilterKey
+  | "search"
+  | "wellKnown"
+  | "internet"
+  | "ransomware"
+  | "yearRange"
+  | "source"
+  | "cvssRange"
+  | "epssRange"
+  | "owned";
+
+export type ActiveFilter = {
+  key: ActiveFilterKey;
+  label: string;
+  value: string;
+};
+
+export type QuickActionKey = "filters" | "focus" | "my-software" | "trends";
+
+export type SeverityKey = NonNullable<KevEntrySummary["cvssSeverity"]> | "Unknown";
+
+export type SeverityDistributionDatum = {
+  key: SeverityKey;
+  label: string;
+  color: string;
+  count: number;
+  percent: number;
+  percentLabel: string;
+};
+
+export type LatestAdditionSummary = {
+  entry: KevEntrySummary;
+  dateLabel: string;
+  vendorProduct: string;
+  wellKnown: string | null;
+  sources: KevEntrySummary["sources"];
+  internetExposed: boolean;
+};
+
+export type SourceBadgeMap = Record<
+  KevEntrySummary["sources"][number],
+  { label: string; color: string }
+>;

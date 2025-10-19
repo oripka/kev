@@ -14,8 +14,16 @@ import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import type { KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
-import FilteredTrendPanel from "~/components/FilteredTrendPanel.vue";
-import TrackedSoftwareSummary from "~/components/TrackedSoftwareSummary.vue";
+import type {
+  ActiveFilter,
+  FilterKey,
+  FilterState,
+  LatestAdditionSummary,
+  QuickActionKey,
+  SeverityDistributionDatum,
+  SeverityKey,
+  SourceBadgeMap,
+} from "~/types/dashboard";
 
 const formatTimestamp = (value: string) => {
   const parsed = parseISO(value);
@@ -31,16 +39,6 @@ const sliderMaxYear = new Date().getFullYear();
 
 const yearRange = ref<[number, number]>([sliderMinYear, sliderMaxYear]);
 const defaultYearRange = ref<[number, number]>([sliderMinYear, sliderMaxYear]);
-
-type FilterKey = "domain" | "exploit" | "vulnerability" | "vendor" | "product";
-
-interface FilterState {
-  domain: string | null;
-  exploit: string | null;
-  vulnerability: string | null;
-  vendor: string | null;
-  product: string | null;
-}
 
 const defaultFilters: FilterState = {
   domain: null,
@@ -63,6 +61,114 @@ const showFocusSlideover = ref(false);
 const showTrendSlideover = ref(false);
 const showMySoftwareSlideover = ref(false);
 const showRiskDetails = ref(false);
+type QuickActionButton = {
+  id: QuickActionKey;
+  icon: string;
+  color: string;
+  variant: "soft" | "solid";
+  size: "md" | "lg";
+  tooltip: string;
+  ariaLabel: string;
+};
+
+const desktopQuickActions: QuickActionButton[] = [
+  {
+    id: "filters",
+    icon: "i-lucide-sliders-horizontal",
+    color: "neutral",
+    variant: "soft",
+    size: "lg",
+    tooltip: "Open filters",
+    ariaLabel: "Open filters",
+  },
+  {
+    id: "focus",
+    icon: "i-lucide-crosshair",
+    color: "neutral",
+    variant: "soft",
+    size: "lg",
+    tooltip: "Focus controls",
+    ariaLabel: "Open focus controls",
+  },
+  {
+    id: "my-software",
+    icon: "i-lucide-monitor",
+    color: "neutral",
+    variant: "soft",
+    size: "lg",
+    tooltip: "My software focus",
+    ariaLabel: "Open my software focus",
+  },
+  {
+    id: "trends",
+    icon: "i-lucide-line-chart",
+    color: "neutral",
+    variant: "soft",
+    size: "lg",
+    tooltip: "Trend explorer",
+    ariaLabel: "Open trend explorer",
+  },
+];
+
+const mobileQuickActions: QuickActionButton[] = [
+  {
+    id: "filters",
+    icon: "i-lucide-sliders-horizontal",
+    color: "primary",
+    variant: "solid",
+    size: "md",
+    tooltip: "Filters",
+    ariaLabel: "Open filters",
+  },
+  {
+    id: "focus",
+    icon: "i-lucide-crosshair",
+    color: "neutral",
+    variant: "soft",
+    size: "md",
+    tooltip: "Focus",
+    ariaLabel: "Open focus controls",
+  },
+  {
+    id: "my-software",
+    icon: "i-lucide-monitor",
+    color: "neutral",
+    variant: "soft",
+    size: "md",
+    tooltip: "My software",
+    ariaLabel: "Open my software focus",
+  },
+  {
+    id: "trends",
+    icon: "i-lucide-line-chart",
+    color: "neutral",
+    variant: "soft",
+    size: "md",
+    tooltip: "Trend explorer",
+    ariaLabel: "Open trend explorer",
+  },
+];
+
+const handleQuickActionSelect = (action: QuickActionKey) => {
+  if (action === "filters") {
+    showFilterSlideover.value = true;
+    return;
+  }
+
+  if (action === "focus") {
+    showFocusSlideover.value = true;
+    return;
+  }
+
+  if (action === "my-software") {
+    showMySoftwareSlideover.value = true;
+    return;
+  }
+
+  if (action === "trends") {
+    showTrendSlideover.value = true;
+  }
+};
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
 const cvssRange = ref<[number, number]>([defaultCvssRange[0], defaultCvssRange[1]]);
@@ -313,7 +419,7 @@ const cvssSeverityColors: Record<Exclude<KevEntrySummary["cvssSeverity"], null>,
   Critical: "error",
 };
 
-const sourceBadgeMap: Record<KevEntrySummary["sources"][number], { label: string; color: string }> = {
+const sourceBadgeMap: SourceBadgeMap = {
   kev: { label: "CISA KEV", color: "primary" },
   enisa: { label: "ENISA", color: "success" },
 };
@@ -552,17 +658,6 @@ type AggregatedMetrics = {
   latestTimestamp: number;
 };
 
-type SeverityKey = NonNullable<KevEntrySummary["cvssSeverity"]> | "Unknown";
-
-type SeverityDistributionDatum = {
-  key: SeverityKey;
-  label: string;
-  color: string;
-  count: number;
-  percent: number;
-  percentLabel: string;
-};
-
 const severityDisplayMeta: Record<SeverityKey, { label: string; color: string }> = {
   Critical: { label: "Critical", color: cvssSeverityColors.Critical },
   High: { label: "High", color: cvssSeverityColors.High },
@@ -770,7 +865,7 @@ const severityDistribution = computed(
 
 const latestResultEntries = computed(() => derivedResultSnapshot.value.latestEntries);
 
-const latestAdditionSummaries = computed(() =>
+const latestAdditionSummaries = computed<LatestAdditionSummary[]>(() =>
   latestResultEntries.value.map((entry) => ({
     entry,
     dateLabel: formatOptionalTimestamp(entry.dateAdded),
@@ -878,21 +973,6 @@ const resolveFilterValueLabel = (key: FilterKey, value: string) => {
   return value;
 };
 
-type ActiveFilter = {
-  key:
-    | FilterKey
-    | "search"
-    | "wellKnown"
-    | "internet"
-    | "yearRange"
-    | "source"
-    | "cvssRange"
-    | "epssRange"
-    | "owned";
-  label: string;
-  value: string;
-};
-
 const activeFilters = computed<ActiveFilter[]>(() => {
   const items: ActiveFilter[] = [];
   const term = debouncedSearch.value.trim();
@@ -986,10 +1066,6 @@ const resetDownstreamFilters = (key: FilterKey) => {
 const toggleFilter = (key: FilterKey, value: string) => {
   filters[key] = filters[key] === value ? null : value;
   resetDownstreamFilters(key);
-};
-
-const setSourceFilter = (value: "all" | "kev" | "enisa") => {
-  selectedSource.value = value;
 };
 
 const clearFilter = (
@@ -1300,91 +1376,19 @@ const columns: TableColumn<KevEntrySummary>[] = [
 
   <UPageBody>
     <div class="relative">
-      <div class="fixed right-6 top-1/3 z-40 hidden xl:flex flex-col gap-3">
-        <UTooltip text="Open filters" placement="left">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="lg"
-            icon="i-lucide-sliders-horizontal"
-            aria-label="Open filters"
-            @click="showFilterSlideover = true"
-          />
-        </UTooltip>
-        <UTooltip text="Focus controls" placement="left">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="lg"
-            icon="i-lucide-crosshair"
-            aria-label="Open focus controls"
-            @click="showFocusSlideover = true"
-          />
-        </UTooltip>
-        <UTooltip text="My software focus" placement="left">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="lg"
-            icon="i-lucide-monitor"
-            aria-label="Open my software focus"
-            @click="showMySoftwareSlideover = true"
-          />
-        </UTooltip>
-        <UTooltip text="Trend explorer" placement="left">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="lg"
-            icon="i-lucide-line-chart"
-            aria-label="Open trend explorer"
-            @click="showTrendSlideover = true"
-          />
-        </UTooltip>
-      </div>
+      <DashboardActionButtons
+        :items="desktopQuickActions"
+        orientation="vertical"
+        wrapper-class="fixed right-6 top-1/3 z-40 hidden xl:flex"
+        @select="handleQuickActionSelect"
+      />
 
-      <div class="fixed bottom-5 right-4 z-40 flex items-center gap-2 xl:hidden">
-        <UTooltip text="Filters" placement="top">
-          <UButton
-            color="primary"
-            variant="solid"
-            size="md"
-            icon="i-lucide-sliders-horizontal"
-            aria-label="Open filters"
-            @click="showFilterSlideover = true"
-          />
-        </UTooltip>
-        <UTooltip text="Focus" placement="top">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="md"
-            icon="i-lucide-crosshair"
-            aria-label="Open focus controls"
-            @click="showFocusSlideover = true"
-          />
-        </UTooltip>
-        <UTooltip text="My software" placement="top">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="md"
-            icon="i-lucide-monitor"
-            aria-label="Open my software focus"
-            @click="showMySoftwareSlideover = true"
-          />
-        </UTooltip>
-        <UTooltip text="Trend explorer" placement="top">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="md"
-            icon="i-lucide-line-chart"
-            aria-label="Open trend explorer"
-            @click="showTrendSlideover = true"
-          />
-        </UTooltip>
-      </div>
+      <DashboardActionButtons
+        :items="mobileQuickActions"
+        orientation="horizontal"
+        wrapper-class="fixed bottom-5 right-4 z-40 xl:hidden"
+        @select="handleQuickActionSelect"
+      />
 
       <div class="mx-auto w-full max-w-6xl space-y-5 px-4 pb-12 sm:px-6 lg:px-8">
         <div
@@ -1462,284 +1466,68 @@ const columns: TableColumn<KevEntrySummary>[] = [
       />
     </div>
 
-    <USlideover
+    <FilterControlsSlideover
       v-model:open="showFilterSlideover"
-      title="Filters"
-      description="Refine the KEV catalog with precise search, score, and time controls."
-      :ui="{ content: 'max-w-2xl' }"
-      :unmount-on-hide="false"
-    >
-      <template #body>
-        <div class="space-y-6">
-          <div class="flex items-start justify-between gap-3">
-            <p class="text-sm text-neutral-500 dark:text-neutral-400">
-              Tune the dataset without leaving the table view.
-            </p>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              icon="i-lucide-rotate-ccw"
-              :disabled="!hasActiveFilters"
-              @click="resetFilters"
-            >
-              Reset
-            </UButton>
-          </div>
+      v-model:search-input="searchInput"
+      v-model:selected-source="selectedSource"
+      v-model:year-range="yearRange"
+      :year-slider-min="yearSliderMin"
+      :year-slider-max="yearSliderMax"
+      v-model:cvss-range="cvssRange"
+      :default-cvss-range="defaultCvssRange"
+      v-model:epss-range="epssRange"
+      :default-epss-range="defaultEpssRange"
+      :active-filters="activeFilters"
+      :has-active-filters="hasActiveFilters"
+      :has-active-filter-chips="hasActiveFilterChips"
+      @reset="resetFilters"
+      @clear-filter="clearFilter"
+    />
 
-          <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <UFormField label="Search">
-              <UInput
-                v-model="searchInput"
-                class="w-full"
-                placeholder="Filter by CVE, vendor, product, or description"
-              />
-            </UFormField>
-
-            <UFormField label="Data source">
-              <div class="flex flex-wrap gap-2">
-                <UButton
-                  v-for="option in ['all', 'kev', 'enisa']"
-                  :key="option"
-                  size="sm"
-                  :color="selectedSource === option ? 'primary' : 'neutral'"
-                  :variant="selectedSource === option ? 'solid' : 'outline'"
-                  @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
-                >
-                  {{
-                    option === 'all'
-                      ? 'All sources'
-                      : option === 'kev'
-                        ? 'CISA KEV'
-                        : 'ENISA'
-                  }}
-                </UButton>
-              </div>
-            </UFormField>
-          </div>
-
-          <div class="grid gap-6 md:grid-cols-3">
-            <UFormField label="Year range">
-              <div class="space-y-2">
-                <USlider
-                  v-model="yearRange"
-                  :min="yearSliderMin"
-                  :max="yearSliderMax"
-                  :step="1"
-                  class="px-1"
-                  tooltip
-                />
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Filter vulnerabilities by the year CISA added them to the KEV catalog.
-                </p>
-              </div>
-            </UFormField>
-
-            <UFormField label="CVSS range">
-              <div class="space-y-2">
-                <USlider
-                  v-model="cvssRange"
-                  :min="defaultCvssRange[0]"
-                  :max="defaultCvssRange[1]"
-                  :step="0.1"
-                  :min-steps-between-thumbs="1"
-                  tooltip
-                />
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Common Vulnerability Scoring System (0–10) shows vendor-assigned severity.
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
-                </p>
-              </div>
-            </UFormField>
-
-            <UFormField label="EPSS range">
-              <div class="space-y-2">
-                <USlider
-                  v-model="epssRange"
-                  :min="defaultEpssRange[0]"
-                  :max="defaultEpssRange[1]"
-                  :step="1"
-                  :min-steps-between-thumbs="1"
-                  tooltip
-                />
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Exploit Prediction Scoring System (0–100%) estimates likelihood of exploitation.
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
-                </p>
-              </div>
-            </UFormField>
-          </div>
-
-          <div class="space-y-6">
-            <UFormField label="Active filters" v-if="hasActiveFilterChips">
-              <div class="flex flex-wrap items-center gap-2">
-                <button
-                  v-for="item in activeFilters"
-                  :key="`${item.key}-${item.value}`"
-                  type="button"
-                  class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-primary-500"
-                  @click="clearFilter(item.key)"
-                >
-                  <span>{{ item.label }}: {{ item.value }}</span>
-                  <UIcon name="i-lucide-x" class="size-3.5" />
-                </button>
-              </div>
-            </UFormField>
-
-            <UAlert
-              v-else
-              color="info"
-              variant="soft"
-              icon="i-lucide-info"
-              title="No filters applied"
-              description="Use the controls above to narrow the results."
-            />
-          </div>
-        </div>
-      </template>
-    </USlideover>
-
-    <USlideover
+    <FocusControlsSlideover
       v-model:open="showFocusSlideover"
-      title="Focus controls"
-      description="Highlight the vulnerabilities that matter most to your organisation."
-      :ui="{ content: 'max-w-lg' }"
-      :unmount-on-hide="false"
-    >
-      <template #body>
-        <div class="relative space-y-5">
-          <div
-            v-if="!trackedProductsReady"
-            class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
-          />
+      v-model:show-owned-only="showOwnedOnly"
+      v-model:show-well-known-only="showWellKnownOnly"
+      v-model:show-ransomware-only="showRansomwareOnly"
+      v-model:show-internet-exposed-only="showInternetExposedOnly"
+      :tracked-products-ready="trackedProductsReady"
+      :tracked-product-count="trackedProductCount"
+    />
 
-          <div class="space-y-3">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">My software</p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Only show CVEs that match the products you track.
-                </p>
-              </div>
-              <USwitch v-model="showOwnedOnly" :disabled="!trackedProductsReady" />
-            </div>
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Named CVEs</p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Elevate high-profile, widely reported vulnerabilities.
-                </p>
-              </div>
-              <USwitch v-model="showWellKnownOnly" />
-            </div>
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Ransomware focus</p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Restrict the view to CVEs linked to ransomware campaigns.
-                </p>
-              </div>
-              <USwitch v-model="showRansomwareOnly" />
-            </div>
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Internet exposure</p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Prioritise vulnerabilities likely to be exposed on the open internet.
-                </p>
-              </div>
-              <USwitch v-model="showInternetExposedOnly" />
-            </div>
-          </div>
-
-          <div class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300">
-            <p class="font-semibold text-neutral-700 dark:text-neutral-100">Tracked products</p>
-            <p class="mt-1">{{ trackedProductCount.toLocaleString() }} product(s) selected.</p>
-            <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-              Manage the list on the dashboard at any time; changes are saved automatically.
-            </p>
-          </div>
-        </div>
-      </template>
-    </USlideover>
-
-    <USlideover
+    <MySoftwareSlideover
       v-model:open="showMySoftwareSlideover"
-      title="My software focus"
-      description="Adjust tracked products and the owned-only view without leaving the table."
-      :ui="{ content: 'max-w-3xl' }"
-      :unmount-on-hide="false"
-    >
-      <template #body>
-        <div class="relative">
-          <div
-            v-if="!trackedProductsReady"
-            class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
-          />
-          <TrackedSoftwareSummary
-            v-model="showOwnedOnly"
-            :tracked-products="trackedProducts"
-            :tracked-product-count="trackedProductCount"
-            :has-tracked-products="hasTrackedProducts"
-            :saving="savingTrackedProducts"
-            :save-error="trackedProductError"
-            @remove="removeTrackedProduct"
-            @clear="clearTrackedProducts"
-          />
-        </div>
-      </template>
-    </USlideover>
+      v-model:show-owned-only="showOwnedOnly"
+      :tracked-products-ready="trackedProductsReady"
+      :tracked-products="trackedProducts"
+      :tracked-product-count="trackedProductCount"
+      :has-tracked-products="hasTrackedProducts"
+      :saving="savingTrackedProducts"
+      :save-error="trackedProductError"
+      @remove="removeTrackedProduct"
+      @clear="clearTrackedProducts"
+    />
 
-    <USlideover
+    <TrendExplorerSlideover
       v-model:open="showTrendSlideover"
-      title="Trend explorer"
-      description="Visualise how the filtered vulnerabilities accumulate over time."
-      :ui="{ content: 'max-w-4xl' }"
-      :unmount-on-hide="false"
-    >
-      <template #body>
-        <div class="relative space-y-6">
-          <div
-            v-if="isBusy"
-            class="pointer-events-none absolute inset-0 z-10 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
-          />
-
-          <RiskSnapshotCard
-            v-model:show-risk-details="showRiskDetails"
-            :matching-results-label="matchingResultsLabel"
-            :high-severity-share-label="highSeverityShareLabel"
-            :high-severity-summary="highSeveritySummary"
-            :average-cvss-label="averageCvssLabel"
-            :average-cvss-summary="averageCvssSummary"
-            :ransomware-share-label="ransomwareShareLabel"
-            :ransomware-summary="ransomwareSummary"
-            :internet-exposed-share-label="internetExposedShareLabel"
-            :internet-exposed-summary="internetExposedSummary"
-            :severity-distribution="severityDistribution"
-            :latest-addition-summaries="latestAdditionSummaries"
-            :source-badge-map="sourceBadgeMap"
-            @open-details="openDetails"
-          />
-
-          <FilteredTrendPanel v-model="showTrendLines" :entries="results" />
-
-          <UCard>
-            <div class="space-y-1">
-              <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                Last catalog import
-              </p>
-              <p class="text-base font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ catalogUpdatedAt }}
-              </p>
-            </div>
-          </UCard>
-        </div>
-      </template>
-    </USlideover>
+      v-model:show-risk-details="showRiskDetails"
+      v-model:show-trend-lines="showTrendLines"
+      :is-busy="isBusy"
+      :matching-results-label="matchingResultsLabel"
+      :high-severity-share-label="highSeverityShareLabel"
+      :high-severity-summary="highSeveritySummary"
+      :average-cvss-label="averageCvssLabel"
+      :average-cvss-summary="averageCvssSummary"
+      :ransomware-share-label="ransomwareShareLabel"
+      :ransomware-summary="ransomwareSummary"
+      :internet-exposed-share-label="internetExposedShareLabel"
+      :internet-exposed-summary="internetExposedSummary"
+      :severity-distribution="severityDistribution"
+      :latest-addition-summaries="latestAdditionSummaries"
+      :source-badge-map="sourceBadgeMap"
+      :catalog-updated-at="catalogUpdatedAt"
+      :entries="results"
+      @open-details="openDetails"
+    />
   </UPageBody>
   </UPage>
 </template>
