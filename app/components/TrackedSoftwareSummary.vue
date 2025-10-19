@@ -38,17 +38,13 @@ const headerStatus = computed(() => {
           <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
             My software focus
           </p>
-          <p class="text-sm text-neutral-500 dark:text-neutral-400">
-            Highlight the products you care about and filter the catalog against them instantly.
-          </p>
+ 
         </div>
-        <div class="flex flex-col text-right leading-tight">
+        <div class="flex flex-col  leading-tight">
           <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
             {{ headerStatus }}
           </span>
-          <span class="text-xs text-neutral-500 dark:text-neutral-400">
-            Stored in your browser and anonymised session.
-          </span>
+ 
         </div>
       </div>
     </template>
@@ -66,26 +62,7 @@ const headerStatus = computed(() => {
             </span>
           </div>
         </div>
-        <div class="flex items-center gap-2">
-          <UButton
-            color="primary"
-            icon="i-lucide-sliders"
-            :to="manageHref"
-            variant="soft"
-            @click="emits('manage')"
-          >
-            Manage tracked software
-          </UButton>
-          <UButton
-            color="neutral"
-            variant="ghost"
-            icon="i-lucide-rotate-ccw"
-            :disabled="!props.hasTrackedProducts"
-            @click="emits('clear')"
-          >
-            Clear list
-          </UButton>
-        </div>
+
       </div>
 
       <div v-if="props.trackedProducts.length" class="flex flex-wrap gap-2">
@@ -95,10 +72,10 @@ const headerStatus = computed(() => {
           class="group inline-flex items-center gap-2 rounded-full border border-primary-200/70 bg-primary-50 px-3 py-1 text-sm dark:border-primary-500/40 dark:bg-primary-500/10"
         >
           <div class="flex flex-col leading-tight">
-            <span class="font-semibold text-primary-700 dark:text-primary-300">
+            <span class="font-semibold text-primary-700 dark:text-primary-300 truncate max-w-[80px]">
               {{ product.productName }}
             </span>
-            <span class="text-xs text-primary-600/80 dark:text-primary-300/80">
+            <span class="text-xs text-primary-600/80 dark:text-primary-300/80 truncate max-w-[80px]">
               {{ product.vendorName }}
             </span>
           </div>

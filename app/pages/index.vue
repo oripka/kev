@@ -1319,7 +1319,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
           "p",
           {
             class:
-              "max-w-xs whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
+              "max-w-md whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
           },
           row.original.vulnerabilityName
         ),
