@@ -1,4 +1,5 @@
 import { getQuery } from 'h3'
+import { and, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import type {
   CatalogSource,
   KevCountDatum,
@@ -8,10 +9,9 @@ import type {
   KevResponse,
   KevVulnerabilityCategory
 } from '~/types'
+import { tables } from '../database/client'
 import { catalogRowToSummary, type CatalogSummaryRow } from '../utils/catalog'
-import { getMetadata, getSqlite } from '../utils/sqlite'
-
-type SqliteClient = ReturnType<typeof getSqlite>
+import { getDatabase, getMetadata, type DrizzleDatabase } from '../utils/sqlite'
 
 type CatalogQuery = {
   search?: string
@@ -38,11 +38,6 @@ type CatalogQuery = {
   ransomwareOnly?: boolean
   internetExposedOnly?: boolean
   limit?: number
-}
-
-type SqlFilter = {
-  where: string[]
-  params: Record<string, unknown>
 }
 
 const toTimestamp = (value?: string): number | null => {
@@ -251,298 +246,310 @@ const omitFilters = (
   return next
 }
 
-const buildSqlFilter = (filters: CatalogQuery): SqlFilter => {
-  const where: string[] = []
-  const params: Record<string, unknown> = {}
-  let paramIndex = 0
+const catalogEntries = tables.catalogEntries
+const catalogEntryDimensions = tables.catalogEntryDimensions
 
-  const addParam = (value: unknown): string => {
-    const key = `p${paramIndex}`
-    paramIndex += 1
-    params[key] = value
-    return `@${key}`
-  }
+const buildFilterExpression = (filters: CatalogQuery): SQL<unknown> | undefined => {
+  const conditions: SQL<unknown>[] = []
 
   if (filters.search) {
-    const key = addParam(`%${filters.search.toLowerCase()}%`)
-    where.push(
-      `(
-        LOWER(ce.cve_id) LIKE ${key}
-        OR LOWER(ce.vendor) LIKE ${key}
-        OR LOWER(ce.product) LIKE ${key}
-        OR LOWER(ce.vulnerability_name) LIKE ${key}
-        OR LOWER(ce.description) LIKE ${key}
+    const pattern = `%${filters.search.toLowerCase()}%`
+    conditions.push(
+      sql`(
+        lower(${catalogEntries.cveId}) LIKE ${pattern}
+        OR lower(${catalogEntries.vendor}) LIKE ${pattern}
+        OR lower(${catalogEntries.product}) LIKE ${pattern}
+        OR lower(${catalogEntries.vulnerabilityName}) LIKE ${pattern}
+        OR lower(${catalogEntries.description}) LIKE ${pattern}
       )`
     )
   }
 
   if (filters.source === 'kev') {
-    where.push('ce.has_source_kev = 1')
+    conditions.push(eq(catalogEntries.hasSourceKev, 1))
   } else if (filters.source === 'enisa') {
-    where.push('ce.has_source_enisa = 1')
+    conditions.push(eq(catalogEntries.hasSourceEnisa, 1))
   }
 
   if (filters.internetExposedOnly) {
-    where.push('ce.internet_exposed = 1')
+    conditions.push(eq(catalogEntries.internetExposed, 1))
   }
 
   const vendorKeys = filters.vendorKeys ?? (filters.vendor ? [filters.vendor] : [])
   if (vendorKeys.length) {
-    const placeholders = vendorKeys.map(value => addParam(value))
-    where.push(`ce.vendor_key IN (${placeholders.join(', ')})`)
+    conditions.push(inArray(catalogEntries.vendorKey, vendorKeys))
   }
 
   const productKeys = filters.productKeys ?? (filters.product ? [filters.product] : [])
   if (productKeys.length) {
-    const placeholders = productKeys.map(value => addParam(value))
-    where.push(`ce.product_key IN (${placeholders.join(', ')})`)
+    conditions.push(inArray(catalogEntries.productKey, productKeys))
   }
 
   if (filters.domain) {
-    const key = addParam(filters.domain)
-    where.push(
-      `EXISTS (
-        SELECT 1 FROM catalog_entry_dimensions d
-        WHERE d.cve_id = ce.cve_id
-          AND d.dimension = 'domain'
-          AND d.value = ${key}
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM ${catalogEntryDimensions}
+        WHERE ${catalogEntryDimensions.cveId} = ${catalogEntries.cveId}
+          AND ${catalogEntryDimensions.dimension} = 'domain'
+          AND ${catalogEntryDimensions.value} = ${filters.domain}
       )`
     )
   }
 
   if (filters.exploit) {
-    const key = addParam(filters.exploit)
-    where.push(
-      `EXISTS (
-        SELECT 1 FROM catalog_entry_dimensions d
-        WHERE d.cve_id = ce.cve_id
-          AND d.dimension = 'exploit'
-          AND d.value = ${key}
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM ${catalogEntryDimensions}
+        WHERE ${catalogEntryDimensions.cveId} = ${catalogEntries.cveId}
+          AND ${catalogEntryDimensions.dimension} = 'exploit'
+          AND ${catalogEntryDimensions.value} = ${filters.exploit}
       )`
     )
   }
 
   if (filters.vulnerability) {
-    const key = addParam(filters.vulnerability)
-    where.push(
-      `EXISTS (
-        SELECT 1 FROM catalog_entry_dimensions d
-        WHERE d.cve_id = ce.cve_id
-          AND d.dimension = 'vulnerability'
-          AND d.value = ${key}
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM ${catalogEntryDimensions}
+        WHERE ${catalogEntryDimensions.cveId} = ${catalogEntries.cveId}
+          AND ${catalogEntryDimensions.dimension} = 'vulnerability'
+          AND ${catalogEntryDimensions.value} = ${filters.vulnerability}
       )`
     )
   }
 
   if (filters.ransomwareOnly) {
-    where.push('ce.has_known_ransomware = 1')
+    conditions.push(eq(catalogEntries.hasKnownRansomware, 1))
   }
 
   if (filters.wellKnownOnly) {
-    where.push('ce.is_well_known = 1')
+    conditions.push(eq(catalogEntries.isWellKnown, 1))
   }
 
   if (typeof filters.startYear === 'number' && typeof filters.endYear === 'number') {
-    const startKey = addParam(filters.startYear)
-    const endKey = addParam(filters.endYear)
-    where.push(
-      `(ce.date_added_year IS NULL OR (ce.date_added_year >= ${startKey} AND ce.date_added_year <= ${endKey}))`
+    conditions.push(
+      sql`(${catalogEntries.dateAddedYear} IS NULL OR (${catalogEntries.dateAddedYear} >= ${filters.startYear} AND ${catalogEntries.dateAddedYear} <= ${filters.endYear}))`
     )
   }
 
   if (filters.fromDate) {
     const timestamp = toTimestamp(filters.fromDate)
     if (timestamp !== null) {
-      const key = addParam(timestamp)
-      where.push('ce.date_added_ts IS NOT NULL AND ce.date_added_ts >= ' + key)
+      conditions.push(
+        sql`(${catalogEntries.dateAddedTs} IS NOT NULL AND ${catalogEntries.dateAddedTs} >= ${timestamp})`
+      )
     }
   }
 
   if (filters.toDate) {
     const timestamp = toTimestamp(filters.toDate)
     if (timestamp !== null) {
-      const key = addParam(timestamp)
-      where.push('ce.date_added_ts IS NOT NULL AND ce.date_added_ts <= ' + key)
+      conditions.push(
+        sql`(${catalogEntries.dateAddedTs} IS NOT NULL AND ${catalogEntries.dateAddedTs} <= ${timestamp})`
+      )
     }
   }
 
   if (filters.fromUpdatedDate) {
     const timestamp = toTimestamp(filters.fromUpdatedDate)
     if (timestamp !== null) {
-      const key = addParam(timestamp)
-      where.push('ce.date_updated_ts IS NOT NULL AND ce.date_updated_ts >= ' + key)
+      conditions.push(
+        sql`(${catalogEntries.dateUpdatedTs} IS NOT NULL AND ${catalogEntries.dateUpdatedTs} >= ${timestamp})`
+      )
     }
   }
 
   if (filters.toUpdatedDate) {
     const timestamp = toTimestamp(filters.toUpdatedDate)
     if (timestamp !== null) {
-      const key = addParam(timestamp)
-      where.push('ce.date_updated_ts IS NOT NULL AND ce.date_updated_ts <= ' + key)
+      conditions.push(
+        sql`(${catalogEntries.dateUpdatedTs} IS NOT NULL AND ${catalogEntries.dateUpdatedTs} <= ${timestamp})`
+      )
     }
   }
 
   if (filters.cvssMin !== undefined) {
-    const key = addParam(filters.cvssMin)
-    where.push('ce.cvss_score IS NOT NULL AND ce.cvss_score >= ' + key)
+    conditions.push(
+      sql`(${catalogEntries.cvssScore} IS NOT NULL AND ${catalogEntries.cvssScore} >= ${filters.cvssMin})`
+    )
   }
 
   if (filters.cvssMax !== undefined) {
-    const key = addParam(filters.cvssMax)
-    where.push('ce.cvss_score IS NOT NULL AND ce.cvss_score <= ' + key)
+    conditions.push(
+      sql`(${catalogEntries.cvssScore} IS NOT NULL AND ${catalogEntries.cvssScore} <= ${filters.cvssMax})`
+    )
   }
 
   if (filters.epssMin !== undefined) {
-    const key = addParam(filters.epssMin)
-    where.push('ce.epss_score IS NOT NULL AND ce.epss_score >= ' + key)
+    conditions.push(
+      sql`(${catalogEntries.epssScore} IS NOT NULL AND ${catalogEntries.epssScore} >= ${filters.epssMin})`
+    )
   }
 
   if (filters.epssMax !== undefined) {
-    const key = addParam(filters.epssMax)
-    where.push('ce.epss_score IS NOT NULL AND ce.epss_score <= ' + key)
+    conditions.push(
+      sql`(${catalogEntries.epssScore} IS NOT NULL AND ${catalogEntries.epssScore} <= ${filters.epssMax})`
+    )
   }
 
-  return { where, params }
-}
-
-const buildWhereClause = (where: string[]): string => {
-  if (!where.length) {
-    return ''
+  if (!conditions.length) {
+    return undefined
   }
-  return 'WHERE ' + where.join('\n  AND ')
+
+  return and(...conditions)
 }
 
 const queryEntries = (
-  db: SqliteClient,
+  db: DrizzleDatabase,
   filters: CatalogQuery,
   limitOverride?: number
 ): KevEntrySummary[] => {
-  const { where, params } = buildSqlFilter(filters)
-  const whereClause = buildWhereClause(where)
+  const where = buildFilterExpression(filters)
   const limit = Math.max(
     1,
     Math.min(MAX_ENTRY_LIMIT, limitOverride ?? filters.limit ?? DEFAULT_ENTRY_LIMIT)
   )
-  const rows = db
-    .prepare<CatalogSummaryRow>(
-      `SELECT
-        ce.cve_id,
-        ce.entry_id,
-        ce.sources,
-        ce.vendor,
-        ce.vendor_key,
-        ce.product,
-        ce.product_key,
-        ce.vulnerability_name,
-        ce.description,
-        ce.due_date,
-        ce.date_added,
-        ce.ransomware_use,
-        ce.cvss_score,
-        ce.cvss_severity,
-        ce.epss_score,
-        ce.domain_categories,
-        ce.exploit_layers,
-        ce.vulnerability_categories,
-        ce.internet_exposed
-      FROM catalog_entries ce
-      ${whereClause}
-      ORDER BY (ce.date_added_ts IS NULL) ASC, ce.date_added_ts DESC, ce.cve_id ASC
-      LIMIT @limit`
+
+  let query = db
+    .select({
+      cve_id: catalogEntries.cveId,
+      entry_id: catalogEntries.entryId,
+      sources: catalogEntries.sources,
+      vendor: catalogEntries.vendor,
+      vendor_key: catalogEntries.vendorKey,
+      product: catalogEntries.product,
+      product_key: catalogEntries.productKey,
+      vulnerability_name: catalogEntries.vulnerabilityName,
+      description: catalogEntries.description,
+      due_date: catalogEntries.dueDate,
+      date_added: catalogEntries.dateAdded,
+      ransomware_use: catalogEntries.ransomwareUse,
+      cvss_score: catalogEntries.cvssScore,
+      cvss_severity: catalogEntries.cvssSeverity,
+      epss_score: catalogEntries.epssScore,
+      domain_categories: catalogEntries.domainCategories,
+      exploit_layers: catalogEntries.exploitLayers,
+      vulnerability_categories: catalogEntries.vulnerabilityCategories,
+      internet_exposed: catalogEntries.internetExposed
+    })
+    .from(catalogEntries)
+
+  if (where) {
+    query = query.where(where)
+  }
+
+  const rows = query
+    .orderBy(
+      sql`(${catalogEntries.dateAddedTs} IS NULL) ASC`,
+      sql`${catalogEntries.dateAddedTs} DESC`,
+      sql`${catalogEntries.cveId} ASC`
     )
-    .all({ ...params, limit }) as CatalogSummaryRow[]
+    .limit(limit)
+    .all() as CatalogSummaryRow[]
 
   return rows.map(catalogRowToSummary)
 }
 
 const queryDimensionCounts = (
-  db: SqliteClient,
+  db: DrizzleDatabase,
   filters: CatalogQuery,
   dimension: 'domain' | 'exploit' | 'vulnerability'
 ): KevCountDatum[] => {
-  const { where, params } = buildSqlFilter(filters)
-  const whereClause = buildWhereClause(where)
+  const where = buildFilterExpression(filters)
+
+  let filteredQuery = db.select({ cve_id: catalogEntries.cveId }).from(catalogEntries)
+  if (where) {
+    filteredQuery = filteredQuery.where(where)
+  }
+
+  const filtered = filteredQuery.as('filtered')
+  const countExpr = sql<number>`COUNT(*)`.as('count')
+
   const rows = db
-    .prepare<{ key: string; name: string; count: number }>(
-      `WITH filtered AS (
-        SELECT ce.cve_id FROM catalog_entries ce
-        ${whereClause}
-      )
-      SELECT d.value AS key, d.name AS name, COUNT(*) AS count
-      FROM catalog_entry_dimensions d
-      JOIN filtered f ON f.cve_id = d.cve_id
-      WHERE d.dimension = '${dimension}'
-      GROUP BY d.value, d.name
-      ORDER BY count DESC, name ASC`
-    )
-    .all(params) as Array<{ key: string; name: string; count: number }>
+    .select({
+      key: catalogEntryDimensions.value,
+      name: catalogEntryDimensions.name,
+      count: countExpr
+    })
+    .from(catalogEntryDimensions)
+    .innerJoin(filtered, eq(filtered.cve_id, catalogEntryDimensions.cveId))
+    .where(eq(catalogEntryDimensions.dimension, dimension))
+    .groupBy(catalogEntryDimensions.value, catalogEntryDimensions.name)
+    .orderBy(sql`count DESC`, sql`${catalogEntryDimensions.name} ASC`)
+    .all()
 
   return rows.map(row => ({ key: row.key, name: row.name, count: row.count }))
 }
 
 const queryVendorCounts = (
-  db: SqliteClient,
+  db: DrizzleDatabase,
   filters: CatalogQuery
 ): KevCountDatum[] => {
-  const { where, params } = buildSqlFilter(filters)
-  const whereClause = buildWhereClause(where)
+  const where = buildFilterExpression(filters)
+
+  let filteredQuery = db
+    .select({ vendor_key: catalogEntries.vendorKey, vendor: catalogEntries.vendor })
+    .from(catalogEntries)
+
+  if (where) {
+    filteredQuery = filteredQuery.where(where)
+  }
+
+  const filtered = filteredQuery.as('filtered')
+  const countExpr = sql<number>`COUNT(*)`.as('count')
+  const nameExpr = sql<string>`MAX(${filtered.vendor})`.as('name')
+
   const rows = db
-    .prepare<{ key: string; name: string; count: number }>(
-      `WITH filtered AS (
-        SELECT ce.vendor_key, ce.vendor
-        FROM catalog_entries ce
-        ${whereClause}
-      )
-      SELECT vendor_key AS key, MAX(vendor) AS name, COUNT(*) AS count
-      FROM filtered
-      WHERE vendor_key != ''
-      GROUP BY vendor_key
-      HAVING MAX(vendor) != 'Other'
-      ORDER BY count DESC, name ASC`
-    )
-    .all(params) as Array<{ key: string; name: string; count: number }>
+    .select({ key: filtered.vendor_key, name: nameExpr, count: countExpr })
+    .from(filtered)
+    .where(ne(filtered.vendor_key, ''))
+    .groupBy(filtered.vendor_key)
+    .having(sql`MAX(${filtered.vendor}) != 'Other'`)
+    .orderBy(sql`count DESC`, sql`name ASC`)
+    .all()
 
   return rows.map(row => ({ key: row.key, name: row.name, count: row.count }))
 }
 
 const queryProductCounts = (
-  db: SqliteClient,
+  db: DrizzleDatabase,
   filters: CatalogQuery
 ): KevCountDatum[] => {
-  const { where, params } = buildSqlFilter(filters)
-  const whereClause = buildWhereClause(where)
+  const where = buildFilterExpression(filters)
+
+  let filteredQuery = db
+    .select({
+      product_key: catalogEntries.productKey,
+      product: catalogEntries.product,
+      vendor_key: catalogEntries.vendorKey,
+      vendor: catalogEntries.vendor
+    })
+    .from(catalogEntries)
+
+  if (where) {
+    filteredQuery = filteredQuery.where(where)
+  }
+
+  const filtered = filteredQuery.as('filtered')
+  const countExpr = sql<number>`COUNT(*)`.as('count')
+  const nameExpr = sql<string>`MAX(${filtered.product})`.as('name')
+  const vendorKeyExpr = sql<string>`MAX(${filtered.vendor_key})`.as('vendorKey')
+  const vendorNameExpr = sql<string>`MAX(${filtered.vendor})`.as('vendorName')
+
   const rows = db
-    .prepare<{
-      key: string
-      name: string
-      count: number
-      vendorKey: string
-      vendorName: string
-    }>(
-      `WITH filtered AS (
-        SELECT ce.product_key, ce.product, ce.vendor_key, ce.vendor
-        FROM catalog_entries ce
-        ${whereClause}
-      )
-      SELECT
-        product_key AS key,
-        MAX(product) AS name,
-        MAX(vendor_key) AS vendorKey,
-        MAX(vendor) AS vendorName,
-        COUNT(*) AS count
-      FROM filtered
-      WHERE product_key != ''
-      GROUP BY product_key
-      HAVING MAX(product) != 'Other'
-      ORDER BY count DESC, name ASC`
-    )
-    .all(params) as Array<{
-      key: string
-      name: string
-      count: number
-      vendorKey: string
-      vendorName: string
-    }>
+    .select({
+      key: filtered.product_key,
+      name: nameExpr,
+      vendorKey: vendorKeyExpr,
+      vendorName: vendorNameExpr,
+      count: countExpr
+    })
+    .from(filtered)
+    .where(ne(filtered.product_key, ''))
+    .groupBy(filtered.product_key)
+    .having(sql`MAX(${filtered.product}) != 'Other'`)
+    .orderBy(sql`count DESC`, sql`name ASC`)
+    .all()
 
   return rows.map(row => ({
     key: row.key,
@@ -553,23 +560,21 @@ const queryProductCounts = (
   }))
 }
 
-const countEntries = (
-  db: SqliteClient,
-  filters: CatalogQuery
-): number => {
-  const { where, params } = buildSqlFilter(filters)
-  const whereClause = buildWhereClause(where)
-  const row = db
-    .prepare<{ count: number }>(
-      `SELECT COUNT(*) AS count FROM catalog_entries ce ${whereClause}`
-    )
-    .get(params) as { count: number } | undefined
+const countEntries = (db: DrizzleDatabase, filters: CatalogQuery): number => {
+  const where = buildFilterExpression(filters)
+  const countExpr = sql<number>`COUNT(*)`.as('count')
 
+  let query = db.select({ count: countExpr }).from(catalogEntries)
+  if (where) {
+    query = query.where(where)
+  }
+
+  const row = query.get()
   return row?.count ?? 0
 }
 
 const getCatalogBounds = (
-  db: SqliteClient
+  db: DrizzleDatabase
 ): { earliest: string | null; latest: string | null } => {
   const earliest = getMetadata('catalog.earliestDate')
   const latest = getMetadata('catalog.latestDate')
@@ -582,10 +587,12 @@ const getCatalogBounds = (
   }
 
   const row = db
-    .prepare<{ earliest: string | null; latest: string | null }>(
-      `SELECT MIN(date_added) AS earliest, MAX(date_added) AS latest FROM catalog_entries`
-    )
-    .get() as { earliest: string | null; latest: string | null }
+    .select({
+      earliest: sql<string | null>`MIN(${catalogEntries.dateAdded})`,
+      latest: sql<string | null>`MAX(${catalogEntries.dateAdded})`
+    })
+    .from(catalogEntries)
+    .get()
 
   return {
     earliest: row?.earliest ?? null,
@@ -593,7 +600,7 @@ const getCatalogBounds = (
   }
 }
 
-const computeUpdatedAt = (db: SqliteClient): string => {
+const computeUpdatedAt = (db: DrizzleDatabase): string => {
   const candidates = [
     getMetadata('dateReleased'),
     getMetadata('lastImportAt'),
@@ -607,10 +614,11 @@ const computeUpdatedAt = (db: SqliteClient): string => {
   }
 
   const row = db
-    .prepare<{ latest: string | null }>(
-      `SELECT MAX(COALESCE(date_updated, date_added)) AS latest FROM catalog_entries`
-    )
-    .get() as { latest: string | null }
+    .select({
+      latest: sql<string | null>`MAX(COALESCE(${catalogEntries.dateUpdated}, ${catalogEntries.dateAdded}))`
+    })
+    .from(catalogEntries)
+    .get()
 
   return row?.latest ?? ''
 }
@@ -622,7 +630,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
 
   if (filters.ownedOnly && !(filters.productKeys?.length ?? 0)) {
     return {
-      updatedAt: computeUpdatedAt(sqlite),
+      updatedAt: computeUpdatedAt(db),
       entries: [],
       counts: {
         domain: [],
@@ -631,18 +639,18 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         vendor: [],
         product: []
       },
-      catalogBounds: getCatalogBounds(sqlite),
+      catalogBounds: getCatalogBounds(db),
       totalEntries: 0,
       entryLimit
     }
   }
 
-  const entries = queryEntries(sqlite, filters, entryLimit)
-  const totalEntries = countEntries(sqlite, filters)
+  const entries = queryEntries(db, filters, entryLimit)
+  const totalEntries = countEntries(db, filters)
 
   const counts = {
     domain: queryDimensionCounts(
-      sqlite,
+      db,
       omitFilters(filters, [
         'domain',
         'exploit',
@@ -655,7 +663,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       'domain'
     ),
     exploit: queryDimensionCounts(
-      sqlite,
+      db,
       omitFilters(filters, [
         'exploit',
         'vulnerability',
@@ -667,22 +675,16 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       'exploit'
     ),
     vulnerability: queryDimensionCounts(
-      sqlite,
+      db,
       omitFilters(filters, ['vulnerability', 'vendor', 'vendorKeys', 'product', 'productKeys']),
       'vulnerability'
     ),
-    vendor: queryVendorCounts(
-      sqlite,
-      omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])
-    ),
-    product: queryProductCounts(
-      sqlite,
-      omitFilters(filters, ['product', 'productKeys'])
-    )
+    vendor: queryVendorCounts(db, omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])),
+    product: queryProductCounts(db, omitFilters(filters, ['product', 'productKeys']))
   }
 
-  const catalogBounds = getCatalogBounds(sqlite)
-  const updatedAt = computeUpdatedAt(sqlite)
+  const catalogBounds = getCatalogBounds(db)
+  const updatedAt = computeUpdatedAt(db)
 
   return {
     updatedAt,
