@@ -68,7 +68,7 @@ const createDefaultCounts = (): DefaultCounts => ({
   product: []
 })
 
-const DEFAULT_ENTRY_LIMIT = 25
+const DEFAULT_ENTRY_LIMIT = 250
 
 const normaliseQuery = (source?: KevQueryParams): NormalisedQuery => {
   if (!source) {

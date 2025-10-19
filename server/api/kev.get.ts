@@ -54,7 +54,7 @@ const toTimestamp = (value?: string): number | null => {
   return timestamp
 }
 
-const DEFAULT_ENTRY_LIMIT = 25
+const DEFAULT_ENTRY_LIMIT = 250
 
 const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const getString = (key: string): string | undefined => {
