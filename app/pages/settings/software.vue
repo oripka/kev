@@ -132,7 +132,7 @@ const columns = computed<
         h(
           "div",
           {
-            class: "max-w-xs truncate",
+            class: "max-w-[230px] break-all text-wrap",
             title: row.original.productName,
           },
           row.original.productName

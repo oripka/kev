@@ -197,7 +197,7 @@ const filterParams = computed(() => {
   }
 
   if (showAllResults.value) {
-    params.limit = 500;
+    params.limit = 10000;
   }
 
   return params;
@@ -1073,7 +1073,7 @@ type AsideAccordionItem = AccordionItem & {
   badgeText?: string;
 };
 
-const asideAccordionValue = ref<string[]>(["filters"]);
+const asideAccordionValue = ref<string[]>([]);
 
 const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
   {
@@ -1474,667 +1474,655 @@ const columns: TableColumn<KevEntrySummary>[] = [
 </script>
 
 <template>
-  <UDashboardGroup >
-    <UDashboardSidebar class="mt-16" :default-size="25" :min-size="20" :max-size="30" resizable>
-      <div
-        class="space-y-6 px-4 pb-10 pt-6 sm:px-6 lg:sticky lg:top-24 lg:px-4 xl:px-6"
-      >
+  <div class="grid grid-cols-12">
+    <div class="col-span-3 ml-8 mt-12">
       <div class="text-xl font-bold">Filters</div>
-        <UAccordion
-          v-model="asideAccordionValue"
-          type="multiple"
-          :items="asideAccordionItems"
-          class="space-y-2"
-        >
-          <template #default="{ item }">
-            <div class="flex items-center justify-between gap-3">
-              <span
-                class="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
-              >
-                {{ item.label }}
-              </span>
-              <UBadge
-                v-if="item.badgeText"
-                :color="item.badgeColor ?? 'neutral'"
-                variant="soft"
-                class="font-semibold"
-              >
-                {{ item.badgeText }}
-              </UBadge>
-            </div>
-          </template>
+      <UAccordion
+        v-model="asideAccordionValue"
+        type="multiple"
+        :items="asideAccordionItems"
+        class="!w-full !col-span-3"
+      >
+        <template #default="{ item }">
+          <div class="flex items-center justify-between gap-3">
+            <span
+              class="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
+            >
+              {{ item.label }}
+            </span>
+            <UBadge
+              v-if="item.badgeText"
+              :color="item.badgeColor ?? 'neutral'"
+              variant="soft"
+              class="font-semibold"
+            >
+              {{ item.badgeText }}
+            </UBadge>
+          </div>
+        </template>
 
-          <template #filters>
-            <div class="space-y-6 mx-2">
-              <div class="flex items-start justify-between gap-3">
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  Tune the dataset without leaving the table view.
-                </p>
-                <UButton
-                  color="neutral"
-                  variant="ghost"
-                  size="sm"
-                  icon="i-lucide-rotate-ccw"
-                  :disabled="!hasActiveFilters"
-                  @click="resetFilters"
-                >
-                  Reset
-                </UButton>
-              </div>
-
-              <div class="grid grid-cols-1 gap-6">
-                <UFormField label="Search">
-                  <UInput
-                    v-model="searchInput"
-                    class="w-full"
-                    placeholder="Filter by CVE, vendor, product, or description"
-                  />
-                </UFormField>
-
-                <UFormField label="Data source">
-                  <div class="flex flex-wrap gap-2">
-                    <UButton
-                      v-for="option in ['all', 'kev', 'enisa']"
-                      :key="option"
-                      size="sm"
-                      :color="selectedSource === option ? 'primary' : 'neutral'"
-                      :variant="selectedSource === option ? 'solid' : 'outline'"
-                      @click="selectSource(option as 'all' | 'kev' | 'enisa')"
-                    >
-                      {{
-                        option === "all"
-                          ? "All sources"
-                          : option === "kev"
-                          ? "CISA KEV"
-                          : "ENISA"
-                      }}
-                    </UButton>
-                  </div>
-                </UFormField>
-              </div>
-
-              <div class="grid grid-cols-1 gap-6">
-                <UFormField label="Year range">
-                  <div class="space-y-2">
-                    <USlider
-                      v-model="yearRange"
-                      :min="yearSliderMin"
-                      :max="yearSliderMax"
-                      :step="1"
-                      class="px-1"
-                      tooltip
-                    />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Filter vulnerabilities by the year CISA added them to the
-                      KEV catalog.
-                    </p>
-                  </div>
-                </UFormField>
-
-                <UFormField label="CVSS range">
-                  <div class="space-y-2">
-                    <USlider
-                      v-model="cvssRange"
-                      :min="defaultCvssRange[0]"
-                      :max="defaultCvssRange[1]"
-                      :step="0.1"
-                      :min-steps-between-thumbs="1"
-                      tooltip
-                    />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Common Vulnerability Scoring System (0–10) shows
-                      vendor-assigned severity.
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      {{ cvssRange[0].toFixed(1) }} –
-                      {{ cvssRange[1].toFixed(1) }}
-                    </p>
-                  </div>
-                </UFormField>
-
-                <UFormField label="EPSS range">
-                  <div class="space-y-2">
-                    <USlider
-                      v-model="epssRange"
-                      :min="defaultEpssRange[0]"
-                      :max="defaultEpssRange[1]"
-                      :step="1"
-                      :min-steps-between-thumbs="1"
-                      tooltip
-                    />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Exploit Prediction Scoring System (0–100%) estimates
-                      likelihood of exploitation.
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      {{ Math.round(epssRange[0]) }} –
-                      {{ Math.round(epssRange[1]) }}
-                    </p>
-                  </div>
-                </UFormField>
-              </div>
-
-            </div>
-          </template>
-
-          <template #domain>
-            <div class="space-y-4">
+        <template #filters>
+          <div class="space-y-6 mx-2">
+            <div class="flex items-start justify-between gap-3">
               <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                Share of vulnerabilities per domain grouping.
+                Tune the dataset without leaving the table view.
               </p>
-
-              <div v-if="domainStats.length" class="space-y-3">
-                <button
-                  v-for="stat in domainStats"
-                  :key="stat.key"
-                  type="button"
-                  @click="toggleFilter('domain', stat.key)"
-                  :aria-pressed="filters.domain === stat.key"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:focus-visible:ring-emerald-600',
-                    filters.domain === stat.key
-                      ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-emerald-200 dark:ring-emerald-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
-                >
-                  <div class="flex items-center justify-between gap-3 text-sm">
-                    <span
-                      :class="[
-                        'truncate font-medium',
-                        filters.domain === stat.key
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-neutral-900 dark:text-neutral-50',
-                      ]"
-                    >
-                      {{ stat.name }}
-                    </span>
-                    <span
-                      class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
-                    >
-                      {{ stat.count }} · {{ stat.percentLabel }}%
-                    </span>
-                  </div>
-                  <UProgress
-                    :model-value="stat.percent"
-                    :max="100"
-                    color="primary"
-                    size="sm"
-                  />
-                </button>
-              </div>
-              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                No domain category data for this filter.
-              </p>
-
-              <div
-                v-if="topDomainStat"
-                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                <span>Top domain</span>
-                <span class="font-medium text-neutral-900 dark:text-neutral-50">
-                  {{ topDomainStat.name }} ({{ topDomainStat.percentLabel }}%)
-                </span>
-              </div>
-            </div>
-          </template>
-
-          <template #exploit>
-            <div class="space-y-4">
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                How execution paths cluster for these CVEs.
-              </p>
-
-              <div v-if="exploitLayerStats.length" class="space-y-3">
-                <button
-                  v-for="stat in exploitLayerStats"
-                  :key="stat.key"
-                  type="button"
-                  @click="toggleFilter('exploit', stat.key)"
-                  :aria-pressed="filters.exploit === stat.key"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:focus-visible:ring-amber-600',
-                    filters.exploit === stat.key
-                      ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
-                >
-                  <div class="flex items-center justify-between gap-3 text-sm">
-                    <span
-                      :class="[
-                        'truncate font-medium',
-                        filters.exploit === stat.key
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-neutral-900 dark:text-neutral-50',
-                      ]"
-                    >
-                      {{ stat.name }}
-                    </span>
-                    <span
-                      class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
-                    >
-                      {{ stat.count }} · {{ stat.percentLabel }}%
-                    </span>
-                  </div>
-                  <UProgress
-                    :model-value="stat.percent"
-                    :max="100"
-                    color="warning"
-                    size="sm"
-                  />
-                </button>
-              </div>
-              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                No exploit profile data for this filter.
-              </p>
-
-              <div
-                v-if="topExploitLayerStat"
-                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                <span>Top profile</span>
-                <span class="font-medium text-neutral-900 dark:text-neutral-50">
-                  {{ topExploitLayerStat.name }} ({{
-                    topExploitLayerStat.percentLabel
-                  }}%)
-                </span>
-              </div>
-            </div>
-          </template>
-
-          <template #vulnerability>
-            <div class="space-y-4">
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                Breakdown of vulnerability categories in view.
-              </p>
-
-              <div v-if="vulnerabilityStats.length" class="space-y-3">
-                <button
-                  v-for="stat in vulnerabilityStats"
-                  :key="stat.key"
-                  type="button"
-                  @click="toggleFilter('vulnerability', stat.key)"
-                  :aria-pressed="filters.vulnerability === stat.key"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:focus-visible:ring-rose-600',
-                    filters.vulnerability === stat.key
-                      ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
-                >
-                  <div class="flex items-center justify-between gap-3 text-sm">
-                    <span
-                      :class="[
-                        'truncate font-medium',
-                        filters.vulnerability === stat.key
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-neutral-900 dark:text-neutral-50',
-                      ]"
-                    >
-                      {{ stat.name }}
-                    </span>
-                    <span
-                      class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
-                    >
-                      {{ stat.count }} · {{ stat.percentLabel }}%
-                    </span>
-                  </div>
-                  <UProgress
-                    :model-value="stat.percent"
-                    :max="100"
-                    color="secondary"
-                    size="sm"
-                  />
-                </button>
-              </div>
-              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                No vulnerability category data for this filter.
-              </p>
-
-              <div
-                v-if="topVulnerabilityStat"
-                class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                <span>Top category</span>
-                <span class="font-medium text-neutral-900 dark:text-neutral-50">
-                  {{ topVulnerabilityStat.name }} ({{
-                    topVulnerabilityStat.percentLabel
-                  }}%)
-                </span>
-              </div>
-            </div>
-          </template>
-
-          <template #topVendors>
-            <div class="space-y-4">
-              <UFormField label="Show" class="w-32">
-                <USelectMenu
-                  v-model="topVendorCount"
-                  :items="topCountItems"
-                  value-key="value"
-                  size="sm"
-                />
-              </UFormField>
-
-              <div v-if="topVendorStats.length" class="space-y-3">
-                <button
-                  v-for="stat in topVendorStats"
-                  :key="stat.key"
-                  type="button"
-                  @click="toggleFilter('vendor', stat.key)"
-                  :aria-pressed="filters.vendor === stat.key"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
-                    filters.vendor === stat.key
-                      ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
-                >
-                  <div class="flex items-center justify-between gap-3 text-sm">
-                    <span
-                      :class="[
-                        'truncate font-medium',
-                        filters.vendor === stat.key
-                          ? 'text-primary-600 dark:text-primary-400'
-                          : 'text-neutral-900 dark:text-neutral-50',
-                      ]"
-                    >
-                      {{ stat.name }}
-                    </span>
-                    <span
-                      class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
-                    >
-                      {{ stat.count }} · {{ stat.percentLabel }}%
-                    </span>
-                  </div>
-                  <UProgress
-                    :model-value="stat.percent"
-                    :max="100"
-                    color="primary"
-                    size="sm"
-                  />
-                </button>
-              </div>
-              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                No vendor data for this filter.
-              </p>
-            </div>
-          </template>
-
-          <template #topProducts>
-            <div class="space-y-4">
-              <UFormField label="Show" class="w-32">
-                <USelectMenu
-                  v-model="topProductCount"
-                  :items="topCountItems"
-                  value-key="value"
-                  size="sm"
-                />
-              </UFormField>
-
-              <div v-if="topProductStats.length" class="space-y-3">
-                <button
-                  v-for="stat in topProductStats"
-                  :key="stat.key"
-                  type="button"
-                  @click="toggleFilter('product', stat.key)"
-                  :aria-pressed="filters.product === stat.key"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
-                    filters.product === stat.key
-                      ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
-                >
-                  <div class="flex items-center justify-between gap-3 text-sm">
-                    <div class="min-w-0">
-                      <p
-                        :class="[
-                          'truncate font-medium',
-                          filters.product === stat.key
-                            ? 'text-secondary-600 dark:text-secondary-400'
-                            : 'text-neutral-900 dark:text-neutral-50',
-                        ]"
-                      >
-                        {{ stat.name }}
-                      </p>
-                      <p
-                        v-if="stat.vendorName"
-                        class="truncate text-xs text-neutral-500 dark:text-neutral-400"
-                      >
-                        {{ stat.vendorName }}
-                      </p>
-                    </div>
-                    <span
-                      class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
-                    >
-                      {{ stat.count }} · {{ stat.percentLabel }}%
-                    </span>
-                  </div>
-                  <UProgress
-                    :model-value="stat.percent"
-                    :max="100"
-                    color="secondary"
-                    size="sm"
-                  />
-                </button>
-              </div>
-              <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                No product data for this filter.
-              </p>
-            </div>
-          </template>
-
-          <template #focus>
-            <div class="space-y-4">
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                Highlight the vulnerabilities that matter most to your
-                organisation.
-              </p>
-
-              <div class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
-                    >
-                      My software
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Only show CVEs that match the products you track.
-                    </p>
-                  </div>
-                  <USwitch
-                    v-model="showOwnedOnly"
-                    :disabled="!trackedProductsReady"
-                  />
-                </div>
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
-                    >
-                      Named CVEs
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Elevate high-profile, widely reported vulnerabilities.
-                    </p>
-                  </div>
-                  <USwitch v-model="showWellKnownOnly" />
-                </div>
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
-                    >
-                      Ransomware focus
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Restrict the view to CVEs linked to ransomware campaigns.
-                    </p>
-                  </div>
-                  <USwitch v-model="showRansomwareOnly" />
-                </div>
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
-                    >
-                      Internet exposure
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Prioritise vulnerabilities likely to be exposed on the
-                      open internet.
-                    </p>
-                  </div>
-                  <USwitch v-model="showInternetExposedOnly" />
-                </div>
-              </div>
-
-              <div
-                class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300"
-              >
-                <p class="font-semibold text-neutral-700 dark:text-neutral-100">
-                  Tracked products
-                </p>
-                <p class="mt-1">
-                  {{ trackedProductCount.toLocaleString() }} product(s)
-                  selected.
-                </p>
-                <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                  Manage the list on the dashboard at any time; changes are
-                  saved automatically.
-                </p>
-              </div>
-            </div>
-          </template>
-
-          <template #mySoftware>
-            <div class="relative">
-              <div
-                v-if="!trackedProductsReady"
-                class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
-              />
-              <TrackedSoftwareSummary
-                v-model="showOwnedOnly"
-                :tracked-products="trackedProducts"
-                :tracked-product-count="trackedProductCount"
-                :has-tracked-products="hasTrackedProducts"
-                :saving="savingTrackedProducts"
-                :save-error="trackedProductError"
-                @remove="removeTrackedProduct"
-                @clear="clearTrackedProducts"
-              />
-            </div>
-          </template>
-
-          <template #trend>
-            <div class="space-y-4">
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                Examine how the current filters influence volume, severity, and
-                exploitation momentum over time.
-              </p>
-
-              <div class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
-                    >
-                      Show risk details
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Add severity and EPSS context to the explorer insights.
-                    </p>
-                  </div>
-                  <USwitch v-model="showRiskDetails" />
-                </div>
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
-                    >
-                      Show trend lines
-                    </p>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Overlay trend lines on charts when exploring results.
-                    </p>
-                  </div>
-                  <USwitch v-model="showTrendLines" />
-                </div>
-              </div>
-
               <UButton
                 color="neutral"
-                variant="soft"
-                icon="i-lucide-line-chart"
-                @click="showTrendSlideover = true"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                :disabled="!hasActiveFilters"
+                @click="resetFilters"
               >
-                Launch trend explorer
+                Reset
               </UButton>
             </div>
-          </template>
-        </UAccordion>
-      </div>
-    </UDashboardSidebar>
 
-    <UDashboardPanel>
+            <div class="grid grid-cols-1 gap-6">
+              <UFormField label="Search">
+                <UInput
+                  v-model="searchInput"
+                  class="w-full"
+                  placeholder="Filter by CVE, vendor, product, or description"
+                />
+              </UFormField>
 
-        <div
-          class="mx-auto w-full max-w-6xl space-y-5 px-4 pb-12 sm:px-6 lg:px-8"
-        >
-          <div
-            class="pointer-events-none fixed left-1/2 top-24 z-50 w-full max-w-6xl -translate-x-1/2 px-4 sm:px-6 lg:px-8"
-          >
-            <QuickFilterSummary
-              :quick-stat-items="quickStatItems"
-              :active-filters="activeFilters"
-              :has-active-filters="hasActiveFilters"
-              :has-active-filter-chips="hasActiveFilterChips"
-              @reset="resetFilters"
-              @clear-filter="clearFilter"
+              <UFormField label="Data source">
+                <div class="flex flex-wrap gap-2">
+                  <UButton
+                    v-for="option in ['all', 'kev', 'enisa']"
+                    :key="option"
+                    size="sm"
+                    :color="selectedSource === option ? 'primary' : 'neutral'"
+                    :variant="selectedSource === option ? 'solid' : 'outline'"
+                    @click="selectSource(option as 'all' | 'kev' | 'enisa')"
+                  >
+                    {{
+                      option === "all"
+                        ? "All sources"
+                        : option === "kev"
+                        ? "CISA KEV"
+                        : "ENISA"
+                    }}
+                  </UButton>
+                </div>
+              </UFormField>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6">
+              <UFormField label="Year range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="yearRange"
+                    :min="yearSliderMin"
+                    :max="yearSliderMax"
+                    :step="1"
+                    class="px-1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Filter vulnerabilities by the year CISA added them to the
+                    KEV catalog.
+                  </p>
+                </div>
+              </UFormField>
+
+              <UFormField label="CVSS range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="cvssRange"
+                    :min="defaultCvssRange[0]"
+                    :max="defaultCvssRange[1]"
+                    :step="0.1"
+                    :min-steps-between-thumbs="1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Common Vulnerability Scoring System (0–10) shows
+                    vendor-assigned severity.
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ cvssRange[0].toFixed(1) }} –
+                    {{ cvssRange[1].toFixed(1) }}
+                  </p>
+                </div>
+              </UFormField>
+
+              <UFormField label="EPSS range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="epssRange"
+                    :min="defaultEpssRange[0]"
+                    :max="defaultEpssRange[1]"
+                    :step="1"
+                    :min-steps-between-thumbs="1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Exploit Prediction Scoring System (0–100%) estimates
+                    likelihood of exploitation.
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ Math.round(epssRange[0]) }} –
+                    {{ Math.round(epssRange[1]) }}
+                  </p>
+                </div>
+              </UFormField>
+            </div>
+          </div>
+        </template>
+
+        <template #domain>
+          <div class="space-y-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Share of vulnerabilities per domain grouping.
+            </p>
+
+            <div v-if="domainStats.length" class="space-y-3">
+              <button
+                v-for="stat in domainStats"
+                :key="stat.key"
+                type="button"
+                @click="toggleFilter('domain', stat.key)"
+                :aria-pressed="filters.domain === stat.key"
+                :class="[
+                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:focus-visible:ring-emerald-600',
+                  filters.domain === stat.key
+                    ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-emerald-200 dark:ring-emerald-500/40'
+                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ]"
+              >
+                <div class="flex items-center justify-between gap-3 text-sm">
+                  <span
+                    :class="[
+                      'truncate font-medium',
+                      filters.domain === stat.key
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-neutral-900 dark:text-neutral-50',
+                    ]"
+                  >
+                    {{ stat.name }}
+                  </span>
+                  <span
+                    class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    {{ stat.count }} · {{ stat.percentLabel }}%
+                  </span>
+                </div>
+                <UProgress
+                  :model-value="stat.percent"
+                  :max="100"
+                  color="primary"
+                  size="sm"
+                />
+              </button>
+            </div>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+              No domain category data for this filter.
+            </p>
+
+            <div
+              v-if="topDomainStat"
+              class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+            >
+              <span>Top domain</span>
+              <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                {{ topDomainStat.name }} ({{ topDomainStat.percentLabel }}%)
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <template #exploit>
+          <div class="space-y-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              How execution paths cluster for these CVEs.
+            </p>
+
+            <div v-if="exploitLayerStats.length" class="space-y-3">
+              <button
+                v-for="stat in exploitLayerStats"
+                :key="stat.key"
+                type="button"
+                @click="toggleFilter('exploit', stat.key)"
+                :aria-pressed="filters.exploit === stat.key"
+                :class="[
+                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:focus-visible:ring-amber-600',
+                  filters.exploit === stat.key
+                    ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/40'
+                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ]"
+              >
+                <div class="flex items-center justify-between gap-3 text-sm">
+                  <span
+                    :class="[
+                      'truncate font-medium',
+                      filters.exploit === stat.key
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-neutral-900 dark:text-neutral-50',
+                    ]"
+                  >
+                    {{ stat.name }}
+                  </span>
+                  <span
+                    class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    {{ stat.count }} · {{ stat.percentLabel }}%
+                  </span>
+                </div>
+                <UProgress
+                  :model-value="stat.percent"
+                  :max="100"
+                  color="warning"
+                  size="sm"
+                />
+              </button>
+            </div>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+              No exploit profile data for this filter.
+            </p>
+
+            <div
+              v-if="topExploitLayerStat"
+              class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+            >
+              <span>Top profile</span>
+              <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                {{ topExploitLayerStat.name }} ({{
+                  topExploitLayerStat.percentLabel
+                }}%)
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <template #vulnerability>
+          <div class="space-y-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Breakdown of vulnerability categories in view.
+            </p>
+
+            <div v-if="vulnerabilityStats.length" class="space-y-3">
+              <button
+                v-for="stat in vulnerabilityStats"
+                :key="stat.key"
+                type="button"
+                @click="toggleFilter('vulnerability', stat.key)"
+                :aria-pressed="filters.vulnerability === stat.key"
+                :class="[
+                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:focus-visible:ring-rose-600',
+                  filters.vulnerability === stat.key
+                    ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
+                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ]"
+              >
+                <div class="flex items-center justify-between gap-3 text-sm">
+                  <span
+                    :class="[
+                      'truncate font-medium',
+                      filters.vulnerability === stat.key
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-neutral-900 dark:text-neutral-50',
+                    ]"
+                  >
+                    {{ stat.name }}
+                  </span>
+                  <span
+                    class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    {{ stat.count }} · {{ stat.percentLabel }}%
+                  </span>
+                </div>
+                <UProgress
+                  :model-value="stat.percent"
+                  :max="100"
+                  color="secondary"
+                  size="sm"
+                />
+              </button>
+            </div>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+              No vulnerability category data for this filter.
+            </p>
+
+            <div
+              v-if="topVulnerabilityStat"
+              class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+            >
+              <span>Top category</span>
+              <span class="font-medium text-neutral-900 dark:text-neutral-50">
+                {{ topVulnerabilityStat.name }} ({{
+                  topVulnerabilityStat.percentLabel
+                }}%)
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <template #topVendors>
+          <div class="space-y-4">
+            <UFormField label="Show" class="w-32">
+              <USelectMenu
+                v-model="topVendorCount"
+                :items="topCountItems"
+                value-key="value"
+                size="sm"
+              />
+            </UFormField>
+
+            <div v-if="topVendorStats.length" class="space-y-3">
+              <button
+                v-for="stat in topVendorStats"
+                :key="stat.key"
+                type="button"
+                @click="toggleFilter('vendor', stat.key)"
+                :aria-pressed="filters.vendor === stat.key"
+                :class="[
+                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
+                  filters.vendor === stat.key
+                    ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
+                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ]"
+              >
+                <div class="flex items-center justify-between gap-3 text-sm">
+                  <span
+                    :class="[
+                      'truncate font-medium',
+                      filters.vendor === stat.key
+                        ? 'text-primary-600 dark:text-primary-400'
+                        : 'text-neutral-900 dark:text-neutral-50',
+                    ]"
+                  >
+                    {{ stat.name }}
+                  </span>
+                  <span
+                    class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    {{ stat.count }} · {{ stat.percentLabel }}%
+                  </span>
+                </div>
+                <UProgress
+                  :model-value="stat.percent"
+                  :max="100"
+                  color="primary"
+                  size="sm"
+                />
+              </button>
+            </div>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+              No vendor data for this filter.
+            </p>
+          </div>
+        </template>
+
+        <template #topProducts>
+          <div class="space-y-4">
+            <UFormField label="Show" class="w-32">
+              <USelectMenu
+                v-model="topProductCount"
+                :items="topCountItems"
+                value-key="value"
+                size="sm"
+              />
+            </UFormField>
+
+            <div v-if="topProductStats.length" class="space-y-3">
+              <button
+                v-for="stat in topProductStats"
+                :key="stat.key"
+                type="button"
+                @click="toggleFilter('product', stat.key)"
+                :aria-pressed="filters.product === stat.key"
+                :class="[
+                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
+                  filters.product === stat.key
+                    ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
+                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ]"
+              >
+                <div class="flex items-center justify-between gap-3 text-sm">
+                  <div class="min-w-0">
+                    <p
+                      :class="[
+                        'truncate font-medium',
+                        filters.product === stat.key
+                          ? 'text-secondary-600 dark:text-secondary-400'
+                          : 'text-neutral-900 dark:text-neutral-50',
+                      ]"
+                    >
+                      {{ stat.name }}
+                    </p>
+                    <p
+                      v-if="stat.vendorName"
+                      class="truncate text-xs text-neutral-500 dark:text-neutral-400"
+                    >
+                      {{ stat.vendorName }}
+                    </p>
+                  </div>
+                  <span
+                    class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    {{ stat.count }} · {{ stat.percentLabel }}%
+                  </span>
+                </div>
+                <UProgress
+                  :model-value="stat.percent"
+                  :max="100"
+                  color="secondary"
+                  size="sm"
+                />
+              </button>
+            </div>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+              No product data for this filter.
+            </p>
+          </div>
+        </template>
+
+        <template #focus>
+          <div class="space-y-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Highlight the vulnerabilities that matter most to your
+              organisation.
+            </p>
+
+            <div class="space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    My software
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Only show CVEs that match the products you track.
+                  </p>
+                </div>
+                <USwitch
+                  v-model="showOwnedOnly"
+                  :disabled="!trackedProductsReady"
+                />
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Named CVEs
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Elevate high-profile, widely reported vulnerabilities.
+                  </p>
+                </div>
+                <USwitch v-model="showWellKnownOnly" />
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Ransomware focus
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Restrict the view to CVEs linked to ransomware campaigns.
+                  </p>
+                </div>
+                <USwitch v-model="showRansomwareOnly" />
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Internet exposure
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Prioritise vulnerabilities likely to be exposed on the open
+                    internet.
+                  </p>
+                </div>
+                <USwitch v-model="showInternetExposedOnly" />
+              </div>
+            </div>
+
+            <div
+              class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300"
+            >
+              <p class="font-semibold text-neutral-700 dark:text-neutral-100">
+                Tracked products
+              </p>
+              <p class="mt-1">
+                {{ trackedProductCount.toLocaleString() }} product(s) selected.
+              </p>
+              <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Manage the list on the dashboard at any time; changes are saved
+                automatically.
+              </p>
+            </div>
+          </div>
+        </template>
+
+        <template #mySoftware>
+          <div class="relative">
+            <div
+              v-if="!trackedProductsReady"
+              class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
+            />
+            <TrackedSoftwareSummary
+              v-model="showOwnedOnly"
+              :tracked-products="trackedProducts"
+              :tracked-product-count="trackedProductCount"
+              :has-tracked-products="hasTrackedProducts"
+              :saving="savingTrackedProducts"
+              :save-error="trackedProductError"
+              @remove="removeTrackedProduct"
+              @clear="clearTrackedProducts"
             />
           </div>
-          <div class="h-40 sm:h-44"></div>
+        </template>
 
-          <UCard>
-            <template #header>
-              <p
-                class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
-              >
-                Results
-              </p>
-            </template>
+        <template #trend>
+          <div class="space-y-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Examine how the current filters influence volume, severity, and
+              exploitation momentum over time.
+            </p>
 
-            <div>
-              <div
-                class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                  {{ resultCountLabel }}
-                </p>
-                <div
-                  v-if="canShowAllResults"
-                  class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
-                >
-                  <span class="font-medium">Show all results</span>
-                  <USwitch
-                    v-model="showAllResults"
-                    aria-label="Toggle show all results"
-                  />
+            <div class="space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Show risk details
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Add severity and EPSS context to the explorer insights.
+                  </p>
                 </div>
+                <USwitch v-model="showRiskDetails" />
               </div>
-              <UProgress
-                v-if="isBusy"
-                class="mb-4"
-                animation="swing"
-                color="primary"
-              />
-              <UTable :data="results" :columns="columns" />
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Show trend lines
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Overlay trend lines on charts when exploring results.
+                  </p>
+                </div>
+                <USwitch v-model="showTrendLines" />
+              </div>
             </div>
-          </UCard>
+
+            <UButton
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-line-chart"
+              @click="showTrendSlideover = true"
+            >
+              Launch trend explorer
+            </UButton>
+          </div>
+        </template>
+      </UAccordion>
+    </div>
+
+    <div
+      class="col-span-9 mx-auto w-full px-12"
+    >
+      <div class="sticky top-24 z-50 flex justify-center w-full">
+        <QuickFilterSummary
+          :quick-stat-items="quickStatItems"
+          :active-filters="activeFilters"
+          :has-active-filters="hasActiveFilters"
+          :has-active-filter-chips="hasActiveFilterChips"
+          @reset="resetFilters"
+          @clear-filter="clearFilter"
+        />
+      </div>
+
+      <UCard class="mt-24">
+        <template #header>
+          <p
+            class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
+          >
+            Results
+          </p>
+        </template>
+
+        <div>
+          <div
+            class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p class="text-sm text-neutral-600 dark:text-neutral-300">
+              {{ resultCountLabel }}
+            </p>
+            <div
+              v-if="canShowAllResults"
+              class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
+            >
+              <span class="font-medium">Show all results</span>
+              <USwitch
+                v-model="showAllResults"
+                aria-label="Toggle show all results"
+              />
+            </div>
+          </div>
+          <UProgress
+            v-if="isBusy"
+            class="mb-4"
+            animation="swing"
+            color="primary"
+          />
+          <UTable :data="results" :columns="columns" />
         </div>
-   
-      <!-- <KevDetailModal
+      </UCard>
+
+      <KevDetailModal
         v-model:open="showDetails"
         :entry="detailEntry"
         :loading="detailLoading"
@@ -2167,7 +2155,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         :catalog-updated-at="catalogUpdatedAt"
         :entries="results"
         @open-details="openDetails"
-      /> -->
-    </UDashboardPanel>
-  </UDashboardGroup>
+      />
+    </div>
+  </div>
 </template>

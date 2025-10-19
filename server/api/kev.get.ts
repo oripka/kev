@@ -55,6 +55,7 @@ const toTimestamp = (value?: string): number | null => {
 }
 
 const DEFAULT_ENTRY_LIMIT = 250
+const MAX_ENTRY_LIMIT = 10_000
 
 const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const getString = (key: string): string | undefined => {
@@ -228,7 +229,7 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
 
   const limit = getInt('limit')
   if (typeof limit === 'number' && limit > 0) {
-    filters.limit = Math.max(1, Math.min(500, limit))
+    filters.limit = Math.max(1, Math.min(MAX_ENTRY_LIMIT, limit))
   }
 
   return filters
@@ -416,7 +417,10 @@ const queryEntries = (
 ): KevEntrySummary[] => {
   const { where, params } = buildSqlFilter(filters)
   const whereClause = buildWhereClause(where)
-  const limit = Math.max(1, Math.min(500, limitOverride ?? filters.limit ?? DEFAULT_ENTRY_LIMIT))
+  const limit = Math.max(
+    1,
+    Math.min(MAX_ENTRY_LIMIT, limitOverride ?? filters.limit ?? DEFAULT_ENTRY_LIMIT)
+  )
   const rows = db
     .prepare<CatalogSummaryRow>(
       `SELECT
@@ -611,7 +615,7 @@ const computeUpdatedAt = (db: ReturnType<typeof getDatabase>): string => {
 
 export default defineEventHandler(async (event): Promise<KevResponse> => {
   const filters = normaliseQuery(getQuery(event))
-  const entryLimit = Math.max(1, Math.min(500, filters.limit ?? DEFAULT_ENTRY_LIMIT))
+  const entryLimit = Math.max(1, Math.min(MAX_ENTRY_LIMIT, filters.limit ?? DEFAULT_ENTRY_LIMIT))
   const db = getDatabase()
 
   if (filters.ownedOnly && !(filters.productKeys?.length ?? 0)) {
