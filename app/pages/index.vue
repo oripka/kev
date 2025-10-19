@@ -1319,7 +1319,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
           "p",
           {
             class:
-              "max-w-md whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
+              "max-w-2xl whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
           },
           row.original.vulnerabilityName
         ),
@@ -1343,7 +1343,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
           "p",
           {
             class:
-              "text-sm text-neutral-500 dark:text-neutral-400 max-w-xl whitespace-normal break-words text-pretty leading-relaxed",
+              "text-sm text-neutral-500 dark:text-neutral-400 max-w-3xl whitespace-normal break-words text-pretty leading-relaxed",
           },
           description
         )
@@ -1359,46 +1359,108 @@ const columns: TableColumn<KevEntrySummary>[] = [
       const parsed = parseISO(row.original.dateAdded);
       return Number.isNaN(parsed.getTime())
         ? row.original.dateAdded
-        : format(parsed, "yyyy-MM-dd");
+        : format(parsed, "dd.MM.yyyy");
     },
   },
   {
-    id: "cvss",
-    header: "CVSS",
+    id: "risk",
+    header: "CVSS · EPSS",
     cell: ({ row }) => {
-      const { cvssScore, cvssSeverity } = row.original;
-      const formattedScore = formatCvssScore(cvssScore);
-
-      if (!formattedScore && !cvssSeverity) {
-        return h(
-          "span",
-          { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-          "—"
-        );
-      }
-
-      const label = buildCvssLabel(cvssSeverity, cvssScore);
-      const color = cvssSeverity
+      const { cvssScore, cvssSeverity, epssScore } = row.original;
+      const formattedCvss = formatCvssScore(cvssScore);
+      const cvssLabel =
+        formattedCvss || cvssSeverity
+          ? buildCvssLabel(cvssSeverity, cvssScore)
+          : null;
+      const cvssColor = cvssSeverity
         ? cvssSeverityColors[cvssSeverity] ?? "neutral"
         : "neutral";
+      const epssLabel = formatEpssScore(epssScore);
 
-      return h(
-        UBadge,
-        {
-          color,
-          variant: "soft",
-          class: "font-semibold",
-        },
-        () => label
-      );
+      const cvssNode = cvssLabel
+        ? h(
+            UBadge,
+            {
+              color: cvssColor,
+              variant: "soft",
+              class: "font-semibold",
+            },
+            () => cvssLabel
+          )
+        : h(
+            "span",
+            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+            "—"
+          );
+
+      const epssNode = epssLabel
+        ? h(
+            UBadge,
+            {
+              color: "success",
+              variant: "soft",
+              class: "font-semibold",
+            },
+            () => `${epssLabel}%`
+          )
+        : h(
+            "span",
+            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+            "—"
+          );
+
+      return h("div", { class: "flex flex-col gap-1" }, [cvssNode, epssNode]);
     },
   },
   {
-    id: "epss",
-    header: "EPSS",
+    id: "taxonomy",
+    header: "Domain · Exploit · Type",
     cell: ({ row }) => {
-      const score = formatEpssScore(row.original.epssScore);
-      if (!score) {
+      const sections: Array<{
+        title: string;
+        values: string[];
+        color: string;
+      }> = [
+        {
+          title: "Domain",
+          values: row.original.domainCategories,
+          color: "primary",
+        },
+        {
+          title: "Exploit profile",
+          values: row.original.exploitLayers,
+          color: "warning",
+        },
+        {
+          title: "Type",
+          values: row.original.vulnerabilityCategories,
+          color: "secondary",
+        },
+      ];
+
+      const sectionNodes = sections
+        .filter((section) => section.values.length)
+        .map((section) =>
+          h("div", { class: "flex flex-col gap-1" }, [
+            h(
+              "div",
+              { class: "flex flex-wrap gap-2" },
+              section.values.map((value) =>
+                h(
+                  UBadge,
+                  {
+                    color: section.color,
+                    variant: "soft",
+                    class: "text-xs font-semibold",
+                  },
+                  () => value
+                )
+              )
+            ),
+          ])
+        );
+
+      if (!sectionNodes.length) {
         return h(
           "span",
           { class: "text-sm text-neutral-400 dark:text-neutral-500" },
@@ -1406,52 +1468,8 @@ const columns: TableColumn<KevEntrySummary>[] = [
         );
       }
 
-      return h(
-        UBadge,
-        {
-          color: "success",
-          variant: "soft",
-          class: "font-semibold",
-        },
-        () => `${score}%`
-      );
+      return h("div", { class: "flex flex-col gap-3" }, sectionNodes);
     },
-  },
-  {
-    id: "domain",
-    header: "Domain",
-    cell: ({ row }) =>
-      h(
-        "div",
-        { class: "flex flex-wrap gap-2" },
-        row.original.domainCategories.map((category) =>
-          h(UBadge, { color: "primary", variant: "soft" }, () => category)
-        )
-      ),
-  },
-  {
-    id: "exploit",
-    header: "Exploit profile",
-    cell: ({ row }) =>
-      h(
-        "div",
-        { class: "flex flex-wrap gap-2" },
-        row.original.exploitLayers.map((layer) =>
-          h(UBadge, { color: "warning", variant: "soft" }, () => layer)
-        )
-      ),
-  },
-  {
-    id: "type",
-    header: "Type",
-    cell: ({ row }) =>
-      h(
-        "div",
-        { class: "flex flex-wrap gap-2" },
-        row.original.vulnerabilityCategories.map((category) =>
-          h(UBadge, { color: "secondary", variant: "soft" }, () => category)
-        )
-      ),
   },
   {
     id: "actions",
@@ -1477,6 +1495,21 @@ const columns: TableColumn<KevEntrySummary>[] = [
   <div class="grid grid-cols-12">
     <div class="col-span-3 ml-8 mt-12">
       <div class="text-xl font-bold">Filters</div>
+
+      <div
+        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div
+          v-if="canShowAllResults"
+          class="flex mt-4 items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
+        >
+          <span class="font-medium">Show all results</span>
+          <USwitch
+            v-model="showAllResults"
+            aria-label="Toggle show all results"
+          />
+        </div>
+      </div>
       <UAccordion
         v-model="asideAccordionValue"
         type="multiple"
@@ -1614,7 +1647,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         </template>
 
         <template #domain>
-          <div class="space-y-4">
+          <div class="space-y-4 px-2">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               Share of vulnerabilities per domain grouping.
             </p>
@@ -1675,7 +1708,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         </template>
 
         <template #exploit>
-          <div class="space-y-4">
+          <div class="space-y-4  px-2">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               How execution paths cluster for these CVEs.
             </p>
@@ -1738,7 +1771,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         </template>
 
         <template #vulnerability>
-          <div class="space-y-4">
+          <div class="space-y-4  px-2">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               Breakdown of vulnerability categories in view.
             </p>
@@ -1801,7 +1834,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         </template>
 
         <template #topVendors>
-          <div class="space-y-4">
+          <div class="space-y-4  px-2">
             <UFormField label="Show" class="w-32">
               <USelectMenu
                 v-model="topVendorCount"
@@ -1857,7 +1890,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         </template>
 
         <template #topProducts>
-          <div class="space-y-4">
+          <div class="space-y-4  px-2">
             <UFormField label="Show" class="w-32">
               <USelectMenu
                 v-model="topProductCount"
@@ -2071,9 +2104,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
       </UAccordion>
     </div>
 
-    <div
-      class="col-span-9 mx-auto w-full px-12"
-    >
+    <div class="col-span-9 mx-auto w-full px-12">
       <div class="sticky top-24 z-50 flex justify-center w-full">
         <QuickFilterSummary
           :quick-stat-items="quickStatItems"
@@ -2086,32 +2117,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
       </div>
 
       <UCard class="mt-24">
-        <template #header>
-          <p
-            class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
-          >
-            Results
-          </p>
-        </template>
-
         <div>
-          <div
-            class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <p class="text-sm text-neutral-600 dark:text-neutral-300">
-              {{ resultCountLabel }}
-            </p>
-            <div
-              v-if="canShowAllResults"
-              class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
-            >
-              <span class="font-medium">Show all results</span>
-              <USwitch
-                v-model="showAllResults"
-                aria-label="Toggle show all results"
-              />
-            </div>
-          </div>
           <UProgress
             v-if="isBusy"
             class="mb-4"
