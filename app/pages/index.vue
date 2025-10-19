@@ -2060,6 +2060,7 @@ const columns: TableColumn<KevEntry>[] = [
       title="Filters"
       description="Refine the KEV catalog with precise search, score, and time controls."
       :ui="{ content: 'max-w-2xl' }"
+      :transition="false"
     >
       <template #body>
         <div class="space-y-6">
@@ -2200,6 +2201,7 @@ const columns: TableColumn<KevEntry>[] = [
       title="Focus controls"
       description="Highlight the vulnerabilities that matter most to your organisation."
       :ui="{ content: 'max-w-lg' }"
+      :transition="false"
     >
       <template #body>
         <div class="space-y-5">
@@ -2258,6 +2260,7 @@ const columns: TableColumn<KevEntry>[] = [
       title="My software focus"
       description="Adjust tracked products and the owned-only view without leaving the table."
       :ui="{ content: 'max-w-3xl' }"
+      :transition="false"
     >
       <template #body>
         <TrackedSoftwareSummary
@@ -2278,6 +2281,7 @@ const columns: TableColumn<KevEntry>[] = [
       title="Trend explorer"
       description="Visualise how the filtered vulnerabilities accumulate over time."
       :ui="{ content: 'max-w-4xl' }"
+      :transition="false"
     >
       <template #body>
         <div class="space-y-6">

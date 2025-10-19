@@ -69,7 +69,7 @@ Last imported release: 2025-10-19 14:58
 
 ## Performance
 
-- [ ] the sldieo ver is a bit slow can you open it faster
+- [x] the sldieo ver is a bit slow can you open it faster
 - [x] cache the downloaded data from enisa and kev for one day so we dont need to redownlaod durign the development all the time but can do a fast reimport add a second button for just reimporting
 - [x] enhance performance by precalculating as much as possibel. when i switch my software it takes a long time to rerender. show a laoding incdicator or somethign at least or make it blatzing fast 
 - [x] make the bade from focus on my software just show the title not twice the title orasomeith Focus on my software
