@@ -146,7 +146,140 @@ const stripVersionSegments = (value: string): string =>
     .replace(/\s*\([^)]*\)\s*/g, " ")
     .replace(/\bbuild\s+\d+\b/gi, " ")
     .replace(/\brelease\s+\d+\b/gi, " ")
-    .replace(/\bpatch\s+\d+\b/gi, " ");
+    .replace(/\bpatch\s+\d+\b/gi, " ")
+    .replace(/(?:\.|-)?rc\d+\b/gi, " ")
+    .replace(/\brelease\s+candidate\s*\d*\b/gi, " ");
+
+const removeVendorOccurrences = (product: string, vendor: string): string => {
+  if (!vendor) {
+    return product;
+  }
+
+  const pattern = new RegExp(`\\b${escapeRegExp(vendor)}\\b`, "gi");
+  return product.replace(pattern, " ");
+};
+
+const removeCatalogNoise = (value: string): string => {
+  const patterns: RegExp[] = [
+    /\badd\s+to\s+focus\b.*$/gi,
+    /\btracked\b.*$/gi,
+    /\b(?:cisa\s+kev|cisa|enisa)\b.*$/gi,
+  ];
+
+  return patterns.reduce((result, pattern) => result.replace(pattern, " "), value);
+};
+
+const stripRangeDescriptors = (value: string): string =>
+  value.replace(
+    /\b(?:prior\s+to|before|through|up\s+to|until|and\s+(?:earlier|prior))\b.*$/gi,
+    " "
+  );
+
+const stripPlatformDescriptors = (value: string): string => {
+  const patterns: RegExp[] = [
+    /\bfor\s+(?:x(?:64|86)|(?:32|64)(?:-?bit)?|itanium|arm|powerpc|ppc|sparc)[^,;)]*(?:systems?|platforms?)\b/gi,
+    /\bfor\s+(?:all\s+versions|all\s+builds|all\s+platforms|all\s+systems)\b/gi,
+    /\bfor\s+(?:microsoft\s+)?(?:windows|linux|mac\s*os|macos|os\s*x|android|ios|ipad\s*os|watch\s*os|tv\s*os|vision\s*os|unix|solaris|aix|hp-ux|chrome\s*os)[^,;)]*/gi,
+    /\bon\s+(?:microsoft\s+)?(?:windows|linux|mac\s*os|macos|os\s*x|android|ios|ipad\s*os|watch\s*os|tv\s*os|vision\s*os|unix|solaris|aix|hp-ux|chrome\s*os)[^,;)]*/gi,
+    /\bservice\s+pack\s*\d+\b/gi,
+    /\bsp\s*\d+\b/gi,
+  ];
+
+  return patterns.reduce((result, pattern) => result.replace(pattern, " "), value);
+};
+
+const selectPrimaryClause = (value: string): string => {
+  const segments = value
+    .split(/[,;|]/)
+    .map((segment) => cleanWhitespace(segment))
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return value;
+  }
+
+  return segments[0];
+};
+
+const removeTrailingPlatformList = (value: string): string => {
+  const platformPattern = /\b(windows|linux|mac\s*os|macos|os\s*x|android|ios|ipad\s*os|watch\s*os|tv\s*os|vision\s*os|unix|solaris|aix|hp-ux|chrome\s*os|ubuntu|red\s+hat|suse|debian)\b/gi;
+  let match: RegExpExecArray | null = null;
+  let trimmed = value;
+
+  while ((match = platformPattern.exec(value)) !== null) {
+    if (match.index > 0 && !value.toLowerCase().startsWith(match[0].toLowerCase())) {
+      trimmed = value.slice(0, match.index);
+      break;
+    }
+  }
+
+  return trimmed;
+};
+
+const dedupeAdjacentTokens = (value: string): string => {
+  const tokens = value.split(" ").filter(Boolean);
+  if (tokens.length <= 1) {
+    return tokens.join(" ");
+  }
+
+  const deduped = tokens.filter((token, index) => {
+    if (index === 0) {
+      return true;
+    }
+
+    return tokens[index - 1].toLowerCase() !== token.toLowerCase();
+  });
+
+  return deduped.join(" ");
+};
+
+const normaliseLinuxLabel = (value: string, vendorLabel: string): string => {
+  const vendorLower = vendorLabel.toLowerCase();
+  const productLower = value.toLowerCase();
+
+  if (vendorLower.includes("linux") || vendorLower === "kernel") {
+    if (!productLower || /^(patch|n\/a|unknown|unspecified)$/i.test(productLower)) {
+      return "Linux";
+    }
+
+    if (/^kernel$/i.test(productLower)) {
+      return "Linux Kernel";
+    }
+
+    if (/^linux\s+kernel$/i.test(productLower)) {
+      return "Linux Kernel";
+    }
+
+    if (/^linux$/i.test(productLower)) {
+      return "Linux";
+    }
+  }
+
+  if (vendorLower === "kernel" && /\blinux\b/i.test(productLower)) {
+    return "Linux Kernel";
+  }
+
+  if (/^linux\s+kernel\b/i.test(productLower)) {
+    return "Linux Kernel";
+  }
+
+  return value;
+};
+
+const buildFallbackProductLabel = (
+  source: string,
+  vendorLabel: string
+): string => {
+  const prepared = cleanWhitespace(source || "");
+  const baseCandidate = prepared || "";
+  const base = /^(?:patch:?|n\/a|unknown|unspecified)$/i.test(baseCandidate)
+    ? vendorLabel
+    : /^\d+$/.test(baseCandidate)
+      ? vendorLabel
+      : baseCandidate || vendorLabel || DEFAULT_PRODUCT;
+  const specialCased = applyProductSpecialCasing(toTitleCase(base));
+  return normaliseLinuxLabel(specialCased, vendorLabel);
+};
 
 const normaliseProductLabel = (
   value: string | null | undefined,
@@ -158,28 +291,46 @@ const normaliseProductLabel = (
   }
 
   const withoutVendor = stripVendorFromProduct(trimmed, vendorLabel);
-
-  const withoutComparators = stripComparatorSuffix(withoutVendor);
-
-  const withoutVersionKeywords = withoutComparators.replace(
+  const withoutEmbeddedVendor = removeVendorOccurrences(withoutVendor, vendorLabel);
+  const withoutCatalogNoise = removeCatalogNoise(withoutEmbeddedVendor);
+  const primaryClause = selectPrimaryClause(withoutCatalogNoise);
+  const withoutComparators = stripComparatorSuffix(primaryClause);
+  const fallbackLabel = buildFallbackProductLabel(
+    withoutComparators || withoutVendor,
+    vendorLabel
+  );
+  const withoutRangeDescriptors = stripRangeDescriptors(withoutComparators);
+  const withoutVersionKeywords = withoutRangeDescriptors.replace(
     /(\bversion\b|\bver\.?\b|\bv\d[\w.-]*|\bbuild\b|\brelease\b)/gi,
     ""
   );
-
-  const withoutSegments = stripVersionSegments(withoutVersionKeywords)
-    .replace(/[.,;:]+$/g, " ");
-
+  const withoutPlatforms = stripPlatformDescriptors(withoutVersionKeywords);
+  const withoutSegments = stripVersionSegments(withoutPlatforms).replace(/[.,;:]+$/g, " ");
   const withoutDescriptors = removeGenericProductDescriptors(withoutSegments);
-
-  const withReplacements = applyProductTokenReplacements(withoutDescriptors);
-
-  const cleaned = cleanWhitespace(withReplacements);
+  const withoutTrailingPlatforms = removeTrailingPlatformList(withoutDescriptors);
+  const withReplacements = applyProductTokenReplacements(withoutTrailingPlatforms);
+  const deduped = dedupeAdjacentTokens(withReplacements);
+  const cleaned = cleanWhitespace(deduped);
   if (!cleaned) {
-    const fallback = cleanWhitespace(withoutComparators || withoutVendor);
-    return applyProductSpecialCasing(toTitleCase(fallback || DEFAULT_PRODUCT));
+    return fallbackLabel;
   }
 
-  return applyProductSpecialCasing(toTitleCase(cleaned));
+  const specialCased = applyProductSpecialCasing(toTitleCase(cleaned));
+  const normalised = normaliseLinuxLabel(specialCased, vendorLabel);
+  const fallbackMeaningful =
+    /^(?:patch:?|n\/a|unknown|unspecified)$/i.test(fallbackLabel) ||
+    /^\d+$/.test(fallbackLabel)
+      ? DEFAULT_PRODUCT
+      : fallbackLabel;
+
+  if (
+    /^(?:patch:?|n\/a|unknown|unspecified)$/i.test(normalised) ||
+    /^\d+$/.test(normalised)
+  ) {
+    return fallbackMeaningful;
+  }
+
+  return normalised;
 };
 
 export const normaliseVendorProduct = (
