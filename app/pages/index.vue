@@ -61,6 +61,7 @@ const showTrendLines = ref(false);
 const showFilterSlideover = ref(false);
 const showFocusSlideover = ref(false);
 const showTrendSlideover = ref(false);
+const showMySoftwareSlideover = ref(false);
 const showRiskDetails = ref(false);
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
@@ -1260,7 +1261,6 @@ const columns: TableColumn<KevEntry>[] = [
             color="neutral"
             variant="soft"
             size="lg"
-            class="size-12 rounded-full shadow-lg"
             icon="i-lucide-sliders-horizontal"
             aria-label="Open filters"
             @click="showFilterSlideover = true"
@@ -1271,10 +1271,19 @@ const columns: TableColumn<KevEntry>[] = [
             color="neutral"
             variant="soft"
             size="lg"
-            class="size-12 rounded-full shadow-lg"
             icon="i-lucide-crosshair"
             aria-label="Open focus controls"
             @click="showFocusSlideover = true"
+          />
+        </UTooltip>
+        <UTooltip text="My software focus" placement="left">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="lg"
+            icon="i-lucide-monitor"
+            aria-label="Open my software focus"
+            @click="showMySoftwareSlideover = true"
           />
         </UTooltip>
         <UTooltip text="Trend explorer" placement="left">
@@ -1282,7 +1291,6 @@ const columns: TableColumn<KevEntry>[] = [
             color="neutral"
             variant="soft"
             size="lg"
-            class="size-12 rounded-full shadow-lg"
             icon="i-lucide-line-chart"
             aria-label="Open trend explorer"
             @click="showTrendSlideover = true"
@@ -1296,7 +1304,6 @@ const columns: TableColumn<KevEntry>[] = [
             color="primary"
             variant="solid"
             size="md"
-            class="rounded-full shadow-lg"
             icon="i-lucide-sliders-horizontal"
             aria-label="Open filters"
             @click="showFilterSlideover = true"
@@ -1307,10 +1314,19 @@ const columns: TableColumn<KevEntry>[] = [
             color="neutral"
             variant="soft"
             size="md"
-            class="rounded-full shadow-lg"
             icon="i-lucide-crosshair"
             aria-label="Open focus controls"
             @click="showFocusSlideover = true"
+          />
+        </UTooltip>
+        <UTooltip text="My software" placement="top">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="md"
+            icon="i-lucide-monitor"
+            aria-label="Open my software focus"
+            @click="showMySoftwareSlideover = true"
           />
         </UTooltip>
         <UTooltip text="Trend explorer" placement="top">
@@ -1318,7 +1334,6 @@ const columns: TableColumn<KevEntry>[] = [
             color="neutral"
             variant="soft"
             size="md"
-            class="rounded-full shadow-lg"
             icon="i-lucide-line-chart"
             aria-label="Open trend explorer"
             @click="showTrendSlideover = true"
@@ -1327,9 +1342,11 @@ const columns: TableColumn<KevEntry>[] = [
       </div>
 
       <div class="mx-auto w-full max-w-6xl space-y-5 px-4 pb-12 sm:px-6 lg:px-8">
-        <div class="sticky top-4 z-30 flex justify-center">
+        <div
+          class="pointer-events-none fixed inset-x-0 top-24 z-50 flex justify-center px-4 sm:px-6 lg:px-8"
+        >
           <div
-            class="flex w-full max-w-5xl flex-wrap items-center gap-3 rounded-full border border-neutral-200 bg-white/90 px-5 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:border-neutral-800 dark:bg-neutral-900/90"
+            class="pointer-events-auto flex w-full max-w-5xl flex-wrap items-center gap-3 rounded-full border border-neutral-200 bg-white/90 px-5 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:border-neutral-800 dark:bg-neutral-900/90"
           >
             <div class="flex flex-wrap gap-4 text-sm">
               <div
@@ -1374,251 +1391,7 @@ const columns: TableColumn<KevEntry>[] = [
             </UButton>
           </div>
         </div>
-
-        <TrackedSoftwareSummary
-          v-model="showOwnedOnly"
-          :tracked-products="trackedProducts"
-          :tracked-product-count="trackedProductCount"
-          :has-tracked-products="hasTrackedProducts"
-          :saving="savingTrackedProducts"
-          :save-error="trackedProductError"
-          @remove="removeTrackedProduct"
-          @clear="clearTrackedProducts"
-        />
-
-        <UCard>
-          <template #header>
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="space-y-1">
-                <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                  Risk snapshot
-                </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  Quick metrics for the current selection
-                </p>
-              </div>
-              <UBadge color="primary" variant="soft" class="text-sm font-semibold">
-                {{ matchingResultsLabel }} CVEs in view
-              </UBadge>
-            </div>
-          </template>
-
-          <div class="space-y-6">
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div
-                class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  High &amp; critical share
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ highSeverityShareLabel }}
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ highSeveritySummary }}
-                </p>
-              </div>
-              <div
-                class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Average CVSS
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ averageCvssLabel }}
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ averageCvssSummary }}
-                </p>
-              </div>
-              <div
-                class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Ransomware-linked CVEs
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ ransomwareShareLabel }}
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ ransomwareSummary }}
-                </p>
-              </div>
-              <div
-                class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
-              >
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Internet exposure share
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                  {{ internetExposedShareLabel }}
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {{ internetExposedSummary }}
-                </p>
-              </div>
-            </div>
-
-            <UCollapsible
-              v-model:open="showRiskDetails"
-              :unmount-on-hide="false"
-              class="flex flex-col gap-4"
-            >
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                :trailing-icon="showRiskDetails ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-                block
-              >
-                {{ showRiskDetails ? 'Hide detailed breakdown' : 'Show detailed breakdown' }}
-              </UButton>
-
-              <template #content>
-                <div class="grid gap-6 lg:grid-cols-5">
-                  <div class="space-y-4 lg:col-span-3">
-                    <div class="flex items-center justify-between gap-3">
-                      <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                        CVSS severity mix
-                      </p>
-                      <UBadge
-                        v-if="severityDistribution.length"
-                        color="neutral"
-                        variant="soft"
-                        class="text-xs font-semibold"
-                      >
-                        {{ matchingResultsLabel }} CVEs
-                      </UBadge>
-                    </div>
-                    <div v-if="severityDistribution.length" class="space-y-3">
-                      <div
-                        v-for="item in severityDistribution"
-                        :key="item.key"
-                        class="space-y-2 rounded-lg border border-neutral-200 bg-white/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40"
-                      >
-                        <div class="flex items-center justify-between gap-3">
-                          <div class="flex items-center gap-2">
-                            <UBadge :color="item.color" variant="soft" class="font-semibold">
-                              {{ item.label }}
-                            </UBadge>
-                            <span class="text-xs text-neutral-500 dark:text-neutral-400">
-                              {{ item.count.toLocaleString() }} CVEs
-                            </span>
-                          </div>
-                          <span class="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                            {{ item.percentLabel }}%
-                          </span>
-                        </div>
-                        <UProgress :model-value="item.percent" :max="100" :color="item.color" size="sm" />
-                      </div>
-                    </div>
-                    <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                      CVSS severity data is not available for the current selection.
-                    </p>
-                  </div>
-
-                  <div class="space-y-4 lg:col-span-2">
-                    <div class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-                      <div class="flex items-center justify-between gap-3">
-                        <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                          Latest additions
-                        </p>
-                        <UBadge
-                          v-if="latestAdditionSummaries.length"
-                          color="primary"
-                          variant="soft"
-                          class="text-xs font-semibold"
-                        >
-                          {{ latestAdditionSummaries.length }} shown
-                        </UBadge>
-                      </div>
-                      <div v-if="latestAdditionSummaries.length" class="space-y-3">
-                        <div
-                          v-for="item in latestAdditionSummaries"
-                          :key="item.entry.cveId"
-                          class="space-y-3 rounded-lg border border-neutral-200 bg-white/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/60"
-                        >
-                          <div class="flex items-center justify-between gap-3">
-                            <div class="space-y-1">
-                              <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                                {{ item.entry.vulnerabilityName }}
-                              </p>
-                              <p
-                                v-if="item.wellKnown"
-                                class="text-xs font-medium text-primary-600 dark:text-primary-400"
-                              >
-                                {{ item.wellKnown }}
-                              </p>
-                              <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ item.vendorProduct }}
-                              </p>
-                            </div>
-                            <UBadge color="primary" variant="soft" class="text-xs font-semibold">
-                              {{ item.dateLabel }}
-                            </UBadge>
-                          </div>
-
-                          <div class="flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                            <UBadge color="neutral" variant="soft" class="font-semibold">
-                              {{ item.entry.cveId }}
-                            </UBadge>
-                            <UBadge
-                              v-if="item.internetExposed"
-                              color="warning"
-                              variant="soft"
-                              class="font-semibold"
-                            >
-                              Internet-exposed
-                            </UBadge>
-                          </div>
-
-                          <div class="flex flex-wrap gap-2">
-                            <UBadge
-                              v-for="source in item.sources"
-                              :key="source"
-                              :color="sourceBadgeMap[source]?.color ?? 'neutral'"
-                              variant="soft"
-                              class="text-xs font-semibold"
-                            >
-                              {{ sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
-                            </UBadge>
-                          </div>
-
-                          <div class="flex justify-end">
-                            <UButton
-                              color="neutral"
-                              variant="ghost"
-                              size="xs"
-                              icon="i-lucide-eye"
-                              @click="openDetails(item.entry)"
-                            >
-                              View details
-                            </UButton>
-                          </div>
-                        </div>
-                      </div>
-                      <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                        No entries match the current filters yet.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </template>
-            </UCollapsible>
-          </div>
-        </UCard>
-
-        <UCard>
-          <div class="space-y-1">
-            <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-              Last catalog import
-            </p>
-            <p class="text-base font-semibold text-neutral-900 dark:text-neutral-50">
-              {{ catalogUpdatedAt }}
-            </p>
-          </div>
-        </UCard>
-
+        <div class="h-40 sm:h-44"></div>
         <UCard>
           <template #header>
             <div class="flex flex-col gap-1">
@@ -2481,13 +2254,268 @@ const columns: TableColumn<KevEntry>[] = [
     </USlideover>
 
     <USlideover
-      v-model:open="showTrendSlideover"
-      title="Trend explorer"
-      description="Visualise how the filtered vulnerabilities accumulate over time."
+      v-model:open="showMySoftwareSlideover"
+      title="My software focus"
+      description="Adjust tracked products and the owned-only view without leaving the table."
       :ui="{ content: 'max-w-3xl' }"
     >
       <template #body>
-        <FilteredTrendPanel v-model="showTrendLines" :entries="results" />
+        <TrackedSoftwareSummary
+          v-model="showOwnedOnly"
+          :tracked-products="trackedProducts"
+          :tracked-product-count="trackedProductCount"
+          :has-tracked-products="hasTrackedProducts"
+          :saving="savingTrackedProducts"
+          :save-error="trackedProductError"
+          @remove="removeTrackedProduct"
+          @clear="clearTrackedProducts"
+        />
+      </template>
+    </USlideover>
+
+    <USlideover
+      v-model:open="showTrendSlideover"
+      title="Trend explorer"
+      description="Visualise how the filtered vulnerabilities accumulate over time."
+      :ui="{ content: 'max-w-4xl' }"
+    >
+      <template #body>
+        <div class="space-y-6">
+          <UCard>
+            <template #header>
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="space-y-1">
+                  <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                    Risk snapshot
+                  </p>
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Quick metrics for the current selection
+                  </p>
+                </div>
+                <UBadge color="primary" variant="soft" class="text-sm font-semibold">
+                  {{ matchingResultsLabel }} CVEs in view
+                </UBadge>
+              </div>
+            </template>
+
+            <div class="space-y-6">
+              <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div
+                  class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+                >
+                  <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                    High &amp; critical share
+                  </p>
+                  <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+                    {{ highSeverityShareLabel }}
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ highSeveritySummary }}
+                  </p>
+                </div>
+                <div
+                  class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+                >
+                  <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                    Average CVSS
+                  </p>
+                  <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+                    {{ averageCvssLabel }}
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ averageCvssSummary }}
+                  </p>
+                </div>
+                <div
+                  class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+                >
+                  <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                    Ransomware-linked CVEs
+                  </p>
+                  <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+                    {{ ransomwareShareLabel }}
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ ransomwareSummary }}
+                  </p>
+                </div>
+                <div
+                  class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+                >
+                  <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                    Internet exposure share
+                  </p>
+                  <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+                    {{ internetExposedShareLabel }}
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ internetExposedSummary }}
+                  </p>
+                </div>
+              </div>
+
+              <UCollapsible
+                v-model:open="showRiskDetails"
+                :unmount-on-hide="false"
+                class="flex flex-col gap-4"
+              >
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  :trailing-icon="showRiskDetails ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                  block
+                >
+                  {{ showRiskDetails ? 'Hide detailed breakdown' : 'Show detailed breakdown' }}
+                </UButton>
+
+                <template #content>
+                  <div class="grid gap-6 lg:grid-cols-5">
+                    <div class="space-y-4 lg:col-span-3">
+                      <div class="flex items-center justify-between gap-3">
+                        <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                          CVSS severity mix
+                        </p>
+                        <UBadge
+                          v-if="severityDistribution.length"
+                          color="neutral"
+                          variant="soft"
+                          class="text-xs font-semibold"
+                        >
+                          {{ matchingResultsLabel }} CVEs
+                        </UBadge>
+                      </div>
+                      <div v-if="severityDistribution.length" class="space-y-3">
+                        <div
+                          v-for="item in severityDistribution"
+                          :key="item.key"
+                          class="space-y-2 rounded-lg border border-neutral-200 bg-white/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40"
+                        >
+                          <div class="flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2">
+                              <UBadge :color="item.color" variant="soft" class="font-semibold">
+                                {{ item.label }}
+                              </UBadge>
+                              <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ item.count.toLocaleString() }} CVEs
+                              </span>
+                            </div>
+                            <span class="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                              {{ item.percentLabel }}%
+                            </span>
+                          </div>
+                          <UProgress :model-value="item.percent" :max="100" :color="item.color" size="sm" />
+                        </div>
+                      </div>
+                      <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                        CVSS severity data is not available for the current selection.
+                      </p>
+                    </div>
+
+                    <div class="space-y-4 lg:col-span-2">
+                      <div class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
+                        <div class="flex items-center justify-between gap-3">
+                          <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                            Latest additions
+                          </p>
+                          <UBadge
+                            v-if="latestAdditionSummaries.length"
+                            color="primary"
+                            variant="soft"
+                            class="text-xs font-semibold"
+                          >
+                            {{ latestAdditionSummaries.length }} shown
+                          </UBadge>
+                        </div>
+                        <div v-if="latestAdditionSummaries.length" class="space-y-3">
+                          <div
+                            v-for="item in latestAdditionSummaries"
+                            :key="item.entry.cveId"
+                            class="space-y-3 rounded-lg border border-neutral-200 bg-white/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/60"
+                          >
+                            <div class="flex items-center justify-between gap-3">
+                              <div class="space-y-1">
+                                <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                  {{ item.entry.vulnerabilityName }}
+                                </p>
+                                <p
+                                  v-if="item.wellKnown"
+                                  class="text-xs font-medium text-primary-600 dark:text-primary-400"
+                                >
+                                  {{ item.wellKnown }}
+                                </p>
+                                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                  {{ item.vendorProduct }}
+                                </p>
+                              </div>
+                              <UBadge color="primary" variant="soft" class="text-xs font-semibold">
+                                {{ item.dateLabel }}
+                              </UBadge>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                              <UBadge color="neutral" variant="soft" class="font-semibold">
+                                {{ item.entry.cveId }}
+                              </UBadge>
+                              <UBadge
+                                v-if="item.internetExposed"
+                                color="warning"
+                                variant="soft"
+                                class="font-semibold"
+                              >
+                                Internet-exposed
+                              </UBadge>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2">
+                              <UBadge
+                                v-for="source in item.sources"
+                                :key="source"
+                                :color="sourceBadgeMap[source]?.color ?? 'neutral'"
+                                variant="soft"
+                                class="text-xs font-semibold"
+                              >
+                                {{ sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
+                              </UBadge>
+                            </div>
+
+                            <div class="flex justify-end">
+                              <UButton
+                                color="neutral"
+                                variant="ghost"
+                                size="xs"
+                                icon="i-lucide-eye"
+                                @click="openDetails(item.entry)"
+                              >
+                                View details
+                              </UButton>
+                            </div>
+                          </div>
+                        </div>
+                        <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                          No entries match the current filters yet.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </UCollapsible>
+            </div>
+          </UCard>
+
+          <FilteredTrendPanel v-model="showTrendLines" :entries="results" />
+
+          <UCard>
+            <div class="space-y-1">
+              <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                Last catalog import
+              </p>
+              <p class="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+                {{ catalogUpdatedAt }}
+              </p>
+            </div>
+          </UCard>
+        </div>
       </template>
     </USlideover>
   </UPageBody>
