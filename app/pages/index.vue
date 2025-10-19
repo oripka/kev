@@ -1493,9 +1493,9 @@ const columns: TableColumn<KevEntrySummary>[] = [
 
 <template>
   <div class="grid grid-cols-12">
-    <div class="col-span-3 ml-8 mt-12">
+    <div class="col-span-3 ml-8 mt-36">
       <div class="text-xl font-bold">Filters</div>
-
+      <USeparator class="mt-4"  />
       <div
         class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
