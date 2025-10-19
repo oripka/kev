@@ -29,6 +29,63 @@ const removeDiacritics = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/ß/g, "ss");
 
+const applyProductTokenReplacements = (value: string): string => {
+  const patterns: Array<[RegExp, string]> = [
+    [/\bmac\s*os\s*x\b/gi, "macos"],
+    [/\bmac\s*os\b/gi, "macos"],
+    [/\bos\s*x\b/gi, "macos"],
+    [/\bipad\s*os\b/gi, "ipados"],
+    [/\biphone\s*os\b/gi, "ios"],
+    [/\bvision\s*os\b/gi, "visionos"],
+    [/\bwatch\s*os\b/gi, "watchos"],
+    [/\btv\s*os\b/gi, "tvos"],
+    [/\s*&\s*/g, " and "],
+    [/\s*\/\s*/g, " / "],
+  ];
+
+  return patterns.reduce(
+    (result, [pattern, replacement]) => result.replace(pattern, replacement),
+    value
+  );
+};
+
+const removeGenericProductDescriptors = (value: string): string => {
+  const genericPatterns: RegExp[] = [
+    /\bunspecified\b/gi,
+    /\bnot\s+specified\b/gi,
+    /\bnot\s+applicable\b/gi,
+    /\bunknown\b/gi,
+    /\bn\/?a\b/gi,
+    /\btbd\b/gi,
+  ];
+
+  return genericPatterns.reduce(
+    (result, pattern) => result.replace(pattern, " "),
+    value
+  );
+};
+
+const applyProductSpecialCasing = (value: string): string => {
+  const replacements: Array<[RegExp, string]> = [
+    [/\bIos\b/g, "iOS"],
+    [/\bIpados\b/g, "iPadOS"],
+    [/\bMacos\b/g, "macOS"],
+    [/\bTvos\b/g, "tvOS"],
+    [/\bWatchos\b/g, "watchOS"],
+    [/\bVisionos\b/g, "visionOS"],
+    [/\bIphone\b/g, "iPhone"],
+    [/\bIpad\b/g, "iPad"],
+    [/\bIpod\b/g, "iPod"],
+    [/\bAnd\b/g, "and"],
+    [/\bOr\b/g, "or"],
+  ];
+
+  return replacements.reduce(
+    (result, [pattern, replacement]) => result.replace(pattern, replacement),
+    value
+  );
+};
+
 const slugify = (value: string, fallback: string) => {
   const cleaned = removeDiacritics(value)
     .toLowerCase()
@@ -109,14 +166,20 @@ const normaliseProductLabel = (
     ""
   );
 
-  const withoutSegments = stripVersionSegments(withoutVersionKeywords);
+  const withoutSegments = stripVersionSegments(withoutVersionKeywords)
+    .replace(/[.,;:]+$/g, " ");
 
-  const cleaned = cleanWhitespace(withoutSegments);
+  const withoutDescriptors = removeGenericProductDescriptors(withoutSegments);
+
+  const withReplacements = applyProductTokenReplacements(withoutDescriptors);
+
+  const cleaned = cleanWhitespace(withReplacements);
   if (!cleaned) {
-    return toTitleCase(cleanWhitespace(withoutComparators || withoutVendor));
+    const fallback = cleanWhitespace(withoutComparators || withoutVendor);
+    return applyProductSpecialCasing(toTitleCase(fallback || DEFAULT_PRODUCT));
   }
 
-  return toTitleCase(cleaned);
+  return applyProductSpecialCasing(toTitleCase(cleaned));
 };
 
 export const normaliseVendorProduct = (
