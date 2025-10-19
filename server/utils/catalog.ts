@@ -4,6 +4,12 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { CatalogSource, KevEntry, KevEntrySummary } from '~/types'
 import { ensureCatalogTables, setMetadata } from './sqlite'
 
+type RebuildCatalogOptions = {
+  onStart?(total: number): void
+  onProgress?(completed: number, total: number): void
+  onComplete?(total: number): void
+}
+
 type VulnerabilityEntryRow = {
   id: string
   cve_id: string | null
@@ -536,7 +542,10 @@ const toBooleanFlag = (value: boolean): number => (value ? 1 : 0)
 const toKnownRansomwareFlag = (value: string | null): number =>
   value?.toLowerCase().includes('known') ? 1 : 0
 
-export const rebuildCatalog = (db: SqliteDatabase) => {
+export const rebuildCatalog = (
+  db: SqliteDatabase,
+  options: RebuildCatalogOptions = {}
+) => {
   ensureCatalogTables(db)
   const entryRows = db
     .prepare<VulnerabilityEntryRow>(

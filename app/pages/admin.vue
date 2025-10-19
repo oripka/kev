@@ -506,7 +506,7 @@ const catalogRangeLabel = computed(() => {
                 <UButton
                   color="error"
                   variant="soft"
-                  icon="i-lucide-database-off"
+                  icon="i-lucide-trash"
                   :loading="resettingDatabase"
                   :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning"
                   @click="handleResetDatabase"
