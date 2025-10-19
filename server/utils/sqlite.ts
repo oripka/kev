@@ -57,6 +57,23 @@ CREATE TABLE IF NOT EXISTS enisa_entries (
   source_url TEXT,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id TEXT PRIMARY KEY,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_product_filters (
+  session_id TEXT NOT NULL,
+  vendor_key TEXT NOT NULL,
+  vendor_name TEXT NOT NULL,
+  product_key TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (session_id, product_key),
+  FOREIGN KEY (session_id) REFERENCES user_sessions(id) ON DELETE CASCADE
+);
 `
 
 const DB_FILENAME = 'kev.sqlite'

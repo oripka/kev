@@ -75,7 +75,6 @@ const domainRules: Array<{
 const matchesAny = (value: string, patterns: RegExp[]) =>
   patterns.some(pattern => pattern.test(value))
 
-<<<<<<< ours
 type CvssVectorTraits = {
   attackVector?: 'P' | 'L' | 'A' | 'N'
   privilegesRequired?: 'N' | 'L' | 'H'
@@ -112,7 +111,6 @@ const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
     userInteraction: metrics.UI as CvssVectorTraits['userInteraction'] | undefined
   }
 }
-=======
 const edgeStrongProductPatterns: RegExp[] = [
   /(citrix (?:adc|netscaler|gateway|workspace))/i,
   /(netscaler)/i,
@@ -169,7 +167,6 @@ const edgeMailPatterns: RegExp[] = [
   /(outlook web access|owa)/i,
   /(exchange web services|ews)/i
 ]
->>>>>>> theirs
 
 const webProductPatterns: RegExp[] = [
   /(jenkins)/i,

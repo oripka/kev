@@ -11,7 +11,8 @@ import {
 import { format, parseISO } from "date-fns";
 import type { SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
-import type { KevEntry } from "~/types";
+import { useTrackedProducts } from "~/composables/useTrackedProducts";
+import type { KevCountDatum, KevEntry } from "~/types";
 
 const formatTimestamp = (value: string) => {
   const parsed = parseISO(value);
@@ -79,6 +80,97 @@ onBeforeUnmount(() => {
   }
 });
 
+const {
+  trackedProducts,
+  trackedProductSet,
+  addTrackedProduct,
+  removeTrackedProduct,
+  clearTrackedProducts,
+  showOwnedOnly,
+  toggleShowOwnedOnly,
+  isSaving: savingTrackedProducts,
+  saveError: trackedProductError,
+  isReady: trackedProductsReady,
+} = useTrackedProducts();
+
+const trackedProductKeys = computed(() =>
+  trackedProducts.value.map((item) => item.productKey)
+);
+
+const trackedProductCount = computed(() => trackedProductKeys.value.length);
+
+const hasTrackedProducts = computed(() => trackedProductCount.value > 0);
+
+const showOwnedOnlyEffective = computed(
+  () => trackedProductsReady.value && showOwnedOnly.value
+);
+
+const productMetaMap = computed(() => {
+  const map = new Map<
+    string,
+    { productKey: string; productName: string; vendorKey: string; vendorName: string }
+  >();
+
+  productCounts.value.forEach((item) => {
+    if (!item.key) {
+      return;
+    }
+
+    map.set(item.key, {
+      productKey: item.key,
+      productName: item.name,
+      vendorKey: item.vendorKey ?? "vendor-unknown",
+      vendorName: item.vendorName ?? "Unknown",
+    });
+  });
+
+  trackedProducts.value.forEach((tracked) => {
+    if (!map.has(tracked.productKey)) {
+      map.set(tracked.productKey, {
+        productKey: tracked.productKey,
+        productName: tracked.productName,
+        vendorKey: tracked.vendorKey,
+        vendorName: tracked.vendorName,
+      });
+    }
+  });
+
+  return map;
+});
+
+const productSelectOptions = computed<SelectMenuItem<string>[]>(() =>
+  Array.from(productMetaMap.value.values())
+    .map((item) => ({
+      label: item.productName,
+      value: item.productKey,
+      description: item.vendorName,
+    }))
+    .sort((first, second) => first.label.localeCompare(second.label))
+);
+
+const selectedProductKey = ref<string | null>(null);
+
+const addSelectedTrackedProduct = () => {
+  const key = selectedProductKey.value;
+  if (!key) {
+    return;
+  }
+
+  const meta = productMetaMap.value.get(key);
+  if (!meta) {
+    return;
+  }
+
+  addTrackedProduct({
+    productKey: meta.productKey,
+    productName: meta.productName,
+    vendorKey: meta.vendorKey,
+    vendorName: meta.vendorName,
+  });
+
+  selectedProductKey.value = null;
+};
+
 const filterParams = computed(() => {
   const [startYear, endYear] = yearRange.value;
   const [cvssStart, cvssEnd] = cvssRange.value;
@@ -94,7 +186,12 @@ const filterParams = computed(() => {
     startYear,
     endYear,
     wellKnownOnly: showWellKnownOnly.value ? true : undefined,
+    ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
   };
+
+  if (showOwnedOnlyEffective.value && trackedProductKeys.value.length) {
+    params.products = trackedProductKeys.value.join(",");
+  }
 
   if (selectedSource.value !== "all") {
     params.source = selectedSource.value;
@@ -208,10 +305,12 @@ const hasActiveFilters = computed(() => {
   const hasEpssFilter =
     epssRange.value[0] > defaultEpssRange[0] || epssRange.value[1] < defaultEpssRange[1];
   const hasSourceFilter = selectedSource.value !== "all";
+  const hasTrackedFilter = showOwnedOnlyEffective.value;
 
   return Boolean(
     hasSearch ||
       hasDomainFilters ||
+      hasTrackedFilter ||
       showWellKnownOnly.value ||
       hasCustomYearRange.value ||
       hasCvssFilter ||
@@ -386,14 +485,26 @@ const productCounts = computed(() => counts.value.product);
 
 const results = computed(() => {
   const term = normalizedSearchTerm.value;
+  const trackedKeys = trackedProductSet.value;
+
+  let collection = entries.value;
+
+  if (showOwnedOnlyEffective.value) {
+    if (!trackedKeys.size) {
+      return [];
+    }
+
+    collection = collection.filter((entry) => trackedKeys.has(entry.productKey));
+  }
+
   if (!term) {
-    return entries.value;
+    return collection;
   }
 
   const includesTerm = (value: string | null | undefined) =>
     typeof value === "string" && value.toLowerCase().includes(term);
 
-  return entries.value.filter((entry) => {
+  return collection.filter((entry) => {
     return (
       includesTerm(entry.cveId) ||
       includesTerm(entry.vendor) ||
@@ -418,6 +529,7 @@ const resetFilters = () => {
   searchInput.value = "";
   debouncedSearch.value = "";
   showWellKnownOnly.value = false;
+  showOwnedOnly.value = false;
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
   selectedSource.value = "all";
@@ -425,10 +537,13 @@ const resetFilters = () => {
 };
 
 type ProgressDatum = {
+  key: string;
   name: string;
   count: number;
   percent: number;
   percentLabel: string;
+  vendorKey?: string;
+  vendorName?: string;
 };
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
@@ -640,9 +755,7 @@ const viewNewestDetails = () => {
   }
 };
 
-const toProgressStats = (
-  counts: { name: string; count: number }[]
-): ProgressDatum[] => {
+const toProgressStats = (counts: KevCountDatum[]): ProgressDatum[] => {
   if (!counts.length) {
     return [];
   }
@@ -655,9 +768,13 @@ const toProgressStats = (
   return counts.map((item) => {
     const percent = (item.count / total) * 100;
     return {
-      ...item,
+      key: item.key,
+      name: item.name,
+      count: item.count,
       percent,
       percentLabel: percentFormatter.format(percent),
+      vendorKey: item.vendorKey,
+      vendorName: item.vendorName,
     };
   });
 };
@@ -711,6 +828,30 @@ const filterLabels: Record<FilterKey, string> = {
   product: "Product",
 };
 
+const resolveFilterValueLabel = (key: FilterKey, value: string) => {
+  if (key === "vendor") {
+    const fromCounts = vendorCounts.value.find((item) => item.key === value)?.name;
+    if (fromCounts) {
+      return fromCounts;
+    }
+
+    const fromProducts = productMetaMap.value.get(value)?.vendorName;
+    return fromProducts ?? value;
+  }
+
+  if (key === "product") {
+    const fromCounts = productCounts.value.find((item) => item.key === value)?.name;
+    if (fromCounts) {
+      return fromCounts;
+    }
+
+    const fromMap = productMetaMap.value.get(value)?.productName;
+    return fromMap ?? value;
+  }
+
+  return value;
+};
+
 type ActiveFilter = {
   key:
     | FilterKey
@@ -719,7 +860,8 @@ type ActiveFilter = {
     | "yearRange"
     | "source"
     | "cvssRange"
-    | "epssRange";
+    | "epssRange"
+    | "owned";
   label: string;
   value: string;
 };
@@ -735,12 +877,23 @@ const activeFilters = computed<ActiveFilter[]>(() => {
   (Object.keys(filterLabels) as FilterKey[]).forEach((key) => {
     const value = filters[key];
     if (value) {
-      items.push({ key, label: filterLabels[key], value });
+      items.push({
+        key,
+        label: filterLabels[key],
+        value: resolveFilterValueLabel(key, value),
+      });
     }
   });
 
   if (showWellKnownOnly.value) {
     items.push({ key: "wellKnown", label: "Focus", value: "Well-known CVEs" });
+  }
+
+  if (showOwnedOnlyEffective.value) {
+    const summary = hasTrackedProducts.value
+      ? `${trackedProductCount.value} selected`
+      : "No products yet";
+    items.push({ key: "owned", label: "Focus", value: `My software · ${summary}` });
   }
 
   if (hasCustomYearRange.value) {
@@ -849,6 +1002,11 @@ const clearFilter = (
     return;
   }
 
+  if (key === "owned") {
+    showOwnedOnly.value = false;
+    return;
+  }
+
   filters[key] = null;
   resetDownstreamFilters(key);
 };
@@ -860,8 +1018,17 @@ const columns: TableColumn<KevEntry>[] = [
     cell: ({ row }) => {
       const description = row.original.description || "No description provided.";
       const wellKnownLabel = getWellKnownCveName(row.original.cveId);
-      const descriptionChildren = [] as Array<ReturnType<typeof h>>;
       const badgeRowChildren = [] as Array<ReturnType<typeof h>>;
+
+      const entry = row.original;
+      const isTracked =
+        trackedProductsReady.value && trackedProductSet.value.has(entry.productKey);
+      const hasServerSideRce = entry.exploitLayers.some((layer) =>
+        layer.startsWith("RCE · Server-side")
+      );
+      const hasTrivialServerSide = entry.exploitLayers.includes(
+        "RCE · Server-side Non-memory"
+      );
 
       for (const source of row.original.sources) {
         const meta = sourceBadgeMap[source];
@@ -892,28 +1059,38 @@ const columns: TableColumn<KevEntry>[] = [
         );
       }
 
-      if (badgeRowChildren.length) {
-        descriptionChildren.push(
+      if (isTracked) {
+        badgeRowChildren.push(
           h(
-            "div",
-            { class: "flex flex-wrap items-center gap-2" },
-            badgeRowChildren
+            UBadge,
+            {
+              color: "warning",
+              variant: "soft",
+              class: "shrink-0 text-xs font-semibold",
+            },
+            () => "My software"
           )
         );
       }
 
-      descriptionChildren.push(
-        h(
-          "span",
-          {
-            class:
-              "text-sm text-neutral-500 dark:text-neutral-400 max-w-xl whitespace-normal break-words text-pretty leading-relaxed",
-          },
-          description
-        )
-      );
+      if (hasServerSideRce) {
+        badgeRowChildren.push(
+          h(
+            UBadge,
+            {
+              color: "error",
+              variant: "soft",
+              class: "shrink-0 text-xs font-semibold",
+            },
+            () =>
+              hasTrivialServerSide
+                ? "Server-side RCE · Non-memory"
+                : "Server-side RCE"
+          )
+        );
+      }
 
-      return h("div", { class: "space-y-1" }, [
+      const children: Array<ReturnType<typeof h>> = [
         h(
           "p",
           {
@@ -922,15 +1099,30 @@ const columns: TableColumn<KevEntry>[] = [
           },
           row.original.vulnerabilityName
         ),
+      ];
+
+      if (badgeRowChildren.length) {
+        children.push(
+          h(
+            "div",
+            { class: "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400" },
+            badgeRowChildren
+          )
+        );
+      }
+
+      children.push(
         h(
           "p",
           {
             class:
-              "flex flex-wrap items-start gap-2 text-neutral-500 dark:text-neutral-400",
+              "text-sm text-neutral-500 dark:text-neutral-400 max-w-xl whitespace-normal break-words text-pretty leading-relaxed",
           },
-          descriptionChildren
-        ),
-      ]);
+          description
+        )
+      );
+
+      return h("div", { class: "space-y-1" }, children);
     },
   },
   {
@@ -1060,6 +1252,131 @@ const columns: TableColumn<KevEntry>[] = [
 
     <UPageBody>
       <div class="grid grid-cols-1 gap-3 w-full px-8 mx-auto">
+        <UCard>
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="space-y-1">
+                <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                  My software focus
+                </p>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Track the products you care about and spotlight relevant CVEs instantly.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <USwitch
+                  v-model="showOwnedOnly"
+                  :disabled="!hasTrackedProducts"
+                  color="primary"
+                  size="sm"
+                  aria-label="Show only products I track"
+                />
+                <div class="flex flex-col leading-tight">
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                    Show only my software
+                  </span>
+                  <span
+                    v-if="!hasTrackedProducts"
+                    class="text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    Add at least one product to enable this filter
+                  </span>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-end">
+              <UFormField
+                label="Add a product"
+                help="Search the catalog to add it to your watch list"
+              >
+                <USelectMenu
+                  v-model="selectedProductKey"
+                  :items="productSelectOptions"
+                  searchable
+                  placeholder="Search products…"
+                  :disabled="!productSelectOptions.length"
+                />
+              </UFormField>
+
+              <UButton
+                color="primary"
+                icon="i-lucide-plus"
+                :disabled="!selectedProductKey"
+                @click="addSelectedTrackedProduct"
+              >
+                Add to my software
+              </UButton>
+            </div>
+
+            <div v-if="trackedProducts.length" class="flex flex-wrap gap-2">
+              <div
+                v-for="product in trackedProducts"
+                :key="product.productKey"
+                class="group inline-flex items-center gap-2 rounded-full border border-primary-200/70 bg-primary-50 px-3 py-1 text-sm dark:border-primary-500/40 dark:bg-primary-500/10"
+              >
+                <div class="flex flex-col leading-tight">
+                  <span class="font-semibold text-primary-700 dark:text-primary-200">
+                    {{ product.productName }}
+                  </span>
+                  <span class="text-xs text-primary-600/80 dark:text-primary-300/80">
+                    {{ product.vendorName }}
+                  </span>
+                </div>
+                <UButton
+                  color="primary"
+                  variant="soft"
+                  size="2xs"
+                  icon="i-lucide-x"
+                  aria-label="Remove product"
+                  @click="removeTrackedProduct(product.productKey)"
+                />
+              </div>
+            </div>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+              No tracked products yet. Use the selector above to build your list.
+            </p>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400">
+              <div class="flex items-center gap-2">
+                <UBadge
+                  v-if="savingTrackedProducts"
+                  color="primary"
+                  variant="soft"
+                  class="font-semibold"
+                >
+                  Saving…
+                </UBadge>
+                <span v-else>
+                  {{ trackedProductCount.toLocaleString() }} product{{
+                    trackedProductCount === 1 ? "" : "s"
+                  }} tracked locally.
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span
+                  v-if="trackedProductError"
+                  class="text-error-500 dark:text-error-400"
+                >
+                  {{ trackedProductError }}
+                </span>
+                <UButton
+                  v-if="trackedProducts.length"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-eraser"
+                  @click="clearTrackedProducts"
+                >
+                  Clear list
+                </UButton>
+              </div>
+            </div>
+          </div>
+        </UCard>
+
         <UCard>
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -1489,10 +1806,10 @@ const columns: TableColumn<KevEntry>[] = [
               <div v-if="domainStats.length" class="space-y-3">
                 <button
                   v-for="stat in domainStats"
-                  :key="stat.name"
+                  :key="stat.key"
                   type="button"
-                  @click="toggleFilter('domain', stat.name)"
-                  :aria-pressed="filters.domain === stat.name"
+                  @click="toggleFilter('domain', stat.key)"
+                  :aria-pressed="filters.domain === stat.key"
                   :class="[
                     'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:focus-visible:ring-emerald-600',
                     filters.domain === stat.name
@@ -1504,7 +1821,7 @@ const columns: TableColumn<KevEntry>[] = [
                     <span
                       :class="[
                         'truncate font-medium',
-                        filters.domain === stat.name
+                        filters.domain === stat.key
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-neutral-900 dark:text-neutral-50',
                       ]"
@@ -1551,10 +1868,10 @@ const columns: TableColumn<KevEntry>[] = [
               <div v-if="exploitLayerStats.length" class="space-y-3">
                 <button
                   v-for="stat in exploitLayerStats"
-                  :key="stat.name"
+                  :key="stat.key"
                   type="button"
-                  @click="toggleFilter('exploit', stat.name)"
-                  :aria-pressed="filters.exploit === stat.name"
+                  @click="toggleFilter('exploit', stat.key)"
+                  :aria-pressed="filters.exploit === stat.key"
                   :class="[
                     'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:focus-visible:ring-amber-600',
                     filters.exploit === stat.name
@@ -1566,7 +1883,7 @@ const columns: TableColumn<KevEntry>[] = [
                     <span
                       :class="[
                         'truncate font-medium',
-                        filters.exploit === stat.name
+                        filters.exploit === stat.key
                           ? 'text-amber-600 dark:text-amber-400'
                           : 'text-neutral-900 dark:text-neutral-50',
                       ]"
@@ -1613,13 +1930,13 @@ const columns: TableColumn<KevEntry>[] = [
               <div v-if="vulnerabilityStats.length" class="space-y-3">
                 <button
                   v-for="stat in vulnerabilityStats"
-                  :key="stat.name"
+                  :key="stat.key"
                   type="button"
-                  @click="toggleFilter('vulnerability', stat.name)"
-                  :aria-pressed="filters.vulnerability === stat.name"
+                  @click="toggleFilter('vulnerability', stat.key)"
+                  :aria-pressed="filters.vulnerability === stat.key"
                   :class="[
                     'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:focus-visible:ring-rose-600',
-                    filters.vulnerability === stat.name
+                        filters.vulnerability === stat.key
                       ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
                       : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
                   ]"
@@ -1693,22 +2010,22 @@ const columns: TableColumn<KevEntry>[] = [
               <div v-if="topVendorStats.length" class="space-y-3">
                 <button
                   v-for="stat in topVendorStats"
-                  :key="stat.name"
+                  :key="stat.key"
                   type="button"
-                  @click="toggleFilter('vendor', stat.name)"
-                  :aria-pressed="filters.vendor === stat.name"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
-                    filters.vendor === stat.name
-                      ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
+                  @click="toggleFilter('vendor', stat.key)"
+                  :aria-pressed="filters.vendor === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
+                      filters.vendor === stat.key
+                        ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
                 >
                   <div class="flex items-center justify-between gap-3 text-sm">
                     <span
                       :class="[
                         'truncate font-medium',
-                        filters.vendor === stat.name
+                        filters.vendor === stat.key
                           ? 'text-primary-600 dark:text-primary-400'
                           : 'text-neutral-900 dark:text-neutral-50',
                       ]"
@@ -1745,32 +2062,40 @@ const columns: TableColumn<KevEntry>[] = [
               <div v-if="topProductStats.length" class="space-y-3">
                 <button
                   v-for="stat in topProductStats"
-                  :key="stat.name"
+                  :key="stat.key"
                   type="button"
-                  @click="toggleFilter('product', stat.name)"
-                  :aria-pressed="filters.product === stat.name"
-                  :class="[
-                    'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
-                    filters.product === stat.name
-                      ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
-                      : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
-                  ]"
+                  @click="toggleFilter('product', stat.key)"
+                  :aria-pressed="filters.product === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
+                      filters.product === stat.key
+                        ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
                 >
-                  <div class="flex items-center justify-between gap-3 text-sm">
-                    <span
-                      :class="[
-                        'truncate font-medium',
-                        filters.product === stat.name
-                          ? 'text-secondary-600 dark:text-secondary-400'
-                          : 'text-neutral-900 dark:text-neutral-50',
-                      ]"
-                    >
-                      {{ stat.name }}
-                    </span>
-                    <span class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
-                      {{ stat.count }} · {{ stat.percentLabel }}%
-                    </span>
-                  </div>
+                    <div class="flex items-center justify-between gap-3 text-sm">
+                      <div class="min-w-0">
+                        <p
+                          :class="[
+                            'truncate font-medium',
+                            filters.product === stat.key
+                              ? 'text-secondary-600 dark:text-secondary-400'
+                              : 'text-neutral-900 dark:text-neutral-50',
+                          ]"
+                        >
+                          {{ stat.name }}
+                        </p>
+                        <p
+                          v-if="stat.vendorName"
+                          class="truncate text-xs text-neutral-500 dark:text-neutral-400"
+                        >
+                          {{ stat.vendorName }}
+                        </p>
+                      </div>
+                      <span class="text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                        {{ stat.count }} · {{ stat.percentLabel }}%
+                      </span>
+                    </div>
                   <UProgress :model-value="stat.percent" :max="100" color="secondary" size="sm" />
                 </button>
               </div>

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
+import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { KevEntry } from '~/types'
 import { fetchCvssMetrics } from '../utils/cvss'
 import { importEnisaCatalog } from '../utils/enisa'
@@ -93,12 +94,18 @@ export default defineEventHandler(async () => {
 
     const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => {
       const cveId = item.cveID
+      const normalised = normaliseVendorProduct({
+        vendor: item.vendorProject,
+        product: item.product
+      })
       return {
         id: `kev:${cveId}`,
         sources: ['kev'],
         cveId,
-        vendor: item.vendorProject ?? 'Unknown',
-        product: item.product ?? 'Unknown',
+        vendor: normalised.vendor.label,
+        vendorKey: normalised.vendor.key,
+        product: normalised.product.label,
+        productKey: normalised.product.key,
         vulnerabilityName: item.vulnerabilityName ?? 'Unknown vulnerability',
         description: item.shortDescription ?? '',
         requiredAction: item.requiredAction ?? null,

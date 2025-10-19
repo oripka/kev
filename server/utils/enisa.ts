@@ -2,6 +2,7 @@ import { ofetch } from 'ofetch'
 import type { Database as SqliteDatabase } from 'better-sqlite3'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry, KevEntry } from '~/types'
+import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { setMetadata } from './sqlite'
 import { setImportPhase } from './import-progress'
 
@@ -132,6 +133,7 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
 
   const vendor = toVendorLabel(item.enisaIdVendor?.[0])
   const product = toProductLabel(item.enisaIdProduct?.[0])
+  const normalised = normaliseVendorProduct({ vendor, product })
 
   const exploitedSince = parseDate(item.exploitedSince)
   const datePublished = parseDate(item.datePublished)
@@ -154,8 +156,10 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
     id: `enisa:${uniqueId}`,
     sources: ['enisa'],
     cveId,
-    vendor,
-    product,
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
     vulnerabilityName: aliases[0] ?? item.id,
     description: item.description?.trim() ?? '',
     requiredAction: null,

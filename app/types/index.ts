@@ -52,7 +52,9 @@ export type KevEntry = {
   cveId: string
   sources: CatalogSource[]
   vendor: string
+  vendorKey: string
   product: string
+  productKey: string
   vulnerabilityName: string
   description: string
   requiredAction: string | null
@@ -79,8 +81,18 @@ export type KevEntry = {
 }
 
 export type KevCountDatum = {
+  key: string
   name: string
   count: number
+  vendorKey?: string
+  vendorName?: string
+}
+
+export type TrackedProduct = {
+  productKey: string
+  productName: string
+  vendorKey: string
+  vendorName: string
 }
 
 export type KevResponse = {

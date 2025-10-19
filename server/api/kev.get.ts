@@ -1,5 +1,6 @@
 import { getQuery } from 'h3'
 import { lookupCveName } from '~/utils/cveToNameMap'
+import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type {
   CatalogSource,
   KevCountDatum,
@@ -61,7 +62,10 @@ type EnisaRow = {
 type CatalogQuery = {
   search?: string
   vendor?: string
+  vendorKeys?: string[]
   product?: string
+  productKeys?: string[]
+  ownedOnly?: boolean
   domain?: KevDomainCategory
   exploit?: KevExploitLayer
   vulnerability?: KevVulnerabilityCategory
@@ -262,13 +266,16 @@ const toKevEntry = (row: KevRow): KevEntry => {
   const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
   const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
   const vulnerabilityCategories = parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
+  const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
 
   return {
     id: `kev:${cveId}`,
     cveId,
     sources: ['kev'],
-    vendor: ensureString(row.vendor, DEFAULT_VENDOR),
-    product: ensureString(row.product, DEFAULT_PRODUCT),
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
     vulnerabilityName: ensureString(row.vulnerability_name, cveId || DEFAULT_VULNERABILITY),
     description: row.description ?? '',
     requiredAction: row.required_action ?? null,
@@ -309,13 +316,16 @@ const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
   const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
   const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
   const vulnerabilityCategories = parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
+  const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
 
   return {
     id: `enisa:${row.enisa_id}`,
     cveId,
     sources: ['enisa'],
-    vendor: ensureString(row.vendor, DEFAULT_VENDOR),
-    product: ensureString(row.product, DEFAULT_PRODUCT),
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
     vulnerabilityName: ensureString(row.vulnerability_name, aliases[0] ?? cveId ?? DEFAULT_VULNERABILITY),
     description: row.description ?? '',
     requiredAction: null,
@@ -357,6 +367,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     existing.vendor !== DEFAULT_VENDOR ? existing.vendor : incoming.vendor
   const product =
     existing.product !== DEFAULT_PRODUCT ? existing.product : incoming.product
+  const normalised = normaliseVendorProduct({ vendor, product })
   const vulnerabilityName =
     existing.vulnerabilityName !== DEFAULT_VULNERABILITY
       ? existing.vulnerabilityName
@@ -407,8 +418,10 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   return {
     ...existing,
     sources,
-    vendor,
-    product,
+    vendor: normalised.vendor.label,
+    vendorKey: normalised.vendor.key,
+    product: normalised.product.label,
+    productKey: normalised.product.key,
     vulnerabilityName,
     description,
     requiredAction,
@@ -492,6 +505,34 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     return undefined
   }
 
+  const getList = (key: string): string[] | undefined => {
+    const value = raw[key]
+
+    const toItems = (source: unknown): string[] => {
+      if (typeof source === 'string') {
+        return source
+          .split(',')
+          .map(item => item.trim())
+          .filter(Boolean)
+      }
+
+      if (Array.isArray(source)) {
+        return source
+          .map(item => (typeof item === 'string' ? item.trim() : ''))
+          .filter(Boolean)
+      }
+
+      return []
+    }
+
+    const items = toItems(value)
+    if (!items.length) {
+      return undefined
+    }
+
+    return Array.from(new Set(items))
+  }
+
   const filters: CatalogQuery = {}
 
   const search = getString('search')
@@ -499,14 +540,23 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.search = search
   }
 
+  const ownedOnly = getString('ownedOnly')
+  if (ownedOnly) {
+    filters.ownedOnly = ownedOnly.toLowerCase() === 'true'
+  }
+
   const vendor = getString('vendor')
-  if (vendor) {
-    filters.vendor = vendor
+  const vendors = getList('vendors')
+  const vendorKeys = Array.from(new Set([...(vendor ? [vendor] : []), ...(vendors ?? [])])).filter(Boolean)
+  if (vendorKeys.length) {
+    filters.vendorKeys = vendorKeys
   }
 
   const product = getString('product')
-  if (product) {
-    filters.product = product
+  const products = getList('products')
+  const productKeys = Array.from(new Set([...(product ? [product] : []), ...(products ?? [])])).filter(Boolean)
+  if (productKeys.length) {
+    filters.productKeys = productKeys
   }
 
   const domain = getString('domain') as KevDomainCategory | undefined
@@ -597,11 +647,16 @@ const applyFilters = (entries: KevEntry[], filters: CatalogQuery): KevEntry[] =>
       return false
     }
 
-    if (filters.vendor && entry.vendor !== filters.vendor) {
+    const vendorKeys = filters.vendorKeys ?? (filters.vendor ? [filters.vendor] : [])
+    if (vendorKeys.length && !vendorKeys.includes(entry.vendorKey)) {
       return false
     }
 
-    if (filters.product && entry.product !== filters.product) {
+    const productKeys = filters.productKeys ?? (filters.product ? [filters.product] : [])
+    if (filters.ownedOnly && !productKeys.length) {
+      return false
+    }
+    if (productKeys.length && !productKeys.includes(entry.productKey)) {
       return false
     }
 
@@ -678,31 +733,73 @@ const omitFilters = (
 ): CatalogQuery => {
   const next: CatalogQuery = { ...filters }
   for (const key of keys) {
+    if (filters.ownedOnly && (key === 'product' || key === 'productKeys')) {
+      continue
+    }
     delete next[key]
   }
   return next
 }
 
+type AggregatedValue =
+  | string
+  | {
+      key: string
+      name: string
+      vendorKey?: string
+      vendorName?: string
+    }
+
 const aggregateCounts = (
   entries: KevEntry[],
-  accessor: (entry: KevEntry) => string | string[]
+  accessor: (entry: KevEntry) => AggregatedValue | AggregatedValue[]
 ): KevCountDatum[] => {
-  const totals = new Map<string, number>()
+  const totals = new Map<
+    string,
+    { name: string; count: number; vendorKey?: string; vendorName?: string }
+  >()
+
+  const toDatum = (
+    value: AggregatedValue
+  ): { key: string; name: string; vendorKey?: string; vendorName?: string } => {
+    if (typeof value === 'string') {
+      return { key: value, name: value }
+    }
+    return value
+  }
 
   for (const entry of entries) {
     const raw = accessor(entry)
     const values = Array.isArray(raw) ? raw : [raw]
 
     for (const value of values) {
-      if (!value || value === 'Other') {
+      const datum = toDatum(value)
+      if (!datum.key || !datum.name || datum.name === 'Other') {
         continue
       }
-      totals.set(value, (totals.get(value) ?? 0) + 1)
+
+      const existing = totals.get(datum.key)
+      if (existing) {
+        existing.count += 1
+      } else {
+        totals.set(datum.key, {
+          name: datum.name,
+          count: 1,
+          vendorKey: datum.vendorKey,
+          vendorName: datum.vendorName
+        })
+      }
     }
   }
 
   return Array.from(totals.entries())
-    .map(([name, count]) => ({ name, count }))
+    .map(([key, value]) => ({
+      key,
+      name: value.name,
+      count: value.count,
+      vendorKey: value.vendorKey,
+      vendorName: value.vendorName
+    }))
     .sort((a, b) => {
       if (b.count === a.count) {
         return a.name.localeCompare(b.name)
@@ -830,25 +927,57 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     domain: aggregateCounts(
       applyFilters(
         catalogEntries,
-        omitFilters(filters, ['domain', 'exploit', 'vulnerability', 'vendor', 'product'])
+        omitFilters(filters, [
+          'domain',
+          'exploit',
+          'vulnerability',
+          'vendor',
+          'vendorKeys',
+          'product',
+          'productKeys'
+        ])
       ),
       entry => entry.domainCategories
     ),
     exploit: aggregateCounts(
-      applyFilters(catalogEntries, omitFilters(filters, ['exploit', 'vulnerability', 'vendor', 'product'])),
+      applyFilters(
+        catalogEntries,
+        omitFilters(filters, [
+          'exploit',
+          'vulnerability',
+          'vendor',
+          'vendorKeys',
+          'product',
+          'productKeys'
+        ])
+      ),
       entry => entry.exploitLayers
     ),
     vulnerability: aggregateCounts(
-      applyFilters(catalogEntries, omitFilters(filters, ['vulnerability', 'vendor', 'product'])),
+      applyFilters(
+        catalogEntries,
+        omitFilters(filters, ['vulnerability', 'vendor', 'vendorKeys', 'product', 'productKeys'])
+      ),
       entry => entry.vulnerabilityCategories
     ),
     vendor: aggregateCounts(
-      applyFilters(catalogEntries, omitFilters(filters, ['vendor', 'product'])),
-      entry => entry.vendor
+      applyFilters(
+        catalogEntries,
+        omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])
+      ),
+      entry => ({ key: entry.vendorKey, name: entry.vendor })
     ),
     product: aggregateCounts(
-      applyFilters(catalogEntries, omitFilters(filters, ['product'])),
-      entry => entry.product
+      applyFilters(
+        catalogEntries,
+        omitFilters(filters, ['product', 'productKeys'])
+      ),
+      entry => ({
+        key: entry.productKey,
+        name: entry.product,
+        vendorKey: entry.vendorKey,
+        vendorName: entry.vendor
+      })
     )
   }
 
