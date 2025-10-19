@@ -31,6 +31,7 @@ type KevRow = {
   domain_categories: string | null
   exploit_layers: string | null
   vulnerability_categories: string | null
+  internet_exposed: number | null
   updated_at: string | null
 }
 
@@ -56,6 +57,7 @@ type EnisaRow = {
   exploit_layers: string | null
   vulnerability_categories: string | null
   source_url: string | null
+  internet_exposed: number | null
   updated_at: string | null
 }
 
@@ -82,6 +84,7 @@ type CatalogQuery = {
   fromUpdatedDate?: string
   toUpdatedDate?: string
   ransomwareOnly?: boolean
+  internetExposedOnly?: boolean
 }
 
 const DEFAULT_VENDOR = 'Unknown'
@@ -301,7 +304,8 @@ const toKevEntry = (row: KevRow): KevEntry => {
     aliases: [cveId],
     domainCategories,
     exploitLayers,
-    vulnerabilityCategories
+    vulnerabilityCategories,
+    internetExposed: row.internet_exposed === 1
   }
 }
 
@@ -351,7 +355,8 @@ const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
     aliases: aliases.length ? aliases : [cveId],
     domainCategories,
     exploitLayers,
-    vulnerabilityCategories
+    vulnerabilityCategories,
+    internetExposed: row.internet_exposed === 1
   }
 }
 
@@ -444,7 +449,8 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     aliases,
     domainCategories,
     exploitLayers,
-    vulnerabilityCategories
+    vulnerabilityCategories,
+    internetExposed: existing.internetExposed || incoming.internetExposed
   }
 }
 
@@ -591,6 +597,15 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.ransomwareOnly = true
   }
 
+  const internetExposedOnly = raw['internetExposedOnly']
+  if (
+    internetExposedOnly === 'true' ||
+    internetExposedOnly === '1' ||
+    internetExposedOnly === true
+  ) {
+    filters.internetExposedOnly = true
+  }
+
   const source = getString('source')
   if (source === 'kev' || source === 'enisa') {
     filters.source = source
@@ -644,6 +659,10 @@ const applyFilters = (entries: KevEntry[], filters: CatalogQuery): KevEntry[] =>
 
   const filtered = entries.filter(entry => {
     if (filters.source && !entry.sources.includes(filters.source)) {
+      return false
+    }
+
+    if (filters.internetExposedOnly && !entry.internetExposed) {
       return false
     }
 
@@ -879,6 +898,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         domain_categories,
         exploit_layers,
         vulnerability_categories,
+        internet_exposed,
         updated_at
       FROM kev_entries`
     )
@@ -908,6 +928,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         exploit_layers,
         vulnerability_categories,
         source_url,
+        internet_exposed,
         updated_at
       FROM enisa_entries`
     )

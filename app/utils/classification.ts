@@ -72,6 +72,15 @@ const domainRules: Array<{
   }
 ]
 
+const internetEdgeDomainHints: KevDomainCategory[] = [
+  'Networking & VPN',
+  'Web Applications',
+  'Web Servers',
+  'Mail Servers',
+  'Cloud & SaaS',
+  'Security Appliances'
+]
+
 const matchesAny = (value: string, patterns: RegExp[]) =>
   patterns.some(pattern => pattern.test(value))
 
@@ -539,12 +548,12 @@ const matchCategory = <T extends string>(
   return Array.from(found)
 }
 
-export const classifyDomainCategories = (entry: {
-  vendor: string
-  product: string
-  vulnerabilityName?: string
-  description?: string
-}): KevDomainCategory[] => {
+export const classifyDomainCategories = (
+  entry: Pick<
+    KevBaseEntry,
+    'vendor' | 'product' | 'vulnerabilityName' | 'description' | 'cvssVector'
+  >
+): { categories: KevDomainCategory[]; internetExposed: boolean } => {
   const source = normalise(`${entry.vendor} ${entry.product}`)
   const context = normalise(`${entry.vulnerabilityName ?? ''} ${entry.description ?? ''}`)
   const text = `${source} ${context}`
@@ -564,6 +573,23 @@ export const classifyDomainCategories = (entry: {
   const hasNonWebContextSignal = matchesAny(context, nonWebContextPatterns)
   const isMailServer = categories.has('Mail Servers')
   const isNetworkDevice = categories.has('Networking & VPN')
+  const edgeStrongProduct = matchesAny(source, edgeStrongProductPatterns)
+  const edgeSupportingProduct = matchesAny(source, edgeSupportingProductPatterns)
+  const edgeContextSignal =
+    matchesAny(context, edgeContextPatterns) ||
+    hasStrongWebSignal ||
+    hasManagementSignal ||
+    hasApiSignal ||
+    deviceHasWebSignal
+  const edgePortalSignal = matchesAny(context, edgePortalPatterns)
+  const edgeMailSignal = matchesAny(context, edgeMailPatterns)
+  const remoteContextSignal = matchesAny(context, remoteContextPatterns)
+  const remoteExecutionSignal =
+    matchesAny(context, remoteExecutionPatterns) || matchesAny(context, codeExecutionPatterns)
+  const cvssTraits = parseCvssVector(entry.cvssVector)
+  const networkAttackVector = cvssTraits?.attackVector === 'N'
+  const lowPrivileges = !cvssTraits?.privilegesRequired || cvssTraits.privilegesRequired === 'N'
+  const noUserInteraction = !cvssTraits?.userInteraction || cvssTraits.userInteraction === 'N'
 
   const hasStandaloneWebIndicator =
     hasWebIndicators && !hasNonWebProductSignal && !hasNonWebContextSignal
@@ -634,7 +660,30 @@ export const classifyDomainCategories = (entry: {
     categories.delete('Other')
   }
 
-  return Array.from(categories)
+  const domainEdgeSignal = internetEdgeDomainHints.some(category => categories.has(category))
+  const productConfidence =
+    (edgeStrongProduct ? 2 : 0) + (edgeSupportingProduct ? 1 : 0) + (domainEdgeSignal ? 1 : 0)
+  const contextConfidence =
+    (edgeContextSignal ? 1.5 : 0) + (edgePortalSignal ? 1 : 0) + (edgeMailSignal ? 1 : 0)
+  const remoteConfidence =
+    (networkAttackVector ? 1 : 0) +
+    (remoteContextSignal ? 1 : 0) +
+    (remoteExecutionSignal ? 0.5 : 0) +
+    (lowPrivileges ? 0.5 : 0) +
+    (noUserInteraction ? 0.5 : 0)
+
+  const hasExposureContext =
+    edgeContextSignal || edgePortalSignal || edgeMailSignal || remoteContextSignal || networkAttackVector
+  const strongProductBackers = edgeStrongProduct || (edgeSupportingProduct && hasExposureContext) || domainEdgeSignal
+
+  const internetExposed =
+    strongProductBackers && hasExposureContext && productConfidence + contextConfidence + remoteConfidence >= 3.5
+
+  if (internetExposed) {
+    categories.add('Internet Edge')
+  }
+
+  return { categories: Array.from(categories), internetExposed }
 }
 
 export const classifyExploitLayers = (
@@ -795,7 +844,7 @@ export const classifyVulnerabilityCategories = (entry: {
 }
 
 export const enrichEntry = (entry: KevBaseEntry): KevEntry => {
-  const domainCategories = classifyDomainCategories(entry)
+  const { categories: domainCategories, internetExposed } = classifyDomainCategories(entry)
   const exploitLayers = classifyExploitLayers(entry, domainCategories)
   const vulnerabilityCategories = classifyVulnerabilityCategories(entry)
 
@@ -803,6 +852,7 @@ export const enrichEntry = (entry: KevBaseEntry): KevEntry => {
     ...entry,
     domainCategories,
     exploitLayers,
-    vulnerabilityCategories
+    vulnerabilityCategories,
+    internetExposed
   }
 }

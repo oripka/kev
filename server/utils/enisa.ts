@@ -179,7 +179,8 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
     exploitedSince,
     sourceUrl,
     references,
-    aliases
+    aliases,
+    internetExposed: false
   }
 
   return baseEntry
@@ -289,6 +290,7 @@ export const importEnisaCatalog = async (
       exploit_layers,
       vulnerability_categories,
       source_url,
+      internet_exposed,
       updated_at
     ) VALUES (
       @enisa_id,
@@ -312,6 +314,7 @@ export const importEnisaCatalog = async (
       @exploit_layers,
       @vulnerability_categories,
       @source_url,
+      @internet_exposed,
       CURRENT_TIMESTAMP
     )`
   )
@@ -342,7 +345,8 @@ export const importEnisaCatalog = async (
         domain_categories: toJson(entry.domainCategories),
         exploit_layers: toJson(entry.exploitLayers),
         vulnerability_categories: toJson(entry.vulnerabilityCategories),
-        source_url: entry.sourceUrl
+        source_url: entry.sourceUrl,
+        internet_exposed: entry.internetExposed ? 1 : 0
       })
 
       if ((index + 1) % 25 === 0 || index + 1 === itemsToSave.length) {

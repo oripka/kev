@@ -22,6 +22,7 @@ export type KevDomainCategory =
   | 'Virtualization & Containers'
   | 'Database & Storage'
   | 'Security Appliances'
+  | 'Internet Edge'
   | 'Other'
 
 export type KevExploitLayer =
@@ -78,6 +79,7 @@ export type KevEntry = {
   domainCategories: KevDomainCategory[]
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
+  internetExposed: boolean
 }
 
 export type KevCountDatum = {
@@ -109,6 +111,18 @@ export type KevResponse = {
     earliest: string | null
     latest: string | null
   }
+}
+
+export type ProductCatalogItem = {
+  productKey: string
+  productName: string
+  vendorKey: string
+  vendorName: string
+  sources: CatalogSource[]
+}
+
+export type ProductCatalogResponse = {
+  items: ProductCatalogItem[]
 }
 
 export type ImportPhase =

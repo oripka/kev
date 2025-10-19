@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS enisa_entries (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS product_catalog (
+  product_key TEXT PRIMARY KEY,
+  product_name TEXT NOT NULL,
+  vendor_key TEXT NOT NULL,
+  vendor_name TEXT NOT NULL,
+  sources TEXT NOT NULL,
+  search_terms TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_catalog_search ON product_catalog(search_terms);
+
 CREATE TABLE IF NOT EXISTS user_sessions (
   id TEXT PRIMARY KEY,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -109,6 +120,7 @@ export const getDatabase = () => {
   ensureColumn(instance, 'kev_entries', 'cvss_vector', 'TEXT')
   ensureColumn(instance, 'kev_entries', 'cvss_version', 'TEXT')
   ensureColumn(instance, 'kev_entries', 'cvss_severity', 'TEXT')
+  ensureColumn(instance, 'kev_entries', 'internet_exposed', 'INTEGER DEFAULT 0')
   ensureColumn(instance, 'kev_entries', 'updated_at', 'TEXT DEFAULT CURRENT_TIMESTAMP')
 
   ensureColumn(instance, 'enisa_entries', 'cve_id', 'TEXT')
@@ -131,7 +143,11 @@ export const getDatabase = () => {
   ensureColumn(instance, 'enisa_entries', 'exploit_layers', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'vulnerability_categories', 'TEXT')
   ensureColumn(instance, 'enisa_entries', 'source_url', 'TEXT')
+  ensureColumn(instance, 'enisa_entries', 'internet_exposed', 'INTEGER DEFAULT 0')
   ensureColumn(instance, 'enisa_entries', 'updated_at', 'TEXT DEFAULT CURRENT_TIMESTAMP')
+
+  ensureColumn(instance, 'product_catalog', 'sources', 'TEXT NOT NULL DEFAULT "[\"kev\"]"')
+  ensureColumn(instance, 'product_catalog', 'search_terms', 'TEXT NOT NULL DEFAULT ""')
 
   return instance
 }

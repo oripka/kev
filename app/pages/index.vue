@@ -9,10 +9,12 @@ import {
   watch,
 } from "vue";
 import { format, parseISO } from "date-fns";
-import type { SelectMenuItem, TableColumn } from "@nuxt/ui";
+import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import type { KevCountDatum, KevEntry } from "~/types";
+import FilteredTrendPanel from "~/components/FilteredTrendPanel.vue";
+import TrackedSoftwareSummary from "~/components/TrackedSoftwareSummary.vue";
 
 const formatTimestamp = (value: string) => {
   const parsed = parseISO(value);
@@ -52,6 +54,8 @@ const filters = reactive<FilterState>({ ...defaultFilters });
 const searchInput = ref("");
 const debouncedSearch = ref("");
 const showWellKnownOnly = ref(false);
+const showInternetExposedOnly = ref(false);
+const showTrendLines = ref(false);
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
 const cvssRange = ref<[number, number]>([defaultCvssRange[0], defaultCvssRange[1]]);
@@ -83,11 +87,9 @@ onBeforeUnmount(() => {
 const {
   trackedProducts,
   trackedProductSet,
-  addTrackedProduct,
   removeTrackedProduct,
   clearTrackedProducts,
   showOwnedOnly,
-  toggleShowOwnedOnly,
   isSaving: savingTrackedProducts,
   saveError: trackedProductError,
   isReady: trackedProductsReady,
@@ -138,39 +140,6 @@ const productMetaMap = computed(() => {
   return map;
 });
 
-const productSelectOptions = computed<SelectMenuItem<string>[]>(() =>
-  Array.from(productMetaMap.value.values())
-    .map((item) => ({
-      label: item.productName,
-      value: item.productKey,
-      description: item.vendorName,
-    }))
-    .sort((first, second) => first.label.localeCompare(second.label))
-);
-
-const selectedProductKey = ref<string | null>(null);
-
-const addSelectedTrackedProduct = () => {
-  const key = selectedProductKey.value;
-  if (!key) {
-    return;
-  }
-
-  const meta = productMetaMap.value.get(key);
-  if (!meta) {
-    return;
-  }
-
-  addTrackedProduct({
-    productKey: meta.productKey,
-    productName: meta.productName,
-    vendorKey: meta.vendorKey,
-    vendorName: meta.vendorName,
-  });
-
-  selectedProductKey.value = null;
-};
-
 const filterParams = computed(() => {
   const [startYear, endYear] = yearRange.value;
   const [cvssStart, cvssEnd] = cvssRange.value;
@@ -187,6 +156,7 @@ const filterParams = computed(() => {
     endYear,
     wellKnownOnly: showWellKnownOnly.value ? true : undefined,
     ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
+    internetExposedOnly: showInternetExposedOnly.value ? true : undefined,
   };
 
   if (showOwnedOnlyEffective.value && trackedProductKeys.value.length) {
@@ -312,6 +282,7 @@ const hasActiveFilters = computed(() => {
       hasDomainFilters ||
       hasTrackedFilter ||
       showWellKnownOnly.value ||
+      showInternetExposedOnly.value ||
       hasCustomYearRange.value ||
       hasCvssFilter ||
       hasEpssFilter ||
@@ -529,6 +500,7 @@ const resetFilters = () => {
   searchInput.value = "";
   debouncedSearch.value = "";
   showWellKnownOnly.value = false;
+  showInternetExposedOnly.value = false;
   showOwnedOnly.value = false;
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
@@ -570,6 +542,7 @@ type AggregatedMetrics = {
   cvssSum: number;
   cvssCount: number;
   severeCount: number;
+  internetExposedCount: number;
   latestEntry: KevEntry | null;
   latestTimestamp: number;
 };
@@ -580,6 +553,7 @@ const aggregatedResultMetrics = computed<AggregatedMetrics>(() => {
     cvssSum: 0,
     cvssCount: 0,
     severeCount: 0,
+    internetExposedCount: 0,
     latestEntry: null,
     latestTimestamp: Number.NEGATIVE_INFINITY,
   };
@@ -597,6 +571,10 @@ const aggregatedResultMetrics = computed<AggregatedMetrics>(() => {
 
     if ((entry.ransomwareUse?.toLowerCase() ?? "").includes("known")) {
       metrics.ransomwareCount += 1;
+    }
+
+    if (entry.internetExposed) {
+      metrics.internetExposedCount += 1;
     }
 
     const timestamp = Date.parse(entry.dateAdded);
@@ -647,6 +625,26 @@ const ransomwareSummary = computed(() => {
   }
 
   return `${ransomwareLinkedCount.value.toLocaleString()} CVEs tied to ransomware activity`;
+});
+
+const internetExposedShare = computed(() =>
+  formatShare(aggregatedResultMetrics.value.internetExposedCount, matchingResultsCount.value)
+);
+const internetExposedShareLabel = computed(() => {
+  const label = internetExposedShare.value.percentLabel;
+  return label === null ? "—" : `${label}%`;
+});
+const internetExposedCount = computed(() => aggregatedResultMetrics.value.internetExposedCount);
+const internetExposedSummary = computed(() => {
+  if (!matchingResultsCount.value) {
+    return "No entries to analyse";
+  }
+
+  if (!internetExposedCount.value) {
+    return "No confirmed internet-exposed CVEs in this view";
+  }
+
+  return `${internetExposedCount.value.toLocaleString()} CVEs likely exposed to the internet`;
 });
 
 const averageCvssScore = computed(() => {
@@ -747,6 +745,7 @@ const newestResultWellKnownLabel = computed(() => {
   const entry = newestResultEntry.value;
   return entry ? getWellKnownCveName(entry.cveId) : undefined;
 });
+const newestResultInternetExposed = computed(() => newestResultEntry.value?.internetExposed ?? false);
 
 const viewNewestDetails = () => {
   const entry = newestResultEntry.value;
@@ -857,6 +856,7 @@ type ActiveFilter = {
     | FilterKey
     | "search"
     | "wellKnown"
+    | "internet"
     | "yearRange"
     | "source"
     | "cvssRange"
@@ -887,6 +887,10 @@ const activeFilters = computed<ActiveFilter[]>(() => {
 
   if (showWellKnownOnly.value) {
     items.push({ key: "wellKnown", label: "Focus", value: "Well-known CVEs" });
+  }
+
+  if (showInternetExposedOnly.value) {
+    items.push({ key: "internet", label: "Focus", value: "Internet-exposed CVEs" });
   }
 
   if (showOwnedOnlyEffective.value) {
@@ -1252,130 +1256,16 @@ const columns: TableColumn<KevEntry>[] = [
 
     <UPageBody>
       <div class="grid grid-cols-1 gap-3 w-full px-8 mx-auto">
-        <UCard>
-          <template #header>
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="space-y-1">
-                <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                  My software focus
-                </p>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                  Track the products you care about and spotlight relevant CVEs instantly.
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <USwitch
-                  v-model="showOwnedOnly"
-                  :disabled="!hasTrackedProducts"
-                  color="primary"
-                  size="sm"
-                  aria-label="Show only products I track"
-                />
-                <div class="flex flex-col leading-tight">
-                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                    Show only my software
-                  </span>
-                  <span
-                    v-if="!hasTrackedProducts"
-                    class="text-xs text-neutral-500 dark:text-neutral-400"
-                  >
-                    Add at least one product to enable this filter
-                  </span>
-                </div>
-              </div>
-            </div>
-          </template>
-
-          <div class="space-y-4">
-            <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-end">
-              <UFormField
-                label="Add a product"
-                help="Search the catalog to add it to your watch list"
-              >
-                <USelectMenu
-                  v-model="selectedProductKey"
-                  :items="productSelectOptions"
-                  searchable
-                  placeholder="Search products…"
-                  :disabled="!productSelectOptions.length"
-                />
-              </UFormField>
-
-              <UButton
-                color="primary"
-                icon="i-lucide-plus"
-                :disabled="!selectedProductKey"
-                @click="addSelectedTrackedProduct"
-              >
-                Add to my software
-              </UButton>
-            </div>
-
-            <div v-if="trackedProducts.length" class="flex flex-wrap gap-2">
-              <div
-                v-for="product in trackedProducts"
-                :key="product.productKey"
-                class="group inline-flex items-center gap-2 rounded-full border border-primary-200/70 bg-primary-50 px-3 py-1 text-sm dark:border-primary-500/40 dark:bg-primary-500/10"
-              >
-                <div class="flex flex-col leading-tight">
-                  <span class="font-semibold text-primary-700 dark:text-primary-200">
-                    {{ product.productName }}
-                  </span>
-                  <span class="text-xs text-primary-600/80 dark:text-primary-300/80">
-                    {{ product.vendorName }}
-                  </span>
-                </div>
-                <UButton
-                  color="primary"
-                  variant="soft"
-                  size="2xs"
-                  icon="i-lucide-x"
-                  aria-label="Remove product"
-                  @click="removeTrackedProduct(product.productKey)"
-                />
-              </div>
-            </div>
-            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-              No tracked products yet. Use the selector above to build your list.
-            </p>
-
-            <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400">
-              <div class="flex items-center gap-2">
-                <UBadge
-                  v-if="savingTrackedProducts"
-                  color="primary"
-                  variant="soft"
-                  class="font-semibold"
-                >
-                  Saving…
-                </UBadge>
-                <span v-else>
-                  {{ trackedProductCount.toLocaleString() }} product{{
-                    trackedProductCount === 1 ? "" : "s"
-                  }} tracked locally.
-                </span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span
-                  v-if="trackedProductError"
-                  class="text-error-500 dark:text-error-400"
-                >
-                  {{ trackedProductError }}
-                </span>
-                <UButton
-                  v-if="trackedProducts.length"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  icon="i-lucide-eraser"
-                  @click="clearTrackedProducts"
-                >
-                  Clear list
-                </UButton>
-              </div>
-            </div>
-          </div>
-        </UCard>
+        <TrackedSoftwareSummary
+          v-model="showOwnedOnly"
+          :tracked-products="trackedProducts"
+          :tracked-product-count="trackedProductCount"
+          :has-tracked-products="hasTrackedProducts"
+          :saving="savingTrackedProducts"
+          :save-error="trackedProductError"
+          @remove="removeTrackedProduct"
+          @clear="clearTrackedProducts"
+        />
 
         <UCard>
           <template #header>
@@ -1395,7 +1285,7 @@ const columns: TableColumn<KevEntry>[] = [
           </template>
 
           <div class="space-y-6">
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div
                 class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
               >
@@ -1433,6 +1323,19 @@ const columns: TableColumn<KevEntry>[] = [
                 </p>
                 <p class="text-xs text-neutral-500 dark:text-neutral-400">
                   {{ ransomwareSummary }}
+                </p>
+              </div>
+              <div
+                class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+              >
+                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                  Internet exposure share
+                </p>
+                <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+                  {{ internetExposedShareLabel }}
+                </p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ internetExposedSummary }}
                 </p>
               </div>
             </div>
@@ -1517,6 +1420,14 @@ const columns: TableColumn<KevEntry>[] = [
                         {{ newestResultEntry.cveId }}
                       </UBadge>
                       <span v-if="!newestResultDateAdded">Recently imported</span>
+                      <UBadge
+                        v-if="newestResultInternetExposed"
+                        color="warning"
+                        variant="soft"
+                        class="font-semibold"
+                      >
+                        Internet-exposed
+                      </UBadge>
                     </div>
                     <div class="flex flex-wrap gap-2">
                       <UBadge
@@ -1549,6 +1460,8 @@ const columns: TableColumn<KevEntry>[] = [
             </div>
           </div>
         </UCard>
+
+        <FilteredTrendPanel v-model="showTrendLines" :entries="results" />
 
         <UCard>
           <div
@@ -1651,7 +1564,7 @@ const columns: TableColumn<KevEntry>[] = [
           </template>
 
           <div class="space-y-6">
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               <UFormField label="Search">
                 <UInput
                   v-model="searchInput"
@@ -1666,6 +1579,15 @@ const columns: TableColumn<KevEntry>[] = [
                     Only show named, high-profile CVEs
                   </p>
                   <USwitch v-model="showWellKnownOnly" />
+                </div>
+              </UFormField>
+
+              <UFormField label="Internet exposure">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                    Prioritise likely internet-facing CVEs
+                  </p>
+                  <USwitch v-model="showInternetExposedOnly" />
                 </div>
               </UFormField>
 

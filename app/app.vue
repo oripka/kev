@@ -6,10 +6,22 @@ const route = useRoute()
 
 const navigationItems = computed<NavigationMenuItem[]>(() => [
   {
-    label: 'Categories',
+    label: 'Catalog',
     to: '/',
     icon: 'i-lucide-layers',
     active: route.path === '/'
+  },
+  {
+    label: 'My software',
+    to: '/settings/software',
+    icon: 'i-lucide-monitor-cog',
+    active: route.path.startsWith('/settings/software')
+  },
+  {
+    label: 'Admin',
+    to: '/admin',
+    icon: 'i-lucide-bar-chart-3',
+    active: route.path === '/admin'
   }
 ])
 </script>

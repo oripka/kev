@@ -13,6 +13,7 @@ import {
   updateImportProgress
 } from '../utils/import-progress'
 import { getDatabase } from '../utils/sqlite'
+import { rebuildProductCatalog } from '../utils/product-catalog'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -125,7 +126,8 @@ export default defineEventHandler(async () => {
         exploitedSince: item.dateAdded ?? null,
         sourceUrl: null,
         references: [],
-        aliases: cveId ? [cveId] : []
+        aliases: cveId ? [cveId] : [],
+        internetExposed: false
       }
     })
 
@@ -257,6 +259,7 @@ export default defineEventHandler(async () => {
       domain_categories,
       exploit_layers,
       vulnerability_categories,
+      internet_exposed,
       updated_at
     ) VALUES (
       @cve_id,
@@ -277,6 +280,7 @@ export default defineEventHandler(async () => {
       @domain_categories,
       @exploit_layers,
       @vulnerability_categories,
+      @internet_exposed,
       CURRENT_TIMESTAMP
     )`
     )
@@ -318,7 +322,8 @@ export default defineEventHandler(async () => {
             cvss_severity: entry.cvssSeverity,
             domain_categories: toJson(entry.domainCategories),
             exploit_layers: toJson(entry.exploitLayers),
-            vulnerability_categories: toJson(entry.vulnerabilityCategories)
+            vulnerability_categories: toJson(entry.vulnerabilityCategories),
+            internet_exposed: entry.internetExposed ? 1 : 0
           })
 
           if ((index + 1) % 25 === 0 || index + 1 === items.length) {
@@ -346,6 +351,7 @@ export default defineEventHandler(async () => {
     })
 
     const enisaSummary = await importEnisaCatalog(db)
+    rebuildProductCatalog(db)
 
     completeImportProgress(
       `Imported ${entries.length} KEV entries and ${enisaSummary.imported} ENISA entries`
