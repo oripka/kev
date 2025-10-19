@@ -75,6 +75,7 @@ const domainRules: Array<{
 const matchesAny = (value: string, patterns: RegExp[]) =>
   patterns.some(pattern => pattern.test(value))
 
+<<<<<<< ours
 type CvssVectorTraits = {
   attackVector?: 'P' | 'L' | 'A' | 'N'
   privilegesRequired?: 'N' | 'L' | 'H'
@@ -111,6 +112,64 @@ const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
     userInteraction: metrics.UI as CvssVectorTraits['userInteraction'] | undefined
   }
 }
+=======
+const edgeStrongProductPatterns: RegExp[] = [
+  /(citrix (?:adc|netscaler|gateway|workspace))/i,
+  /(netscaler)/i,
+  /(pulse (?:secure|connect secure))/i,
+  /(ivanti (?:connect secure|policy secure|secure access))/i,
+  /(globalprotect)/i,
+  /(pan-?os)/i,
+  /(forti(?:gate|os|web|proxy|wan))/i,
+  /(big[- ]?ip|f5\s*(?:big[- ]?ip|traffic manager))/i,
+  /(zscaler)/i,
+  /(barracuda (?:cloudgen|ssl vpn|remote access))/i,
+  /(sonicwall)/i,
+  /(check point)/i,
+  /(cisco (?:asa|anyconnect|secure (?:desktop|firewall)|vpn))/i,
+  /(secure mobile access)/i,
+  /(remote desktop (?:gateway|web access)|rd\s?(?:gateway|web))/i,
+  /(microsoft exchange|exchange server|exchange online)/i,
+  /(outlook web access|owa)/i
+]
+
+const edgeSupportingProductPatterns: RegExp[] = [
+  /(sharepoint)/i,
+  /(jira)/i,
+  /(confluence)/i,
+  /(bitbucket)/i,
+  /(gitlab)/i,
+  /(workspace one)/i,
+  /(vpn (?:portal|gateway))/i
+]
+
+const edgeContextPatterns: RegExp[] = [
+  /(ssl[- ]?vpn)/i,
+  /(clientless vpn)/i,
+  /(vpn (?:portal|gateway|service|interface|server))/i,
+  /(remote (?:access|portal|service|authentication|desktop))/i,
+  /(internet[- ]?facing|public[- ]?facing|externally accessible|exposed to the internet)/i,
+  /(edge (?:device|gateway|service))/i,
+  /(webvpn)/i,
+  /(citrix (?:gateway|netscaler|adc))/i,
+  /(rd\s?web|rdweb|remote desktop (?:web|gateway))/i,
+  /(outlook web access|owa)/i,
+  /(exchange web services|ews)/i
+]
+
+const edgePortalPatterns: RegExp[] = [
+  /(web (?:portal|login|interface|console|client))/i,
+  /(portal (?:access|login|interface))/i,
+  /(remote portal)/i,
+  /(vpn web (?:portal|interface))/i
+]
+
+const edgeMailPatterns: RegExp[] = [
+  /(microsoft exchange|exchange server|exchange online)/i,
+  /(outlook web access|owa)/i,
+  /(exchange web services|ews)/i
+]
+>>>>>>> theirs
 
 const webProductPatterns: RegExp[] = [
   /(jenkins)/i,
