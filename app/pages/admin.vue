@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { format, parseISO } from "date-fns";
 import type { TableColumn } from "@nuxt/ui";
+import { useKevData } from "~/composables/useKevData";
 
 interface ProductStat {
   vendorKey: string;
@@ -90,6 +93,125 @@ const vendorColumns: TableColumn<VendorStat>[] = [
     },
   },
 ];
+
+const {
+  catalogBounds,
+  updatedAt,
+  importLatest,
+  importing,
+  importError,
+  lastImportSummary,
+  importProgress,
+  entries,
+} = useKevData();
+
+const formatTimestamp = (value: string) => {
+  const parsed = parseISO(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return format(parsed, "yyyy-MM-dd HH:mm");
+};
+
+const catalogUpdatedAt = computed(() => {
+  const summary = lastImportSummary.value;
+  if (summary) {
+    return formatTimestamp(summary.importedAt);
+  }
+  return updatedAt.value ? formatTimestamp(updatedAt.value) : "Not imported yet";
+});
+
+const handleImport = async () => {
+  await importLatest({ mode: "force" });
+};
+
+const handleCachedReimport = async () => {
+  await importLatest({ mode: "cache" });
+};
+
+const importProgressPhase = computed(() => importProgress.value.phase);
+const importProgressPercent = computed(() => {
+  const { total, completed, phase } = importProgress.value;
+  if (phase === "complete") {
+    return 100;
+  }
+  if (total > 0) {
+    return Math.min(100, Math.round((completed / total) * 100));
+  }
+  if (phase === "preparing") {
+    return 10;
+  }
+  if (phase === "enriching") {
+    return 80;
+  }
+  if (phase === "saving" || phase === "savingEnisa") {
+    return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));
+  }
+  return 0;
+});
+
+const showImportProgress = computed(() => {
+  const phase = importProgressPhase.value;
+  if (phase === "idle") {
+    return importing.value;
+  }
+  if (phase === "complete") {
+    return false;
+  }
+  return true;
+});
+
+const importProgressMessage = computed(() => {
+  const { message, phase, error: progressError } = importProgress.value;
+  if (phase === "idle" && importing.value) {
+    return "Preparing catalog import…";
+  }
+  if (phase === "error" && progressError) {
+    return progressError;
+  }
+  if (message) {
+    return message;
+  }
+  return "Importing the latest vulnerability data…";
+});
+
+const hasProgressValue = computed(() => {
+  const percent = importProgressPercent.value;
+  return Number.isFinite(percent) && percent > 0 && percent <= 100;
+});
+
+const totalEntries = computed(() => entries.value.length);
+
+const importSummaryMessage = computed(() => {
+  const summary = lastImportSummary.value;
+  if (!summary) {
+    return null;
+  }
+
+  const importedAt = formatTimestamp(summary.importedAt);
+  const kevCount = summary.kevImported.toLocaleString();
+  const enisaCount = summary.enisaImported.toLocaleString();
+  const enisaDetail = summary.enisaImported
+    ? ` Latest ENISA update: ${
+        summary.enisaLastUpdated ? formatTimestamp(summary.enisaLastUpdated) : "not provided"
+      }.`
+    : "";
+
+  return `Imported ${kevCount} CISA KEV entries and ${enisaCount} ENISA entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${enisaDetail}`;
+});
+
+const catalogRangeLabel = computed(() => {
+  const { earliest, latest } = catalogBounds.value;
+  const formattedEarliest = earliest ? formatTimestamp(earliest) : "Unknown";
+  const formattedLatest = latest ? formatTimestamp(latest) : "Unknown";
+
+  if (!earliest && !latest) {
+    return "Range unavailable";
+  }
+
+  return `${formattedEarliest} → ${formattedLatest}`;
+});
 </script>
 
 <template>
@@ -154,6 +276,98 @@ const vendorColumns: TableColumn<VendorStat>[] = [
           <p v-else-if="pending" class="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
             Loading saved filter analytics…
           </p>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                Data freshness
+              </p>
+              <UBadge color="neutral" variant="soft" class="text-xs font-semibold">
+                {{ catalogUpdatedAt }}
+              </UBadge>
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                Cached entries: <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ totalEntries.toLocaleString() }}</span>
+              </p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                Catalog coverage: {{ catalogRangeLabel }}
+              </p>
+              <p
+                v-if="importSummaryMessage && !importError"
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                {{ importSummaryMessage }}
+              </p>
+            </div>
+
+            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div class="flex flex-1 flex-wrap gap-2">
+                <UButton
+                  color="primary"
+                  icon="i-lucide-cloud-download"
+                  :loading="importing"
+                  :disabled="importing"
+                  @click="handleImport"
+                >
+                  {{ importing ? "Importing…" : "Import latest data" }}
+                </UButton>
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  icon="i-lucide-refresh-ccw"
+                  :disabled="importing"
+                  @click="handleCachedReimport"
+                >
+                  Reimport cached data
+                </UButton>
+              </div>
+
+              <UAlert
+                v-if="importError"
+                color="error"
+                variant="soft"
+                icon="i-lucide-alert-triangle"
+                title="Import failed"
+                :description="importError"
+                class="md:w-80"
+              />
+              <div
+                v-else-if="showImportProgress"
+                class="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300 md:w-80"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                    Import status
+                  </span>
+                  <span
+                    v-if="hasProgressValue"
+                    class="tabular-nums text-neutral-600 dark:text-neutral-300"
+                  >
+                    {{ importProgressPercent }}%
+                  </span>
+                </div>
+                <UProgress
+                  v-if="hasProgressValue"
+                  :value="importProgressPercent"
+                  size="xs"
+                  :ui="{
+                    rounded: 'rounded-md',
+                    track: 'bg-neutral-200 dark:bg-neutral-800',
+                    indicator: 'bg-primary-500 dark:bg-primary-400'
+                  }"
+                />
+                <p class="mt-2 text-[0.78rem] text-neutral-500 dark:text-neutral-400">
+                  {{ importProgressMessage }}
+                </p>
+              </div>
+            </div>
+          </div>
         </UCard>
 
         <UCard>
