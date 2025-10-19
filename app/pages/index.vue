@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  nextTick,
   h,
   onBeforeUnmount,
   reactive,
@@ -57,11 +58,16 @@ const showWellKnownOnly = ref(false);
 const showRansomwareOnly = ref(false);
 const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
+const showFilterSlideover = ref(false);
+const showFocusSlideover = ref(false);
+const showTrendSlideover = ref(false);
+const showRiskDetails = ref(false);
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
 const cvssRange = ref<[number, number]>([defaultCvssRange[0], defaultCvssRange[1]]);
 const epssRange = ref<[number, number]>([defaultEpssRange[0], defaultEpssRange[1]]);
 const selectedSource = ref<"all" | "kev" | "enisa">("all");
+const isFiltering = ref(false);
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -190,6 +196,7 @@ const {
   catalogBounds,
   updatedAt,
   getWellKnownCveName,
+  pending: dataPending,
 } = useKevData(filterParams);
 
 const earliestDataYear = computed(() => {
@@ -410,6 +417,34 @@ const results = computed(() => {
   });
 });
 
+watch(
+  filterParams,
+  () => {
+    isFiltering.value = true;
+  },
+  { deep: true }
+);
+
+watch(
+  [results, dataPending],
+  () => {
+    if (!dataPending.value) {
+      nextTick(() => {
+        isFiltering.value = false;
+      });
+    }
+  },
+  { immediate: true, flush: "post" }
+);
+
+const isBusy = computed(() => dataPending.value || isFiltering.value);
+
+watch(showTrendSlideover, (value) => {
+  if (value) {
+    showTrendLines.value = true;
+  }
+});
+
 const resetYearRange = () => {
   const [start, end] = defaultYearRange.value;
   yearRange.value = [start, end];
@@ -471,7 +506,33 @@ type AggregatedMetrics = {
   latestTimestamp: number;
 };
 
-const aggregatedResultMetrics = computed<AggregatedMetrics>(() => {
+type SeverityKey = NonNullable<KevEntry["cvssSeverity"]> | "Unknown";
+
+type SeverityDistributionDatum = {
+  key: SeverityKey;
+  label: string;
+  color: string;
+  count: number;
+  percent: number;
+  percentLabel: string;
+};
+
+const severityDisplayMeta: Record<SeverityKey, { label: string; color: string }> = {
+  Critical: { label: "Critical", color: cvssSeverityColors.Critical },
+  High: { label: "High", color: cvssSeverityColors.High },
+  Medium: { label: "Medium", color: cvssSeverityColors.Medium },
+  Low: { label: "Low", color: cvssSeverityColors.Low },
+  None: { label: "None", color: cvssSeverityColors.None },
+  Unknown: { label: "Unknown", color: "neutral" },
+};
+
+type DerivedResultSnapshot = {
+  aggregated: AggregatedMetrics;
+  severityDistribution: SeverityDistributionDatum[];
+  latestEntries: KevEntry[];
+};
+
+const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
   const metrics: AggregatedMetrics = {
     ransomwareCount: 0,
     cvssSum: 0,
@@ -481,6 +542,9 @@ const aggregatedResultMetrics = computed<AggregatedMetrics>(() => {
     latestEntry: null,
     latestTimestamp: Number.NEGATIVE_INFINITY,
   };
+
+  const severityCounts = new Map<SeverityKey, number>();
+  const latestEntries: Array<{ entry: KevEntry; timestamp: number }> = [];
 
   for (const entry of results.value) {
     const severity = entry.cvssSeverity;
@@ -501,15 +565,47 @@ const aggregatedResultMetrics = computed<AggregatedMetrics>(() => {
       metrics.internetExposedCount += 1;
     }
 
+    const severityKey = (severity ?? "Unknown") as SeverityKey;
+    severityCounts.set(severityKey, (severityCounts.get(severityKey) ?? 0) + 1);
+
     const timestamp = Date.parse(entry.dateAdded);
-    if (!Number.isNaN(timestamp) && timestamp > metrics.latestTimestamp) {
-      metrics.latestTimestamp = timestamp;
-      metrics.latestEntry = entry;
+    if (!Number.isNaN(timestamp)) {
+      latestEntries.push({ entry, timestamp });
+      if (timestamp > metrics.latestTimestamp) {
+        metrics.latestTimestamp = timestamp;
+        metrics.latestEntry = entry;
+      }
     }
   }
 
-  return metrics;
+  latestEntries.sort((first, second) => second.timestamp - first.timestamp);
+
+  const total = results.value.length;
+  const severityDistribution: SeverityDistributionDatum[] = total
+    ? [...severityCounts.entries()]
+        .map(([key, count]) => {
+          const meta = severityDisplayMeta[key];
+          const percent = (count / total) * 100;
+          return {
+            key,
+            label: meta.label,
+            color: meta.color,
+            count,
+            percent,
+            percentLabel: percentFormatter.format(percent),
+          };
+        })
+        .sort((first, second) => second.percent - first.percent)
+    : [];
+
+  return {
+    aggregated: metrics,
+    severityDistribution,
+    latestEntries: latestEntries.slice(0, 3).map((item) => item.entry),
+  };
 });
+
+const aggregatedResultMetrics = computed(() => derivedResultSnapshot.value.aggregated);
 
 const highSeverityShare = computed(() =>
   formatShare(aggregatedResultMetrics.value.severeCount, matchingResultsCount.value)
@@ -593,90 +689,51 @@ const averageCvssSummary = computed(() => {
   return `${count.toLocaleString()} CVEs with CVSS data`;
 });
 
-type SeverityKey = NonNullable<KevEntry["cvssSeverity"]> | "Unknown";
+const quickStatItems = computed(() => [
+  {
+    key: "count",
+    icon: "i-lucide-list-checks",
+    label: "In view",
+    value: `${matchingResultsLabel.value} CVEs`,
+  },
+  {
+    key: "high",
+    icon: "i-lucide-activity",
+    label: "High/Critical",
+    value: highSeverityShareLabel.value,
+  },
+  {
+    key: "cvss",
+    icon: "i-lucide-gauge",
+    label: "Avg CVSS",
+    value: averageCvssLabel.value,
+  },
+  {
+    key: "ransomware",
+    icon: "i-lucide-flame",
+    label: "Ransomware",
+    value: ransomwareShareLabel.value,
+  },
+]);
 
-const severityDisplayMeta: Record<SeverityKey, { label: string; color: string }> = {
-  Critical: { label: "Critical", color: cvssSeverityColors.Critical },
-  High: { label: "High", color: cvssSeverityColors.High },
-  Medium: { label: "Medium", color: cvssSeverityColors.Medium },
-  Low: { label: "Low", color: cvssSeverityColors.Low },
-  None: { label: "None", color: cvssSeverityColors.None },
-  Unknown: { label: "Unknown", color: "neutral" },
-};
+const hasActiveFilterChips = computed(() => activeFilters.value.length > 0);
 
-type SeverityDistributionDatum = {
-  key: SeverityKey;
-  label: string;
-  color: string;
-  count: number;
-  percent: number;
-  percentLabel: string;
-};
+const severityDistribution = computed(
+  () => derivedResultSnapshot.value.severityDistribution
+);
 
-const severityDistribution = computed<SeverityDistributionDatum[]>(() => {
-  const total = matchingResultsCount.value;
-  if (!total) {
-    return [];
-  }
+const latestResultEntries = computed(() => derivedResultSnapshot.value.latestEntries);
 
-  const counts = new Map<SeverityKey, number>();
-
-  for (const entry of results.value) {
-    const key = (entry.cvssSeverity ?? "Unknown") as SeverityKey;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  return [...counts.entries()]
-    .map(([key, count]) => {
-      const meta = severityDisplayMeta[key];
-      const percent = (count / total) * 100;
-      return {
-        key,
-        label: meta.label,
-        color: meta.color,
-        count,
-        percent,
-        percentLabel: percentFormatter.format(percent),
-      };
-    })
-    .sort((first, second) => second.percent - first.percent);
-});
-
-const newestResultEntry = computed(() => aggregatedResultMetrics.value.latestEntry);
-const newestResultDateAdded = computed(() => {
-  const entry = newestResultEntry.value;
-  if (!entry) {
-    return null;
-  }
-
-  const parsed = parseISO(entry.dateAdded);
-  if (Number.isNaN(parsed.getTime())) {
-    return entry.dateAdded;
-  }
-
-  return format(parsed, "yyyy-MM-dd");
-});
-const newestResultVendorProduct = computed(() => {
-  const entry = newestResultEntry.value;
-  if (!entry) {
-    return null;
-  }
-
-  return `${entry.vendor} · ${entry.product}`;
-});
-const newestResultSources = computed(() => newestResultEntry.value?.sources ?? []);
-const newestResultWellKnownLabel = computed(() => {
-  const entry = newestResultEntry.value;
-  return entry ? getWellKnownCveName(entry.cveId) : undefined;
-});
-const newestResultInternetExposed = computed(() => newestResultEntry.value?.internetExposed ?? false);
-
-const viewNewestDetails = () => {
-  const entry = newestResultEntry.value;
-  if (entry) {
-    openDetails(entry);
-  }
-};
+const latestAdditionSummaries = computed(() =>
+  latestResultEntries.value.map((entry) => ({
+    entry,
+    dateLabel: formatOptionalTimestamp(entry.dateAdded),
+    vendorProduct: `${entry.vendor} · ${entry.product}`,
+    wellKnown: getWellKnownCveName(entry.cveId),
+    sources: entry.sources,
+    internetExposed: entry.internetExposed,
+  }))
+);
 
 const toProgressStats = (counts: KevCountDatum[]): ProgressDatum[] => {
   if (!counts.length) {
@@ -898,6 +955,9 @@ const clearFilter = (
     | "source"
     | "cvssRange"
     | "epssRange"
+    | "internet"
+    | "ransomware"
+    | "owned"
 ) => {
   if (key === "search") {
     if (searchDebounce) {
@@ -931,6 +991,16 @@ const clearFilter = (
 
   if (key === "epssRange") {
     epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
+    return;
+  }
+
+  if (key === "internet") {
+    showInternetExposedOnly.value = false;
+    return;
+  }
+
+  if (key === "ransomware") {
+    showRansomwareOnly.value = false;
     return;
   }
 
@@ -1182,8 +1252,129 @@ const columns: TableColumn<KevEntry>[] = [
   <UPage>
 
 
-    <UPageBody>
-      <div class="grid grid-cols-1 gap-3 w-full px-8 mx-auto">
+  <UPageBody>
+    <div class="relative">
+      <div class="fixed right-6 top-1/3 z-40 hidden xl:flex flex-col gap-3">
+        <UTooltip text="Open filters" placement="left">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="lg"
+            class="size-12 rounded-full shadow-lg"
+            icon="i-lucide-sliders-horizontal"
+            aria-label="Open filters"
+            @click="showFilterSlideover = true"
+          />
+        </UTooltip>
+        <UTooltip text="Focus controls" placement="left">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="lg"
+            class="size-12 rounded-full shadow-lg"
+            icon="i-lucide-crosshair"
+            aria-label="Open focus controls"
+            @click="showFocusSlideover = true"
+          />
+        </UTooltip>
+        <UTooltip text="Trend explorer" placement="left">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="lg"
+            class="size-12 rounded-full shadow-lg"
+            icon="i-lucide-line-chart"
+            aria-label="Open trend explorer"
+            @click="showTrendSlideover = true"
+          />
+        </UTooltip>
+      </div>
+
+      <div class="fixed bottom-5 right-4 z-40 flex items-center gap-2 xl:hidden">
+        <UTooltip text="Filters" placement="top">
+          <UButton
+            color="primary"
+            variant="solid"
+            size="md"
+            class="rounded-full shadow-lg"
+            icon="i-lucide-sliders-horizontal"
+            aria-label="Open filters"
+            @click="showFilterSlideover = true"
+          />
+        </UTooltip>
+        <UTooltip text="Focus" placement="top">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="md"
+            class="rounded-full shadow-lg"
+            icon="i-lucide-crosshair"
+            aria-label="Open focus controls"
+            @click="showFocusSlideover = true"
+          />
+        </UTooltip>
+        <UTooltip text="Trend explorer" placement="top">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="md"
+            class="rounded-full shadow-lg"
+            icon="i-lucide-line-chart"
+            aria-label="Open trend explorer"
+            @click="showTrendSlideover = true"
+          />
+        </UTooltip>
+      </div>
+
+      <div class="mx-auto w-full max-w-6xl space-y-5 px-4 pb-12 sm:px-6 lg:px-8">
+        <div class="sticky top-4 z-30 flex justify-center">
+          <div
+            class="flex w-full max-w-5xl flex-wrap items-center gap-3 rounded-full border border-neutral-200 bg-white/90 px-5 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:border-neutral-800 dark:bg-neutral-900/90"
+          >
+            <div class="flex flex-wrap gap-4 text-sm">
+              <div
+                v-for="item in quickStatItems"
+                :key="item.key"
+                class="flex items-center gap-2"
+              >
+                <UIcon :name="item.icon" class="size-4 text-primary-500 dark:text-primary-400" />
+                <span class="text-neutral-500 dark:text-neutral-400">{{ item.label }}</span>
+                <span class="font-semibold text-neutral-900 dark:text-neutral-50">{{ item.value }}</span>
+              </div>
+            </div>
+
+            <div class="hidden h-6 w-px bg-neutral-200 dark:bg-neutral-800 lg:block" />
+
+            <div class="flex flex-wrap items-center gap-2">
+              <template v-if="hasActiveFilterChips">
+                <button
+                  v-for="item in activeFilters"
+                  :key="`${item.key}-${item.value}`"
+                  type="button"
+                  class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-primary-500"
+                  @click="clearFilter(item.key)"
+                >
+                  <span>{{ item.label }}: {{ item.value }}</span>
+                  <UIcon name="i-lucide-x" class="size-3.5" />
+                </button>
+              </template>
+              <span v-else class="text-xs text-neutral-500 dark:text-neutral-400">No active filters</span>
+            </div>
+
+            <UButton
+              v-if="hasActiveFilters"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-rotate-ccw"
+              class="ml-auto"
+              @click="resetFilters"
+            >
+              Clear
+            </UButton>
+          </div>
+        </div>
+
         <TrackedSoftwareSummary
           v-model="showOwnedOnly"
           :tracked-products="trackedProducts"
@@ -1268,128 +1459,154 @@ const columns: TableColumn<KevEntry>[] = [
               </div>
             </div>
 
-            <div class="grid gap-6 lg:grid-cols-5">
-              <div class="space-y-4 lg:col-span-3">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                    CVSS severity mix
-                  </p>
-                  <UBadge
-                    v-if="severityDistribution.length"
-                    color="neutral"
-                    variant="soft"
-                    class="text-xs font-semibold"
-                  >
-                    {{ matchingResultsLabel }} CVEs
-                  </UBadge>
-                </div>
-                <div v-if="severityDistribution.length" class="space-y-3">
-                  <div
-                    v-for="item in severityDistribution"
-                    :key="item.key"
-                    class="space-y-2 rounded-lg border border-neutral-200 bg-white/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40"
-                  >
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="flex items-center gap-2">
-                        <UBadge :color="item.color" variant="soft" class="font-semibold">
-                          {{ item.label }}
-                        </UBadge>
-                        <span class="text-xs text-neutral-500 dark:text-neutral-400">
-                          {{ item.count.toLocaleString() }} CVEs
-                        </span>
-                      </div>
-                      <span class="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                        {{ item.percentLabel }}%
-                      </span>
-                    </div>
-                    <UProgress :model-value="item.percent" :max="100" :color="item.color" size="sm" />
-                  </div>
-                </div>
-                <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                  CVSS severity data is not available for the current selection.
-                </p>
-              </div>
+            <UCollapsible
+              v-model:open="showRiskDetails"
+              :unmount-on-hide="false"
+              class="flex flex-col gap-4"
+            >
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                :trailing-icon="showRiskDetails ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                block
+              >
+                {{ showRiskDetails ? 'Hide detailed breakdown' : 'Show detailed breakdown' }}
+              </UButton>
 
-              <div class="space-y-4 lg:col-span-2">
-                <div class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-                  <div class="flex items-center justify-between gap-3">
-                    <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                      Latest addition
-                    </p>
-                    <UBadge
-                      v-if="newestResultDateAdded"
-                      color="primary"
-                      variant="soft"
-                      class="text-xs font-semibold"
-                    >
-                      Added {{ newestResultDateAdded }}
-                    </UBadge>
-                  </div>
-                  <div v-if="newestResultEntry" class="space-y-3">
-                    <div class="space-y-1">
-                      <p class="text-base font-semibold text-neutral-900 dark:text-neutral-50">
-                        {{ newestResultEntry.vulnerabilityName }}
+              <template #content>
+                <div class="grid gap-6 lg:grid-cols-5">
+                  <div class="space-y-4 lg:col-span-3">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                        CVSS severity mix
                       </p>
-                      <p
-                        v-if="newestResultWellKnownLabel"
-                        class="text-xs font-medium text-primary-600 dark:text-primary-400"
-                      >
-                        {{ newestResultWellKnownLabel }}
-                      </p>
-                      <p
-                        v-if="newestResultVendorProduct"
-                        class="text-sm text-neutral-500 dark:text-neutral-400"
-                      >
-                        {{ newestResultVendorProduct }}
-                      </p>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                      <UBadge color="primary" variant="soft" class="font-semibold">
-                        {{ newestResultEntry.cveId }}
-                      </UBadge>
-                      <span v-if="!newestResultDateAdded">Recently imported</span>
                       <UBadge
-                        v-if="newestResultInternetExposed"
-                        color="warning"
-                        variant="soft"
-                        class="font-semibold"
-                      >
-                        Internet-exposed
-                      </UBadge>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                      <UBadge
-                        v-for="source in newestResultSources"
-                        :key="source"
-                        :color="sourceBadgeMap[source]?.color ?? 'neutral'"
+                        v-if="severityDistribution.length"
+                        color="neutral"
                         variant="soft"
                         class="text-xs font-semibold"
                       >
-                        {{ sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
+                        {{ matchingResultsLabel }} CVEs
                       </UBadge>
                     </div>
-                    <div class="flex flex-wrap gap-2">
-                      <UButton
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        icon="i-lucide-eye"
-                        @click="viewNewestDetails"
+                    <div v-if="severityDistribution.length" class="space-y-3">
+                      <div
+                        v-for="item in severityDistribution"
+                        :key="item.key"
+                        class="space-y-2 rounded-lg border border-neutral-200 bg-white/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40"
                       >
-                        View details
-                      </UButton>
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="flex items-center gap-2">
+                            <UBadge :color="item.color" variant="soft" class="font-semibold">
+                              {{ item.label }}
+                            </UBadge>
+                            <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                              {{ item.count.toLocaleString() }} CVEs
+                            </span>
+                          </div>
+                          <span class="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                            {{ item.percentLabel }}%
+                          </span>
+                        </div>
+                        <UProgress :model-value="item.percent" :max="100" :color="item.color" size="sm" />
+                      </div>
+                    </div>
+                    <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                      CVSS severity data is not available for the current selection.
+                    </p>
+                  </div>
+
+                  <div class="space-y-4 lg:col-span-2">
+                    <div class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
+                      <div class="flex items-center justify-between gap-3">
+                        <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                          Latest additions
+                        </p>
+                        <UBadge
+                          v-if="latestAdditionSummaries.length"
+                          color="primary"
+                          variant="soft"
+                          class="text-xs font-semibold"
+                        >
+                          {{ latestAdditionSummaries.length }} shown
+                        </UBadge>
+                      </div>
+                      <div v-if="latestAdditionSummaries.length" class="space-y-3">
+                        <div
+                          v-for="item in latestAdditionSummaries"
+                          :key="item.entry.cveId"
+                          class="space-y-3 rounded-lg border border-neutral-200 bg-white/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/60"
+                        >
+                          <div class="flex items-center justify-between gap-3">
+                            <div class="space-y-1">
+                              <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                {{ item.entry.vulnerabilityName }}
+                              </p>
+                              <p
+                                v-if="item.wellKnown"
+                                class="text-xs font-medium text-primary-600 dark:text-primary-400"
+                              >
+                                {{ item.wellKnown }}
+                              </p>
+                              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ item.vendorProduct }}
+                              </p>
+                            </div>
+                            <UBadge color="primary" variant="soft" class="text-xs font-semibold">
+                              {{ item.dateLabel }}
+                            </UBadge>
+                          </div>
+
+                          <div class="flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                            <UBadge color="neutral" variant="soft" class="font-semibold">
+                              {{ item.entry.cveId }}
+                            </UBadge>
+                            <UBadge
+                              v-if="item.internetExposed"
+                              color="warning"
+                              variant="soft"
+                              class="font-semibold"
+                            >
+                              Internet-exposed
+                            </UBadge>
+                          </div>
+
+                          <div class="flex flex-wrap gap-2">
+                            <UBadge
+                              v-for="source in item.sources"
+                              :key="source"
+                              :color="sourceBadgeMap[source]?.color ?? 'neutral'"
+                              variant="soft"
+                              class="text-xs font-semibold"
+                            >
+                              {{ sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
+                            </UBadge>
+                          </div>
+
+                          <div class="flex justify-end">
+                            <UButton
+                              color="neutral"
+                              variant="ghost"
+                              size="xs"
+                              icon="i-lucide-eye"
+                              @click="openDetails(item.entry)"
+                            >
+                              View details
+                            </UButton>
+                          </div>
+                        </div>
+                      </div>
+                      <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+                        No entries match the current filters yet.
+                      </p>
                     </div>
                   </div>
-                  <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-                    No entries match the current filters yet.
-                  </p>
                 </div>
-              </div>
-            </div>
+              </template>
+            </UCollapsible>
           </div>
         </UCard>
-
-        <FilteredTrendPanel v-model="showTrendLines" :entries="results" />
 
         <UCard>
           <div class="space-y-1">
@@ -1401,159 +1618,6 @@ const columns: TableColumn<KevEntry>[] = [
             </p>
           </div>
         </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Filters
-              </p>
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                icon="i-lucide-rotate-ccw"
-                @click="resetFilters"
-                :disabled="!hasActiveFilters"
-              >
-                Reset filters
-              </UButton>
-            </div>
-          </template>
-
-          <div class="space-y-6">
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              <UFormField label="Search">
-                <UInput
-                  v-model="searchInput"
-                  class="w-full"
-                  placeholder="Filter by CVE, vendor, product, or description"
-                />
-              </UFormField>
-
-              <UFormField label="Well-known focus">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                    Only show named, high-profile CVEs
-                  </p>
-                  <USwitch v-model="showWellKnownOnly" />
-                </div>
-              </UFormField>
-
-              <UFormField label="Internet exposure">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                    Prioritise likely internet-facing CVEs
-                  </p>
-                  <USwitch v-model="showInternetExposedOnly" />
-                </div>
-              </UFormField>
-
-              <UFormField label="Data source">
-                <div class="flex flex-wrap gap-2">
-                  <UButton
-                    v-for="option in ['all', 'kev', 'enisa']"
-                    :key="option"
-                    size="sm"
-                    :color="selectedSource === option ? 'primary' : 'neutral'"
-                    :variant="selectedSource === option ? 'solid' : 'outline'"
-                    @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
-                  >
-                    {{
-                      option === "all"
-                        ? "All sources"
-                        : option === "kev"
-                          ? "CISA KEV"
-                          : "ENISA"
-                    }}
-                  </UButton>
-                </div>
-              </UFormField>
-            </div>
-
-            <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
-              <UFormField label="Year range">
-                <div class="space-y-2">
-                  <USlider
-                    v-model="yearRange"
-                    :min="yearSliderMin"
-                    :max="yearSliderMax"
-                    :step="1"
-                    class="px-1"
-                    tooltip
-                  />
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Filter vulnerabilities by the year CISA added them to the KEV catalog.
-                  </p>
-                </div>
-              </UFormField>
-
-              <UFormField label="CVSS range">
-                <div class="space-y-2">
-                  <USlider
-                    v-model="cvssRange"
-                    :min="defaultCvssRange[0]"
-                    :max="defaultCvssRange[1]"
-                    :step="0.1"
-                    :min-steps-between-thumbs="1"
-                    tooltip
-                  />
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Common Vulnerability Scoring System (0–10) shows vendor-assigned severity.
-                  </p>
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
-                  </p>
-                </div>
-              </UFormField>
-
-              <UFormField label="EPSS range">
-                <div class="space-y-2">
-                  <USlider
-                    v-model="epssRange"
-                    :min="defaultEpssRange[0]"
-                    :max="defaultEpssRange[1]"
-                    :step="1"
-                    :min-steps-between-thumbs="1"
-                    tooltip
-                  />
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Exploit Prediction Scoring System (0–100%) estimates likelihood of exploitation.
-                  </p>
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
-                  </p>
-                </div>
-              </UFormField>
-            </div>
-
-            <div v-if="activeFilters.length" class="flex flex-wrap items-center gap-2">
-              <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Active filters</p>
-              <div class="flex flex-wrap items-center gap-2">
-                <button
-                  v-for="item in activeFilters"
-                  :key="`${item.key}-${item.value}`"
-                  type="button"
-                  class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-neutral-600"
-                  @click="clearFilter(item.key)"
-                >
-                  <span>{{ item.label }}: {{ item.value }}</span>
-                  <UIcon name="i-lucide-x" class="size-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <div v-if="hasActiveFilters">
-              <UAlert
-                color="info"
-                variant="soft"
-                icon="i-lucide-filters"
-                :title="`${results.length} matching vulnerabilities`"
-              />
-            </div>
-          </div>
-        </UCard>
-
 
         <UCard>
           <template #header>
@@ -1893,7 +1957,18 @@ const columns: TableColumn<KevEntry>[] = [
             </p>
           </template>
 
-          <UTable :data="results" :columns="columns" />
+          <div class="relative">
+            <UTable :data="results" :columns="columns" />
+            <div
+              v-if="isBusy"
+              class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-white/70 backdrop-blur dark:bg-neutral-950/70"
+            >
+              <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-primary-500" />
+              <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                Refreshing view…
+              </p>
+            </div>
+          </div>
         </UCard>
       </div>
 
@@ -2205,6 +2280,216 @@ const columns: TableColumn<KevEntry>[] = [
           </UCard>
         </template>
       </UModal>
-    </UPageBody>
+    </div>
+
+    <USlideover
+      v-model:open="showFilterSlideover"
+      title="Filters"
+      description="Refine the KEV catalog with precise search, score, and time controls."
+      :ui="{ content: 'max-w-2xl' }"
+    >
+      <template #body>
+        <div class="space-y-6">
+          <div class="flex items-start justify-between gap-3">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Tune the dataset without leaving the table view.
+            </p>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              icon="i-lucide-rotate-ccw"
+              :disabled="!hasActiveFilters"
+              @click="resetFilters"
+            >
+              Reset
+            </UButton>
+          </div>
+
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <UFormField label="Search">
+              <UInput
+                v-model="searchInput"
+                class="w-full"
+                placeholder="Filter by CVE, vendor, product, or description"
+              />
+            </UFormField>
+
+            <UFormField label="Data source">
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  v-for="option in ['all', 'kev', 'enisa']"
+                  :key="option"
+                  size="sm"
+                  :color="selectedSource === option ? 'primary' : 'neutral'"
+                  :variant="selectedSource === option ? 'solid' : 'outline'"
+                  @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
+                >
+                  {{
+                    option === 'all'
+                      ? 'All sources'
+                      : option === 'kev'
+                        ? 'CISA KEV'
+                        : 'ENISA'
+                  }}
+                </UButton>
+              </div>
+            </UFormField>
+          </div>
+
+          <div class="grid gap-6 md:grid-cols-3">
+            <UFormField label="Year range">
+              <div class="space-y-2">
+                <USlider
+                  v-model="yearRange"
+                  :min="yearSliderMin"
+                  :max="yearSliderMax"
+                  :step="1"
+                  class="px-1"
+                  tooltip
+                />
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Filter vulnerabilities by the year CISA added them to the KEV catalog.
+                </p>
+              </div>
+            </UFormField>
+
+            <UFormField label="CVSS range">
+              <div class="space-y-2">
+                <USlider
+                  v-model="cvssRange"
+                  :min="defaultCvssRange[0]"
+                  :max="defaultCvssRange[1]"
+                  :step="0.1"
+                  :min-steps-between-thumbs="1"
+                  tooltip
+                />
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Common Vulnerability Scoring System (0–10) shows vendor-assigned severity.
+                </p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
+                </p>
+              </div>
+            </UFormField>
+
+            <UFormField label="EPSS range">
+              <div class="space-y-2">
+                <USlider
+                  v-model="epssRange"
+                  :min="defaultEpssRange[0]"
+                  :max="defaultEpssRange[1]"
+                  :step="1"
+                  :min-steps-between-thumbs="1"
+                  tooltip
+                />
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Exploit Prediction Scoring System (0–100%) estimates likelihood of exploitation.
+                </p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
+                </p>
+              </div>
+            </UFormField>
+          </div>
+
+          <div class="space-y-6">
+            <UFormField label="Active filters" v-if="hasActiveFilterChips">
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  v-for="item in activeFilters"
+                  :key="`${item.key}-${item.value}`"
+                  type="button"
+                  class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-primary-500"
+                  @click="clearFilter(item.key)"
+                >
+                  <span>{{ item.label }}: {{ item.value }}</span>
+                  <UIcon name="i-lucide-x" class="size-3.5" />
+                </button>
+              </div>
+            </UFormField>
+
+            <UAlert
+              v-else
+              color="info"
+              variant="soft"
+              icon="i-lucide-info"
+              title="No filters applied"
+              description="Use the controls above to narrow the results."
+            />
+          </div>
+        </div>
+      </template>
+    </USlideover>
+
+    <USlideover
+      v-model:open="showFocusSlideover"
+      title="Focus controls"
+      description="Highlight the vulnerabilities that matter most to your organisation."
+      :ui="{ content: 'max-w-lg' }"
+    >
+      <template #body>
+        <div class="space-y-5">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">My software</p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Only show CVEs that match the products you track.
+                </p>
+              </div>
+              <USwitch v-model="showOwnedOnly" :disabled="!trackedProductsReady" />
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Named CVEs</p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Elevate high-profile, widely reported vulnerabilities.
+                </p>
+              </div>
+              <USwitch v-model="showWellKnownOnly" />
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Ransomware focus</p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Restrict the view to CVEs linked to ransomware campaigns.
+                </p>
+              </div>
+              <USwitch v-model="showRansomwareOnly" />
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Internet exposure</p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Prioritise vulnerabilities likely to be exposed on the open internet.
+                </p>
+              </div>
+              <USwitch v-model="showInternetExposedOnly" />
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300">
+            <p class="font-semibold text-neutral-700 dark:text-neutral-100">Tracked products</p>
+            <p class="mt-1">{{ trackedProductCount.toLocaleString() }} product(s) selected.</p>
+            <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+              Manage the list on the dashboard at any time; changes are saved automatically.
+            </p>
+          </div>
+        </div>
+      </template>
+    </USlideover>
+
+    <USlideover
+      v-model:open="showTrendSlideover"
+      title="Trend explorer"
+      description="Visualise how the filtered vulnerabilities accumulate over time."
+      :ui="{ content: 'max-w-3xl' }"
+    >
+      <template #body>
+        <FilteredTrendPanel v-model="showTrendLines" :entries="results" />
+      </template>
+    </USlideover>
+  </UPageBody>
   </UPage>
 </template>
