@@ -1,6 +1,5 @@
 ## Refactor index.vue
 
-- [ ] refactor index.vue
 ## Optmize
 
 -Database Schema
@@ -12,7 +11,6 @@
 - [ ] Avoid using reserved SQL keywords (e.g., references) as column names to prevent conflicts with SQLite.
 - [ ] on intiial index.vue load dont load all vulnerabilties but jsut the last 25 in the list. but make sure that the staitics and the Category insights are still showing the correctoverall numebrs not just of the show vulns, same for Vendor & product leader. this should be failry easy when we have all data inthe datbase. 
 - [ ] fix any other bugs
-- [ ]
 
 ## Optmize
 
