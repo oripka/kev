@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import type { Database as SqliteDatabase } from 'better-sqlite3'
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { readMigrationFiles } from 'drizzle-orm/migrator'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import * as schema from './schema'
@@ -12,6 +13,42 @@ let migrationsApplied = false
 
 const DB_FILENAME = 'db.sqlite'
 const MIGRATIONS_FOLDER = join(process.cwd(), 'server', 'database', 'migrations')
+
+const ensureBaselineMigrations = (sqlite: SqliteDatabase) => {
+  const hasCatalogEntries = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get('catalog_entries')
+
+  if (!hasCatalogEntries) {
+    return
+  }
+
+  sqlite
+    .prepare(
+      'CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (id INTEGER PRIMARY KEY AUTOINCREMENT, hash text NOT NULL, created_at numeric)'
+    )
+    .run()
+
+  const migrationCount = sqlite
+    .prepare('SELECT COUNT(*) as count FROM "__drizzle_migrations"')
+    .get() as { count: number }
+
+  if (migrationCount.count > 0) {
+    return
+  }
+
+  const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_FOLDER })
+  const insert = sqlite.prepare(
+    'INSERT INTO "__drizzle_migrations" ("hash", "created_at") VALUES (?, ?)' 
+  )
+  const insertTransaction = sqlite.transaction((records: typeof migrations) => {
+    for (const migration of records) {
+      insert.run(migration.hash, migration.folderMillis)
+    }
+  })
+
+  insertTransaction(migrations)
+}
 
 const ensureDirectory = (filepath: string) => {
   const directory = dirname(filepath)
@@ -43,6 +80,7 @@ const initialiseDrizzle = () => {
   }
 
   const sqlite = initialiseDatabase()
+  ensureBaselineMigrations(sqlite)
   const db = drizzle(sqlite, { schema })
   drizzleInstance = db
 

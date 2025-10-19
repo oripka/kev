@@ -37,7 +37,7 @@ export default defineEventHandler(async event => {
     .onConflictDoNothing()
     .run()
 
-  const transaction = db.transaction(tx => {
+  db.transaction(tx => {
     const items = uniqueProducts
 
     if (!items.length) {
@@ -81,8 +81,6 @@ export default defineEventHandler(async event => {
         .run()
     }
   })
-
-  transaction()
 
   const result = db
     .select({ count: sql<number>`COUNT(*)` })
