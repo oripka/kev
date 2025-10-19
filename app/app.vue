@@ -32,11 +32,11 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     <NuxtLoadingIndicator />
     <UToaster />
 
-    <UHeader title="KEV Watch" to="/">
+    <!-- <UHeader title="KEV Watch" to="/">
       <template #right>
         <UNavigationMenu :items="navigationItems" />
       </template>
-    </UHeader>
+    </UHeader> -->
 
     <UMain>
       <NuxtLayout>
@@ -44,12 +44,12 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
       </NuxtLayout>
     </UMain>
 
-    <UFooter>
+    <!-- <UFooter>
       <template #left>
         <p class="text-sm text-neutral-500 dark:text-neutral-400">
           Data from the CISA Known Exploited Vulnerabilities Catalog.
         </p>
       </template>
-    </UFooter>
+    </UFooter> -->
   </UApp>
 </template>

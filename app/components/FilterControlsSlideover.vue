@@ -129,7 +129,7 @@ const selectSource = (value: "all" | "kev" | "enisa") => {
           </UFormField>
         </div>
 
-        <div class="grid gap-6 md:grid-cols-3">
+        <div class="grid gap-6 grid-cols-1">
           <UFormField label="Year range">
             <div class="space-y-2">
               <USlider
