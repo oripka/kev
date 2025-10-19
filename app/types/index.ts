@@ -119,6 +119,7 @@ export type ProductCatalogItem = {
   vendorKey: string
   vendorName: string
   sources: CatalogSource[]
+  kevCount: number
 }
 
 export type ProductCatalogResponse = {

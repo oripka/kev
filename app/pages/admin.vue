@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import type { TableColumn } from "@nuxt/ui";
 
 interface ProductStat {
@@ -55,37 +54,40 @@ const numberFormatter = new Intl.NumberFormat("en-US");
 
 const productColumns: TableColumn<ProductStat>[] = [
   {
-    key: "productName",
-    label: "Product",
-    sortable: true,
-    cell: ({ row }) => row.productName,
+    accessorKey: "productName",
+    header: "Product",
+    enableSorting: true,
   },
   {
-    key: "vendorName",
-    label: "Vendor",
-    sortable: true,
-    cell: ({ row }) => row.vendorName,
+    accessorKey: "vendorName",
+    header: "Vendor",
+    enableSorting: true,
   },
   {
-    key: "selections",
-    label: "Selections",
-    sortable: true,
-    cell: ({ row }) => numberFormatter.format(row.selections),
+    accessorKey: "selections",
+    header: "Selections",
+    enableSorting: true,
+    cell: ({ row }) => numberFormatter.format(row.getValue<number>("selections")),
+    meta: {
+      align: "end",
+    },
   },
 ];
 
 const vendorColumns: TableColumn<VendorStat>[] = [
   {
-    key: "vendorName",
-    label: "Vendor",
-    sortable: true,
-    cell: ({ row }) => row.vendorName,
+    accessorKey: "vendorName",
+    header: "Vendor",
+    enableSorting: true,
   },
   {
-    key: "selections",
-    label: "Tracked products",
-    sortable: true,
-    cell: ({ row }) => numberFormatter.format(row.selections),
+    accessorKey: "selections",
+    header: "Tracked products",
+    enableSorting: true,
+    cell: ({ row }) => numberFormatter.format(row.getValue<number>("selections")),
+    meta: {
+      align: "end",
+    },
   },
 ];
 </script>

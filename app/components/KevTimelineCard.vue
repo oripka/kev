@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { KevEntry, Period, Range } from '~/types'
-import TimelineChart from './TimelineChart.vue'
 
 const props = defineProps<{
   period: Period

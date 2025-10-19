@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, h, onMounted, ref, resolveComponent, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { CatalogSource, ProductCatalogItem, ProductCatalogResponse, TrackedProduct } from '~/types'
@@ -18,7 +18,18 @@ const updateSearch = useDebounceFn((value: string) => {
 
 watch(searchTerm, value => updateSearch(value))
 
-const resultLimit = ref(150)
+const showAllResults = ref(false)
+const numberFormatter = new Intl.NumberFormat('en-US')
+
+const isSearchActive = computed(() => debouncedSearch.value.length >= 2)
+const effectiveLimit = computed(() => {
+  if (!isSearchActive.value && !showAllResults.value) {
+    return 15
+  }
+  return 150
+})
+
+const isTopLimited = computed(() => !showAllResults.value && !isSearchActive.value)
 
 const { data: catalogData, pending: catalogPending, error: catalogError, refresh: refreshCatalog } = await useAsyncData(
   'product-catalog',
@@ -26,11 +37,11 @@ const { data: catalogData, pending: catalogPending, error: catalogError, refresh
     $fetch<ProductCatalogResponse>('/api/products', {
       query: {
         q: debouncedSearch.value || undefined,
-        limit: resultLimit.value
+        limit: effectiveLimit.value
       }
     }),
   {
-    watch: [debouncedSearch, resultLimit]
+    watch: [debouncedSearch, effectiveLimit]
   }
 )
 
@@ -42,27 +53,6 @@ const catalogRows = computed(() =>
     sourceSummary: item.sources.map(source => sourceLabels[source]).join(', ')
   }))
 )
-
-const columns: TableColumn<(ProductCatalogItem & { sourceSummary: string })>[] = [
-  {
-    key: 'productName',
-    label: 'Product',
-    sortable: true,
-    cell: ({ row }) => row.productName
-  },
-  {
-    key: 'vendorName',
-    label: 'Vendor',
-    sortable: true,
-    cell: ({ row }) => row.vendorName
-  },
-  {
-    key: 'sourceSummary',
-    label: 'Sources',
-    sortable: true,
-    cell: ({ row }) => row.sourceSummary
-  }
-]
 
 const {
   trackedProducts,
@@ -111,6 +101,60 @@ onMounted(() => {
     void ensureSession()
   }
 })
+
+const UButton = resolveComponent('UButton')
+
+const columns = computed<TableColumn<(ProductCatalogItem & { sourceSummary: string })>[]>(() => {
+  const trackedSet = trackedProductSet.value
+
+  return [
+    {
+      accessorKey: 'productName',
+      header: 'Product',
+      cell: ({ row }) => row.original.productName
+    },
+    {
+      accessorKey: 'vendorName',
+      header: 'Vendor',
+      cell: ({ row }) => row.original.vendorName
+    },
+    {
+      accessorKey: 'kevCount',
+      header: 'KEV matches',
+      cell: ({ row }) => numberFormatter.format(row.original.kevCount),
+      meta: {
+        align: 'end'
+      }
+    },
+    {
+      accessorKey: 'sourceSummary',
+      header: 'Sources',
+      cell: ({ row }) => row.original.sourceSummary
+    },
+    {
+      id: 'actions',
+      header: '',
+      enableSorting: false,
+      meta: {
+        align: 'end'
+      },
+      cell: ({ row }) => {
+        const tracked = trackedSet.has(row.original.productKey)
+
+        return h(
+          UButton,
+          {
+            color: tracked ? 'neutral' : 'primary',
+            size: 'xs',
+            disabled: tracked,
+            onClick: () => addItem(row.original)
+          },
+          () => (tracked ? 'Tracked' : 'Add to focus')
+        )
+      }
+    }
+  ]
+})
 </script>
 
 <template>
@@ -145,33 +189,40 @@ onMounted(() => {
                 <UFormField label="Search the catalog" help="Type at least two characters to filter by product or vendor.">
                   <UInput v-model="searchTerm" placeholder="Search by product or vendor name" />
                 </UFormField>
-                <div class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-                  <span>
-                    Showing {{ catalogRows.length }} results
-                  </span>
-                  <button
-                    type="button"
-                    class="font-medium text-primary-600 hover:underline dark:text-primary-400"
-                    @click="refreshCatalog"
-                  >
-                    Refresh list
-                  </button>
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div class="flex flex-wrap items-center gap-3 text-xs text-neutral-500 dark:text-neutral-400">
+                    <span>
+                      Showing {{ catalogRows.length }} results
+                    </span>
+                    <span v-if="isTopLimited" class="rounded-full bg-primary-100/60 px-2 py-1 text-[11px] font-semibold text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
+                      Top 15 most exploited vulnerabilities
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      class="text-xs font-medium text-primary-600 hover:underline dark:text-primary-400"
+                      @click="refreshCatalog"
+                    >
+                      Refresh list
+                    </button>
+                    <label class="flex items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                      <USwitch
+                        :model-value="showAllResults"
+                        :disabled="isSearchActive"
+                        aria-label="Toggle showing all catalog results"
+                        @update:model-value="value => (showAllResults = value)"
+                      />
+                      <span>
+                        Show all catalog results
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
               <div class="space-y-3">
-                <UTable :data="catalogRows" :columns="columns" :loading="catalogPending">
-                  <template #actions-data="{ row }">
-                    <UButton
-                      color="primary"
-                      size="xs"
-                      :disabled="isTracked(row.productKey)"
-                      @click="addItem(row)"
-                    >
-                      {{ isTracked(row.productKey) ? 'Tracked' : 'Add to focus' }}
-                    </UButton>
-                  </template>
-                </UTable>
+                <UTable :data="catalogRows" :columns="columns" :loading="catalogPending" />
                 <UAlert
                   v-if="catalogError"
                   color="error"

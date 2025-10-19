@@ -1,6 +1,7 @@
 import { getQuery } from 'h3'
 import { getDatabase } from '../utils/sqlite'
 import type { CatalogSource, ProductCatalogItem, ProductCatalogResponse } from '~/types'
+import { normaliseVendorProduct } from '~/utils/vendorProduct'
 
 type ProductCatalogRow = {
   product_key: string
@@ -8,6 +9,12 @@ type ProductCatalogRow = {
   vendor_key: string
   vendor_name: string
   sources: string
+}
+
+type KevCountRow = {
+  vendor: string | null
+  product: string | null
+  count: number
 }
 
 const toSources = (value: string): CatalogSource[] => {
@@ -47,6 +54,21 @@ export default defineEventHandler((event): ProductCatalogResponse => {
   const limit = normaliseLimit(query.limit)
 
   const db = getDatabase()
+  const kevCountRows = db
+    .prepare<KevCountRow>(
+      `SELECT vendor, product, COUNT(*) as count
+       FROM kev_entries
+       GROUP BY vendor, product`
+    )
+    .all() as KevCountRow[]
+
+  const kevCountByProduct = new Map<string, number>()
+
+  for (const row of kevCountRows) {
+    const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
+    kevCountByProduct.set(normalised.product.key, row.count ?? 0)
+  }
+
   let rows: ProductCatalogRow[]
 
   if (search) {
@@ -63,9 +85,21 @@ export default defineEventHandler((event): ProductCatalogResponse => {
       SELECT product_key, product_name, vendor_key, vendor_name, sources
       FROM product_catalog
       ORDER BY product_name ASC
-      LIMIT ?
     `)
-    rows = statement.all(limit) as ProductCatalogRow[]
+    const fetched = statement.all() as ProductCatalogRow[]
+
+    rows = fetched
+      .sort((a, b) => {
+        const countA = kevCountByProduct.get(a.product_key) ?? 0
+        const countB = kevCountByProduct.get(b.product_key) ?? 0
+
+        if (countA !== countB) {
+          return countB - countA
+        }
+
+        return a.product_name.localeCompare(b.product_name)
+      })
+      .slice(0, limit)
   }
 
   const items: ProductCatalogItem[] = rows.map(row => ({
@@ -73,7 +107,8 @@ export default defineEventHandler((event): ProductCatalogResponse => {
     productName: row.product_name,
     vendorKey: row.vendor_key,
     vendorName: row.vendor_name,
-    sources: toSources(row.sources)
+    sources: toSources(row.sources),
+    kevCount: kevCountByProduct.get(row.product_key) ?? 0
   }))
 
   return { items }
