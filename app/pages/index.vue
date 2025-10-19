@@ -10,7 +10,7 @@ import {
   watch,
 } from "vue";
 import { format, parseISO } from "date-fns";
-import type { TableColumn } from "@nuxt/ui";
+import type { AccordionItem, SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import type { KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
@@ -19,7 +19,6 @@ import type {
   FilterKey,
   FilterState,
   LatestAdditionSummary,
-  QuickActionKey,
   SeverityDistributionDatum,
   SeverityKey,
   SourceBadgeMap,
@@ -56,126 +55,25 @@ const showWellKnownOnly = ref(false);
 const showRansomwareOnly = ref(false);
 const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
-const showFilterSlideover = ref(false);
-const showFocusSlideover = ref(false);
 const showTrendSlideover = ref(false);
-const showMySoftwareSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(false);
-type QuickActionButton = {
-  id: QuickActionKey;
-  icon: string;
-  color: string;
-  variant: "soft" | "solid";
-  size: "md" | "lg";
-  tooltip: string;
-  ariaLabel: string;
-};
-
-const desktopQuickActions: QuickActionButton[] = [
-  {
-    id: "filters",
-    icon: "i-lucide-sliders-horizontal",
-    color: "neutral",
-    variant: "soft",
-    size: "lg",
-    tooltip: "Open filters",
-    ariaLabel: "Open filters",
-  },
-  {
-    id: "focus",
-    icon: "i-lucide-crosshair",
-    color: "neutral",
-    variant: "soft",
-    size: "lg",
-    tooltip: "Focus controls",
-    ariaLabel: "Open focus controls",
-  },
-  {
-    id: "my-software",
-    icon: "i-lucide-monitor",
-    color: "neutral",
-    variant: "soft",
-    size: "lg",
-    tooltip: "My software focus",
-    ariaLabel: "Open my software focus",
-  },
-  {
-    id: "trends",
-    icon: "i-lucide-line-chart",
-    color: "neutral",
-    variant: "soft",
-    size: "lg",
-    tooltip: "Trend explorer",
-    ariaLabel: "Open trend explorer",
-  },
-];
-
-const mobileQuickActions: QuickActionButton[] = [
-  {
-    id: "filters",
-    icon: "i-lucide-sliders-horizontal",
-    color: "primary",
-    variant: "solid",
-    size: "md",
-    tooltip: "Filters",
-    ariaLabel: "Open filters",
-  },
-  {
-    id: "focus",
-    icon: "i-lucide-crosshair",
-    color: "neutral",
-    variant: "soft",
-    size: "md",
-    tooltip: "Focus",
-    ariaLabel: "Open focus controls",
-  },
-  {
-    id: "my-software",
-    icon: "i-lucide-monitor",
-    color: "neutral",
-    variant: "soft",
-    size: "md",
-    tooltip: "My software",
-    ariaLabel: "Open my software focus",
-  },
-  {
-    id: "trends",
-    icon: "i-lucide-line-chart",
-    color: "neutral",
-    variant: "soft",
-    size: "md",
-    tooltip: "Trend explorer",
-    ariaLabel: "Open trend explorer",
-  },
-];
-
-const handleQuickActionSelect = (action: QuickActionKey) => {
-  if (action === "filters") {
-    showFilterSlideover.value = true;
-    return;
-  }
-
-  if (action === "focus") {
-    showFocusSlideover.value = true;
-    return;
-  }
-
-  if (action === "my-software") {
-    showMySoftwareSlideover.value = true;
-    return;
-  }
-
-  if (action === "trends") {
-    showTrendSlideover.value = true;
-  }
-};
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
-const cvssRange = ref<[number, number]>([defaultCvssRange[0], defaultCvssRange[1]]);
-const epssRange = ref<[number, number]>([defaultEpssRange[0], defaultEpssRange[1]]);
+const cvssRange = ref<[number, number]>([
+  defaultCvssRange[0],
+  defaultCvssRange[1],
+]);
+const epssRange = ref<[number, number]>([
+  defaultEpssRange[0],
+  defaultEpssRange[1],
+]);
 const selectedSource = ref<"all" | "kev" | "enisa">("all");
 const isFiltering = ref(false);
+
+const selectSource = (value: "all" | "kev" | "enisa") => {
+  selectedSource.value = value;
+};
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -225,7 +123,12 @@ const showOwnedOnlyEffective = computed(
 const productMetaMap = computed(() => {
   const map = new Map<
     string,
-    { productKey: string; productName: string; vendorKey: string; vendorName: string }
+    {
+      productKey: string;
+      productName: string;
+      vendorKey: string;
+      vendorName: string;
+    }
   >();
 
   productCounts.value.forEach((item) => {
@@ -300,7 +203,9 @@ const filterParams = computed(() => {
   return params;
 });
 
-const normalizedSearchTerm = computed(() => debouncedSearch.value.trim().toLowerCase());
+const normalizedSearchTerm = computed(() =>
+  debouncedSearch.value.trim().toLowerCase()
+);
 
 const {
   entries,
@@ -353,7 +258,10 @@ watch(
   ([min, max]) => {
     const hadCustomRange = hasCustomYearRange.value;
 
-    if (defaultYearRange.value[0] !== min || defaultYearRange.value[1] !== max) {
+    if (
+      defaultYearRange.value[0] !== min ||
+      defaultYearRange.value[1] !== max
+    ) {
       defaultYearRange.value = [min, max];
     }
 
@@ -387,9 +295,11 @@ const hasActiveFilters = computed(() => {
     filters.vendor ||
     filters.product;
   const hasCvssFilter =
-    cvssRange.value[0] > defaultCvssRange[0] || cvssRange.value[1] < defaultCvssRange[1];
+    cvssRange.value[0] > defaultCvssRange[0] ||
+    cvssRange.value[1] < defaultCvssRange[1];
   const hasEpssFilter =
-    epssRange.value[0] > defaultEpssRange[0] || epssRange.value[1] < defaultEpssRange[1];
+    epssRange.value[0] > defaultEpssRange[0] ||
+    epssRange.value[1] < defaultEpssRange[1];
   const hasSourceFilter = selectedSource.value !== "all";
   const hasTrackedFilter = showOwnedOnlyEffective.value;
 
@@ -418,7 +328,10 @@ const catalogUpdatedAt = computed(() => {
 const UBadge = resolveComponent("UBadge");
 const UButton = resolveComponent("UButton");
 
-const cvssSeverityColors: Record<Exclude<KevEntrySummary["cvssSeverity"], null>, string> = {
+const cvssSeverityColors: Record<
+  Exclude<KevEntrySummary["cvssSeverity"], null>,
+  string
+> = {
   None: "success",
   Low: "primary",
   Medium: "warning",
@@ -432,14 +345,10 @@ const sourceBadgeMap: SourceBadgeMap = {
 };
 
 const formatCvssScore = (score: number | null) =>
-  typeof score === "number" && Number.isFinite(score)
-    ? score.toFixed(1)
-    : null;
+  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;
 
 const formatEpssScore = (score: number | null) =>
-  typeof score === "number" && Number.isFinite(score)
-    ? score.toFixed(1)
-    : null;
+  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;
 
 const formatOptionalTimestamp = (value: string | null) => {
   if (!value) {
@@ -555,7 +464,9 @@ const results = computed(() => {
       return [];
     }
 
-    collection = collection.filter((entry) => trackedKeys.has(entry.productKey));
+    collection = collection.filter((entry) =>
+      trackedKeys.has(entry.productKey)
+    );
   }
 
   if (!term) {
@@ -601,9 +512,13 @@ const isBusy = computed(() => dataPending.value || isFiltering.value);
 const shownResultCount = computed(() => results.value.length);
 const totalMatchCount = computed(() => totalEntries.value);
 const hasLimitedResults = computed(
-  () => totalMatchCount.value > entryLimit.value || (showAllResults.value && shownResultCount.value < totalMatchCount.value)
+  () =>
+    totalMatchCount.value > entryLimit.value ||
+    (showAllResults.value && shownResultCount.value < totalMatchCount.value)
 );
-const canShowAllResults = computed(() => hasLimitedResults.value || showAllResults.value);
+const canShowAllResults = computed(
+  () => hasLimitedResults.value || showAllResults.value
+);
 const resultCountLabel = computed(() => {
   const shown = shownResultCount.value;
   const total = totalMatchCount.value;
@@ -612,7 +527,9 @@ const resultCountLabel = computed(() => {
     return "No matches found.";
   }
 
-  const shownLabel = `${shown.toLocaleString()} match${shown === 1 ? "" : "es"}`;
+  const shownLabel = `${shown.toLocaleString()} match${
+    shown === 1 ? "" : "es"
+  }`;
   if (total <= shown) {
     return `Showing ${shownLabel}.`;
   }
@@ -676,7 +593,9 @@ const formatShare = (count: number, total: number) => {
 };
 
 const matchingResultsCount = computed(() => results.value.length);
-const matchingResultsLabel = computed(() => matchingResultsCount.value.toLocaleString());
+const matchingResultsLabel = computed(() =>
+  matchingResultsCount.value.toLocaleString()
+);
 
 type AggregatedMetrics = {
   ransomwareCount: number;
@@ -688,7 +607,10 @@ type AggregatedMetrics = {
   latestTimestamp: number;
 };
 
-const severityDisplayMeta: Record<SeverityKey, { label: string; color: string }> = {
+const severityDisplayMeta: Record<
+  SeverityKey,
+  { label: string; color: string }
+> = {
   Critical: { label: "Critical", color: cvssSeverityColors.Critical },
   High: { label: "High", color: cvssSeverityColors.High },
   Medium: { label: "Medium", color: cvssSeverityColors.Medium },
@@ -715,7 +637,8 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
   };
 
   const severityCounts = new Map<SeverityKey, number>();
-  const latestEntries: Array<{ entry: KevEntrySummary; timestamp: number }> = [];
+  const latestEntries: Array<{ entry: KevEntrySummary; timestamp: number }> =
+    [];
 
   for (const entry of results.value) {
     const severity = entry.cvssSeverity;
@@ -723,7 +646,10 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
       metrics.severeCount += 1;
     }
 
-    if (typeof entry.cvssScore === "number" && Number.isFinite(entry.cvssScore)) {
+    if (
+      typeof entry.cvssScore === "number" &&
+      Number.isFinite(entry.cvssScore)
+    ) {
       metrics.cvssSum += entry.cvssScore;
       metrics.cvssCount += 1;
     }
@@ -776,16 +702,23 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
   };
 });
 
-const aggregatedResultMetrics = computed(() => derivedResultSnapshot.value.aggregated);
+const aggregatedResultMetrics = computed(
+  () => derivedResultSnapshot.value.aggregated
+);
 
 const highSeverityShare = computed(() =>
-  formatShare(aggregatedResultMetrics.value.severeCount, matchingResultsCount.value)
+  formatShare(
+    aggregatedResultMetrics.value.severeCount,
+    matchingResultsCount.value
+  )
 );
 const highSeverityShareLabel = computed(() => {
   const label = highSeverityShare.value.percentLabel;
   return label === null ? "—" : `${label}%`;
 });
-const highSeverityCount = computed(() => aggregatedResultMetrics.value.severeCount);
+const highSeverityCount = computed(
+  () => aggregatedResultMetrics.value.severeCount
+);
 const highSeveritySummary = computed(() => {
   if (!matchingResultsCount.value) {
     return "No entries to analyse";
@@ -799,13 +732,18 @@ const highSeveritySummary = computed(() => {
 });
 
 const ransomwareShare = computed(() =>
-  formatShare(aggregatedResultMetrics.value.ransomwareCount, matchingResultsCount.value)
+  formatShare(
+    aggregatedResultMetrics.value.ransomwareCount,
+    matchingResultsCount.value
+  )
 );
 const ransomwareShareLabel = computed(() => {
   const label = ransomwareShare.value.percentLabel;
   return label === null ? "—" : `${label}%`;
 });
-const ransomwareLinkedCount = computed(() => aggregatedResultMetrics.value.ransomwareCount);
+const ransomwareLinkedCount = computed(
+  () => aggregatedResultMetrics.value.ransomwareCount
+);
 const ransomwareSummary = computed(() => {
   if (!matchingResultsCount.value) {
     return "No entries to analyse";
@@ -819,13 +757,18 @@ const ransomwareSummary = computed(() => {
 });
 
 const internetExposedShare = computed(() =>
-  formatShare(aggregatedResultMetrics.value.internetExposedCount, matchingResultsCount.value)
+  formatShare(
+    aggregatedResultMetrics.value.internetExposedCount,
+    matchingResultsCount.value
+  )
 );
 const internetExposedShareLabel = computed(() => {
   const label = internetExposedShare.value.percentLabel;
   return label === null ? "—" : `${label}%`;
 });
-const internetExposedCount = computed(() => aggregatedResultMetrics.value.internetExposedCount);
+const internetExposedCount = computed(
+  () => aggregatedResultMetrics.value.internetExposedCount
+);
 const internetExposedSummary = computed(() => {
   if (!matchingResultsCount.value) {
     return "No entries to analyse";
@@ -850,7 +793,9 @@ const averageCvssLabel = computed(() => {
   const value = averageCvssScore.value;
   return value === null ? "—" : value.toFixed(1);
 });
-const scoredResultsCount = computed(() => aggregatedResultMetrics.value.cvssCount);
+const scoredResultsCount = computed(
+  () => aggregatedResultMetrics.value.cvssCount
+);
 const averageCvssSummary = computed(() => {
   const count = scoredResultsCount.value;
   if (!count) {
@@ -893,7 +838,9 @@ const severityDistribution = computed(
   () => derivedResultSnapshot.value.severityDistribution
 );
 
-const latestResultEntries = computed(() => derivedResultSnapshot.value.latestEntries);
+const latestResultEntries = computed(
+  () => derivedResultSnapshot.value.latestEntries
+);
 
 const latestAdditionSummaries = computed<LatestAdditionSummary[]>(() =>
   latestResultEntries.value.map((entry) => ({
@@ -932,20 +879,29 @@ const toProgressStats = (counts: KevCountDatum[]): ProgressDatum[] => {
 
 const domainStats = computed(() => toProgressStats(domainCounts.value));
 const exploitLayerStats = computed(() => toProgressStats(exploitCounts.value));
-const vulnerabilityStats = computed(() => toProgressStats(vulnerabilityCounts.value));
+const vulnerabilityStats = computed(() =>
+  toProgressStats(vulnerabilityCounts.value)
+);
 const vendorStats = computed(() => toProgressStats(vendorCounts.value));
 const productStats = computed(() => toProgressStats(productCounts.value));
 
 const topCountOptions = [5, 10, 15, 20];
-const topCountItems: SelectMenuItem<number>[] = topCountOptions.map((value) => ({
-  label: `Top ${value}`,
-  value,
-}));
+const topCountItems: SelectMenuItem<number>[] = topCountOptions.map(
+  (value) => ({
+    label: `Top ${value}`,
+    value,
+  })
+);
 
-const topCount = ref<number>(5);
+const topVendorCount = ref<number>(5);
+const topProductCount = ref<number>(5);
 
-const topVendorStats = computed(() => vendorStats.value.slice(0, topCount.value));
-const topProductStats = computed(() => productStats.value.slice(0, topCount.value));
+const topVendorStats = computed(() =>
+  vendorStats.value.slice(0, topVendorCount.value)
+);
+const topProductStats = computed(() =>
+  productStats.value.slice(0, topProductCount.value)
+);
 
 const domainTotalCount = computed(() =>
   domainCounts.value.reduce((sum, item) => sum + item.count, 0)
@@ -969,7 +925,9 @@ const productTotalCount = computed(() =>
 
 const topDomainStat = computed(() => domainStats.value[0] ?? null);
 const topExploitLayerStat = computed(() => exploitLayerStats.value[0] ?? null);
-const topVulnerabilityStat = computed(() => vulnerabilityStats.value[0] ?? null);
+const topVulnerabilityStat = computed(
+  () => vulnerabilityStats.value[0] ?? null
+);
 
 const filterLabels: Record<FilterKey, string> = {
   domain: "Domain",
@@ -981,7 +939,9 @@ const filterLabels: Record<FilterKey, string> = {
 
 const resolveFilterValueLabel = (key: FilterKey, value: string) => {
   if (key === "vendor") {
-    const fromCounts = vendorCounts.value.find((item) => item.key === value)?.name;
+    const fromCounts = vendorCounts.value.find(
+      (item) => item.key === value
+    )?.name;
     if (fromCounts) {
       return fromCounts;
     }
@@ -991,7 +951,9 @@ const resolveFilterValueLabel = (key: FilterKey, value: string) => {
   }
 
   if (key === "product") {
-    const fromCounts = productCounts.value.find((item) => item.key === value)?.name;
+    const fromCounts = productCounts.value.find(
+      (item) => item.key === value
+    )?.name;
     if (fromCounts) {
       return fromCounts;
     }
@@ -1027,18 +989,30 @@ const activeFilters = computed<ActiveFilter[]>(() => {
   }
 
   if (showRansomwareOnly.value) {
-    items.push({ key: "ransomware", label: "Focus", value: "Ransomware-linked CVEs" });
+    items.push({
+      key: "ransomware",
+      label: "Focus",
+      value: "Ransomware-linked CVEs",
+    });
   }
 
   if (showInternetExposedOnly.value) {
-    items.push({ key: "internet", label: "Focus", value: "Internet-exposed CVEs" });
+    items.push({
+      key: "internet",
+      label: "Focus",
+      value: "Internet-exposed CVEs",
+    });
   }
 
   if (showOwnedOnlyEffective.value) {
     const summary = hasTrackedProducts.value
       ? `${trackedProductCount.value} selected`
       : "No products yet";
-    items.push({ key: "owned", label: "Focus", value: `My software · ${summary}` });
+    items.push({
+      key: "owned",
+      label: "Focus",
+      value: `My software · ${summary}`,
+    });
   }
 
   if (hasCustomYearRange.value) {
@@ -1054,7 +1028,10 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     items.push({ key: "source", label: "Source", value: label });
   }
 
-  if (cvssRange.value[0] > defaultCvssRange[0] || cvssRange.value[1] < defaultCvssRange[1]) {
+  if (
+    cvssRange.value[0] > defaultCvssRange[0] ||
+    cvssRange.value[1] < defaultCvssRange[1]
+  ) {
     const [min, max] = cvssRange.value;
     items.push({
       key: "cvssRange",
@@ -1063,7 +1040,10 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     });
   }
 
-  if (epssRange.value[0] > defaultEpssRange[0] || epssRange.value[1] < defaultEpssRange[1]) {
+  if (
+    epssRange.value[0] > defaultEpssRange[0] ||
+    epssRange.value[1] < defaultEpssRange[1]
+  ) {
     const [min, max] = epssRange.value;
     items.push({
       key: "epssRange",
@@ -1074,6 +1054,94 @@ const activeFilters = computed<ActiveFilter[]>(() => {
 
   return items;
 });
+
+const activeFilterCount = computed(() => activeFilters.value.length);
+
+const focusActiveCount = computed(
+  () =>
+    [
+      showOwnedOnlyEffective.value,
+      showWellKnownOnly.value,
+      showRansomwareOnly.value,
+      showInternetExposedOnly.value,
+    ].filter(Boolean).length
+);
+
+type AsideAccordionItem = AccordionItem & {
+  value: string;
+  badgeColor?: string;
+  badgeText?: string;
+};
+
+const asideAccordionValue = ref<string[]>(["filters"]);
+
+const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
+  {
+    value: "domain",
+    label: "Domain coverage",
+    slot: "domain",
+    badgeColor: "primary",
+    badgeText: domainTotalCount.value.toLocaleString(),
+  },
+  {
+    value: "exploit",
+    label: "Exploit dynamics",
+    slot: "exploit",
+    badgeColor: "warning",
+    badgeText: exploitLayerTotalCount.value.toLocaleString(),
+  },
+  {
+    value: "vulnerability",
+    label: "Vulnerability mix",
+    slot: "vulnerability",
+    badgeColor: "violet",
+    badgeText: vulnerabilityTotalCount.value.toLocaleString(),
+  },
+  {
+    value: "top-vendors",
+    label: "Top vendors",
+    slot: "topVendors",
+    badgeColor: "primary",
+    badgeText: vendorTotalCount.value.toLocaleString(),
+  },
+  {
+    value: "top-products",
+    label: "Top products",
+    slot: "topProducts",
+    badgeColor: "secondary",
+    badgeText: productTotalCount.value.toLocaleString(),
+  },
+  {
+    value: "filters",
+    label: "Filters",
+    slot: "filters",
+    badgeColor: "primary",
+    badgeText: activeFilterCount.value.toString(),
+  },
+  {
+    value: "focus",
+    label: "Focus controls",
+    slot: "focus",
+    badgeColor: "emerald",
+    badgeText: focusActiveCount.value.toString(),
+  },
+  {
+    value: "my-software",
+    label: "My software focus",
+    slot: "mySoftware",
+    badgeColor: "neutral",
+    badgeText: trackedProductsReady.value
+      ? trackedProductCount.value.toLocaleString()
+      : "…",
+  },
+  {
+    value: "trend",
+    label: "Trend explorer",
+    slot: "trend",
+    badgeColor: "neutral",
+    badgeText: results.value.length.toLocaleString(),
+  },
+]);
 
 const resetDownstreamFilters = (key: FilterKey) => {
   if (key === "domain") {
@@ -1170,13 +1238,15 @@ const columns: TableColumn<KevEntrySummary>[] = [
     id: "summary",
     header: "Description",
     cell: ({ row }) => {
-      const description = row.original.description || "No description provided.";
+      const description =
+        row.original.description || "No description provided.";
       const wellKnownLabel = getWellKnownCveName(row.original.cveId);
       const badgeRowChildren = [] as Array<ReturnType<typeof h>>;
 
       const entry = row.original;
       const isTracked =
-        trackedProductsReady.value && trackedProductSet.value.has(entry.productKey);
+        trackedProductsReady.value &&
+        trackedProductSet.value.has(entry.productKey);
       const hasServerSideRce = entry.exploitLayers.some((layer) =>
         layer.startsWith("RCE · Server-side")
       );
@@ -1259,7 +1329,10 @@ const columns: TableColumn<KevEntrySummary>[] = [
         children.push(
           h(
             "div",
-            { class: "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400" },
+            {
+              class:
+                "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400",
+            },
             badgeRowChildren
           )
         );
@@ -1401,169 +1474,773 @@ const columns: TableColumn<KevEntrySummary>[] = [
 </script>
 
 <template>
-  <UPage>
+  <UDashboardGroup>
 
-
-  <UPageBody>
-    <div class="relative">
-      <DashboardActionButtons
-        :items="desktopQuickActions"
-        orientation="vertical"
-        wrapper-class="fixed right-6 top-1/3 z-40 hidden xl:flex"
-        @select="handleQuickActionSelect"
-      />
-
-      <DashboardActionButtons
-        :items="mobileQuickActions"
-        orientation="horizontal"
-        wrapper-class="fixed bottom-5 right-4 z-40 xl:hidden"
-        @select="handleQuickActionSelect"
-      />
-
-      <div class="mx-auto w-full max-w-6xl space-y-5 px-4 pb-12 sm:px-6 lg:px-8">
+      <UDashboardPanel     :default-size="25"
+    :min-size="20"
+    :max-size="30"
+    resizable>
         <div
-          class="pointer-events-none fixed inset-x-0 top-24 z-50 flex justify-center px-4 sm:px-6 lg:px-8"
+          class="space-y-6 px-4 pb-10 pt-6 sm:px-6 lg:sticky lg:top-24 lg:px-4 xl:px-6"
         >
-          <QuickFilterSummary
-            :quick-stat-items="quickStatItems"
-            :active-filters="activeFilters"
-            :has-active-filters="hasActiveFilters"
-            :has-active-filter-chips="hasActiveFilterChips"
-            @reset="resetFilters"
-            @clear-filter="clearFilter"
-          />
-        </div>
-        <div class="h-40 sm:h-44"></div>
-        <CategoryInsightsCard
-          :filters="filters"
-          :domain-stats="domainStats"
-          :exploit-layer-stats="exploitLayerStats"
-          :vulnerability-stats="vulnerabilityStats"
-          :domain-total-count="domainTotalCount"
-          :exploit-layer-total-count="exploitLayerTotalCount"
-          :vulnerability-total-count="vulnerabilityTotalCount"
-          :top-domain-stat="topDomainStat"
-          :top-exploit-layer-stat="topExploitLayerStat"
-          :top-vulnerability-stat="topVulnerabilityStat"
-          @toggle-filter="toggleFilter"
-        />
-
-        <VendorProductLeadersCard
-          v-model:top-count="topCount"
-          :filters="filters"
-          :top-vendor-stats="topVendorStats"
-          :top-product-stats="topProductStats"
-          :vendor-total-count="vendorTotalCount"
-          :product-total-count="productTotalCount"
-          :top-count-items="topCountItems"
-          @toggle-filter="toggleFilter"
-        />
-
-        <UCard>
-          <template #header>
-            <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-              Results
-            </p>
-          </template>
-
-          <div>
-            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                {{ resultCountLabel }}
-              </p>
-              <div v-if="canShowAllResults" class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                <span class="font-medium">Show all results</span>
-                <USwitch v-model="showAllResults" aria-label="Toggle show all results" />
+          <UAccordion
+            v-model="asideAccordionValue"
+            type="multiple"
+            :items="asideAccordionItems"
+            class="space-y-2"
+          >
+            <template #default="{ item }">
+              <div class="flex items-center justify-between gap-3">
+                <span
+                  class="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
+                >
+                  {{ item.label }}
+                </span>
+                <UBadge
+                  v-if="item.badgeText"
+                  :color="item.badgeColor ?? 'neutral'"
+                  variant="soft"
+                  class="font-semibold"
+                >
+                  {{ item.badgeText }}
+                </UBadge>
               </div>
-            </div>
-            <UProgress
-              v-if="isBusy"
-              class="mb-4"
-              animation="swing"
-              color="primary"
+            </template>
+
+            <template #filters>
+              <div class="space-y-6">
+                <div class="flex items-start justify-between gap-3">
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Tune the dataset without leaving the table view.
+                  </p>
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="sm"
+                    icon="i-lucide-rotate-ccw"
+                    :disabled="!hasActiveFilters"
+                    @click="resetFilters"
+                  >
+                    Reset
+                  </UButton>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <UFormField label="Search">
+                    <UInput
+                      v-model="searchInput"
+                      class="w-full"
+                      placeholder="Filter by CVE, vendor, product, or description"
+                    />
+                  </UFormField>
+
+                  <UFormField label="Data source">
+                    <div class="flex flex-wrap gap-2">
+                      <UButton
+                        v-for="option in ['all', 'kev', 'enisa']"
+                        :key="option"
+                        size="sm"
+                        :color="
+                          selectedSource === option ? 'primary' : 'neutral'
+                        "
+                        :variant="
+                          selectedSource === option ? 'solid' : 'outline'
+                        "
+                        @click="selectSource(option as 'all' | 'kev' | 'enisa')"
+                      >
+                        {{
+                          option === "all"
+                            ? "All sources"
+                            : option === "kev"
+                            ? "CISA KEV"
+                            : "ENISA"
+                        }}
+                      </UButton>
+                    </div>
+                  </UFormField>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <UFormField label="Year range">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="yearRange"
+                        :min="yearSliderMin"
+                        :max="yearSliderMax"
+                        :step="1"
+                        class="px-1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Filter vulnerabilities by the year CISA added them to
+                        the KEV catalog.
+                      </p>
+                    </div>
+                  </UFormField>
+
+                  <UFormField label="CVSS range">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="cvssRange"
+                        :min="defaultCvssRange[0]"
+                        :max="defaultCvssRange[1]"
+                        :step="0.1"
+                        :min-steps-between-thumbs="1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Common Vulnerability Scoring System (0–10) shows
+                        vendor-assigned severity.
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        {{ cvssRange[0].toFixed(1) }} –
+                        {{ cvssRange[1].toFixed(1) }}
+                      </p>
+                    </div>
+                  </UFormField>
+
+                  <UFormField label="EPSS range" class="md:col-span-2">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="epssRange"
+                        :min="defaultEpssRange[0]"
+                        :max="defaultEpssRange[1]"
+                        :step="1"
+                        :min-steps-between-thumbs="1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Exploit Prediction Scoring System (0–100%) estimates
+                        likelihood of exploitation.
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        {{ Math.round(epssRange[0]) }} –
+                        {{ Math.round(epssRange[1]) }}
+                      </p>
+                    </div>
+                  </UFormField>
+                </div>
+
+                <div class="space-y-6">
+                  <UFormField
+                    label="Active filters"
+                    v-if="hasActiveFilterChips"
+                  >
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button
+                        v-for="item in activeFilters"
+                        :key="`${item.key}-${item.value}`"
+                        type="button"
+                        class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-primary-500"
+                        @click="clearFilter(item.key)"
+                      >
+                        <span>{{ item.label }}: {{ item.value }}</span>
+                        <UIcon name="i-lucide-x" class="size-3.5" />
+                      </button>
+                    </div>
+                  </UFormField>
+
+                  <UAlert
+                    v-else
+                    color="info"
+                    variant="soft"
+                    icon="i-lucide-info"
+                    title="No filters applied"
+                    description="Use the controls above to narrow the results."
+                  />
+                </div>
+              </div>
+            </template>
+
+            <template #domain>
+              <div class="space-y-4">
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Share of vulnerabilities per domain grouping.
+                </p>
+
+                <div v-if="domainStats.length" class="space-y-3">
+                  <button
+                    v-for="stat in domainStats"
+                    :key="stat.key"
+                    type="button"
+                    @click="toggleFilter('domain', stat.key)"
+                    :aria-pressed="filters.domain === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:focus-visible:ring-emerald-600',
+                      filters.domain === stat.key
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-emerald-200 dark:ring-emerald-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
+                  >
+                    <div
+                      class="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span
+                        :class="[
+                          'truncate font-medium',
+                          filters.domain === stat.key
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-neutral-900 dark:text-neutral-50',
+                        ]"
+                      >
+                        {{ stat.name }}
+                      </span>
+                      <span
+                        class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        {{ stat.count }} · {{ stat.percentLabel }}%
+                      </span>
+                    </div>
+                    <UProgress
+                      :model-value="stat.percent"
+                      :max="100"
+                      color="primary"
+                      size="sm"
+                    />
+                  </button>
+                </div>
+                <p
+                  v-else
+                  class="text-sm text-neutral-500 dark:text-neutral-400"
+                >
+                  No domain category data for this filter.
+                </p>
+
+                <div
+                  v-if="topDomainStat"
+                  class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+                >
+                  <span>Top domain</span>
+                  <span
+                    class="font-medium text-neutral-900 dark:text-neutral-50"
+                  >
+                    {{ topDomainStat.name }} ({{ topDomainStat.percentLabel }}%)
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <template #exploit>
+              <div class="space-y-4">
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  How execution paths cluster for these CVEs.
+                </p>
+
+                <div v-if="exploitLayerStats.length" class="space-y-3">
+                  <button
+                    v-for="stat in exploitLayerStats"
+                    :key="stat.key"
+                    type="button"
+                    @click="toggleFilter('exploit', stat.key)"
+                    :aria-pressed="filters.exploit === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:focus-visible:ring-amber-600',
+                      filters.exploit === stat.key
+                        ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
+                  >
+                    <div
+                      class="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span
+                        :class="[
+                          'truncate font-medium',
+                          filters.exploit === stat.key
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-neutral-900 dark:text-neutral-50',
+                        ]"
+                      >
+                        {{ stat.name }}
+                      </span>
+                      <span
+                        class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        {{ stat.count }} · {{ stat.percentLabel }}%
+                      </span>
+                    </div>
+                    <UProgress
+                      :model-value="stat.percent"
+                      :max="100"
+                      color="warning"
+                      size="sm"
+                    />
+                  </button>
+                </div>
+                <p
+                  v-else
+                  class="text-sm text-neutral-500 dark:text-neutral-400"
+                >
+                  No exploit profile data for this filter.
+                </p>
+
+                <div
+                  v-if="topExploitLayerStat"
+                  class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+                >
+                  <span>Top profile</span>
+                  <span
+                    class="font-medium text-neutral-900 dark:text-neutral-50"
+                  >
+                    {{ topExploitLayerStat.name }} ({{
+                      topExploitLayerStat.percentLabel
+                    }}%)
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <template #vulnerability>
+              <div class="space-y-4">
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Breakdown of vulnerability categories in view.
+                </p>
+
+                <div v-if="vulnerabilityStats.length" class="space-y-3">
+                  <button
+                    v-for="stat in vulnerabilityStats"
+                    :key="stat.key"
+                    type="button"
+                    @click="toggleFilter('vulnerability', stat.key)"
+                    :aria-pressed="filters.vulnerability === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:focus-visible:ring-rose-600',
+                      filters.vulnerability === stat.key
+                        ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
+                  >
+                    <div
+                      class="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span
+                        :class="[
+                          'truncate font-medium',
+                          filters.vulnerability === stat.key
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-neutral-900 dark:text-neutral-50',
+                        ]"
+                      >
+                        {{ stat.name }}
+                      </span>
+                      <span
+                        class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        {{ stat.count }} · {{ stat.percentLabel }}%
+                      </span>
+                    </div>
+                    <UProgress
+                      :model-value="stat.percent"
+                      :max="100"
+                      color="secondary"
+                      size="sm"
+                    />
+                  </button>
+                </div>
+                <p
+                  v-else
+                  class="text-sm text-neutral-500 dark:text-neutral-400"
+                >
+                  No vulnerability category data for this filter.
+                </p>
+
+                <div
+                  v-if="topVulnerabilityStat"
+                  class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400"
+                >
+                  <span>Top category</span>
+                  <span
+                    class="font-medium text-neutral-900 dark:text-neutral-50"
+                  >
+                    {{ topVulnerabilityStat.name }} ({{
+                      topVulnerabilityStat.percentLabel
+                    }}%)
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <template #topVendors>
+              <div class="space-y-4">
+                <UFormField label="Show" class="w-32">
+                  <USelectMenu
+                    v-model="topVendorCount"
+                    :items="topCountItems"
+                    value-key="value"
+                    size="sm"
+                  />
+                </UFormField>
+
+                <div v-if="topVendorStats.length" class="space-y-3">
+                  <button
+                    v-for="stat in topVendorStats"
+                    :key="stat.key"
+                    type="button"
+                    @click="toggleFilter('vendor', stat.key)"
+                    :aria-pressed="filters.vendor === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
+                      filters.vendor === stat.key
+                        ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
+                  >
+                    <div
+                      class="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span
+                        :class="[
+                          'truncate font-medium',
+                          filters.vendor === stat.key
+                            ? 'text-primary-600 dark:text-primary-400'
+                            : 'text-neutral-900 dark:text-neutral-50',
+                        ]"
+                      >
+                        {{ stat.name }}
+                      </span>
+                      <span
+                        class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        {{ stat.count }} · {{ stat.percentLabel }}%
+                      </span>
+                    </div>
+                    <UProgress
+                      :model-value="stat.percent"
+                      :max="100"
+                      color="primary"
+                      size="sm"
+                    />
+                  </button>
+                </div>
+                <p
+                  v-else
+                  class="text-sm text-neutral-500 dark:text-neutral-400"
+                >
+                  No vendor data for this filter.
+                </p>
+              </div>
+            </template>
+
+            <template #topProducts>
+              <div class="space-y-4">
+                <UFormField label="Show" class="w-32">
+                  <USelectMenu
+                    v-model="topProductCount"
+                    :items="topCountItems"
+                    value-key="value"
+                    size="sm"
+                  />
+                </UFormField>
+
+                <div v-if="topProductStats.length" class="space-y-3">
+                  <button
+                    v-for="stat in topProductStats"
+                    :key="stat.key"
+                    type="button"
+                    @click="toggleFilter('product', stat.key)"
+                    :aria-pressed="filters.product === stat.key"
+                    :class="[
+                      'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
+                      filters.product === stat.key
+                        ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
+                        : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ]"
+                  >
+                    <div
+                      class="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <div class="min-w-0">
+                        <p
+                          :class="[
+                            'truncate font-medium',
+                            filters.product === stat.key
+                              ? 'text-secondary-600 dark:text-secondary-400'
+                              : 'text-neutral-900 dark:text-neutral-50',
+                          ]"
+                        >
+                          {{ stat.name }}
+                        </p>
+                        <p
+                          v-if="stat.vendorName"
+                          class="truncate text-xs text-neutral-500 dark:text-neutral-400"
+                        >
+                          {{ stat.vendorName }}
+                        </p>
+                      </div>
+                      <span
+                        class="whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        {{ stat.count }} · {{ stat.percentLabel }}%
+                      </span>
+                    </div>
+                    <UProgress
+                      :model-value="stat.percent"
+                      :max="100"
+                      color="secondary"
+                      size="sm"
+                    />
+                  </button>
+                </div>
+                <p
+                  v-else
+                  class="text-sm text-neutral-500 dark:text-neutral-400"
+                >
+                  No product data for this filter.
+                </p>
+              </div>
+            </template>
+
+            <template #focus>
+              <div class="space-y-4">
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Highlight the vulnerabilities that matter most to your
+                  organisation.
+                </p>
+
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                      >
+                        My software
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Only show CVEs that match the products you track.
+                      </p>
+                    </div>
+                    <USwitch
+                      v-model="showOwnedOnly"
+                      :disabled="!trackedProductsReady"
+                    />
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                      >
+                        Named CVEs
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Elevate high-profile, widely reported vulnerabilities.
+                      </p>
+                    </div>
+                    <USwitch v-model="showWellKnownOnly" />
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                      >
+                        Ransomware focus
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Restrict the view to CVEs linked to ransomware
+                        campaigns.
+                      </p>
+                    </div>
+                    <USwitch v-model="showRansomwareOnly" />
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                      >
+                        Internet exposure
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Prioritise vulnerabilities likely to be exposed on the
+                        open internet.
+                      </p>
+                    </div>
+                    <USwitch v-model="showInternetExposedOnly" />
+                  </div>
+                </div>
+
+                <div
+                  class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300"
+                >
+                  <p
+                    class="font-semibold text-neutral-700 dark:text-neutral-100"
+                  >
+                    Tracked products
+                  </p>
+                  <p class="mt-1">
+                    {{ trackedProductCount.toLocaleString() }} product(s)
+                    selected.
+                  </p>
+                  <p
+                    class="mt-1 text-xs text-neutral-500 dark:text-neutral-400"
+                  >
+                    Manage the list on the dashboard at any time; changes are
+                    saved automatically.
+                  </p>
+                </div>
+              </div>
+            </template>
+
+            <template #mySoftware>
+              <div class="relative">
+                <div
+                  v-if="!trackedProductsReady"
+                  class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
+                />
+                <TrackedSoftwareSummary
+                  v-model="showOwnedOnly"
+                  :tracked-products="trackedProducts"
+                  :tracked-product-count="trackedProductCount"
+                  :has-tracked-products="hasTrackedProducts"
+                  :saving="savingTrackedProducts"
+                  :save-error="trackedProductError"
+                  @remove="removeTrackedProduct"
+                  @clear="clearTrackedProducts"
+                />
+              </div>
+            </template>
+
+            <template #trend>
+              <div class="space-y-4">
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Examine how the current filters influence volume, severity,
+                  and exploitation momentum over time.
+                </p>
+
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                      >
+                        Show risk details
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Add severity and EPSS context to the explorer insights.
+                      </p>
+                    </div>
+                    <USwitch v-model="showRiskDetails" />
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                      >
+                        Show trend lines
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Overlay trend lines on charts when exploring results.
+                      </p>
+                    </div>
+                    <USwitch v-model="showTrendLines" />
+                  </div>
+                </div>
+
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  icon="i-lucide-line-chart"
+                  @click="showTrendSlideover = true"
+                >
+                  Launch trend explorer
+                </UButton>
+              </div>
+            </template>
+          </UAccordion>
+        </div>
+      </UDashboardPanel>
+   
+
+      <div class="relative">
+        <div
+          class="mx-auto w-full max-w-6xl space-y-5 px-4 pb-12 sm:px-6 lg:px-8"
+        >
+          <div
+            class="pointer-events-none fixed left-1/2 top-24 z-50 w-full max-w-6xl -translate-x-1/2 px-4 sm:px-6 lg:px-8"
+          >
+            <QuickFilterSummary
+              :quick-stat-items="quickStatItems"
+              :active-filters="activeFilters"
+              :has-active-filters="hasActiveFilters"
+              :has-active-filter-chips="hasActiveFilterChips"
+              @reset="resetFilters"
+              @clear-filter="clearFilter"
             />
-            <UTable :data="results" :columns="columns" />
           </div>
-        </UCard>
+          <div class="h-40 sm:h-44"></div>
+
+          <UCard>
+            <template #header>
+              <p
+                class="text-lg font-semibold text-neutral-900 dark:text-neutral-50"
+              >
+                Results
+              </p>
+            </template>
+
+            <div>
+              <div
+                class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                  {{ resultCountLabel }}
+                </p>
+                <div
+                  v-if="canShowAllResults"
+                  class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
+                >
+                  <span class="font-medium">Show all results</span>
+                  <USwitch
+                    v-model="showAllResults"
+                    aria-label="Toggle show all results"
+                  />
+                </div>
+              </div>
+              <UProgress
+                v-if="isBusy"
+                class="mb-4"
+                animation="swing"
+                color="primary"
+              />
+              <UTable :data="results" :columns="columns" />
+            </div>
+          </UCard>
+        </div>
+
+        <KevDetailModal
+          v-model:open="showDetails"
+          :entry="detailEntry"
+          :loading="detailLoading"
+          :error="detailError"
+          :source-badge-map="sourceBadgeMap"
+          :cvss-severity-colors="cvssSeverityColors"
+          :build-cvss-label="buildCvssLabel"
+          :format-epss-score="formatEpssScore"
+          :format-optional-timestamp="formatOptionalTimestamp"
+          :get-well-known-cve-name="getWellKnownCveName"
+          @close="closeDetails"
+        />
       </div>
 
-      <KevDetailModal
-        v-model:open="showDetails"
-        :entry="detailEntry"
-        :loading="detailLoading"
-        :error="detailError"
+      <TrendExplorerSlideover
+        v-model:open="showTrendSlideover"
+        v-model:show-risk-details="showRiskDetails"
+        v-model:show-trend-lines="showTrendLines"
+        :is-busy="isBusy"
+        :matching-results-label="matchingResultsLabel"
+        :high-severity-share-label="highSeverityShareLabel"
+        :high-severity-summary="highSeveritySummary"
+        :average-cvss-label="averageCvssLabel"
+        :average-cvss-summary="averageCvssSummary"
+        :ransomware-share-label="ransomwareShareLabel"
+        :ransomware-summary="ransomwareSummary"
+        :internet-exposed-share-label="internetExposedShareLabel"
+        :internet-exposed-summary="internetExposedSummary"
+        :severity-distribution="severityDistribution"
+        :latest-addition-summaries="latestAdditionSummaries"
         :source-badge-map="sourceBadgeMap"
-        :cvss-severity-colors="cvssSeverityColors"
-        :build-cvss-label="buildCvssLabel"
-        :format-epss-score="formatEpssScore"
-        :format-optional-timestamp="formatOptionalTimestamp"
-        :get-well-known-cve-name="getWellKnownCveName"
-        @close="closeDetails"
+        :catalog-updated-at="catalogUpdatedAt"
+        :entries="results"
+        @open-details="openDetails"
       />
-    </div>
 
-    <FilterControlsSlideover
-      v-model:open="showFilterSlideover"
-      v-model:search-input="searchInput"
-      v-model:selected-source="selectedSource"
-      v-model:year-range="yearRange"
-      :year-slider-min="yearSliderMin"
-      :year-slider-max="yearSliderMax"
-      v-model:cvss-range="cvssRange"
-      :default-cvss-range="defaultCvssRange"
-      v-model:epss-range="epssRange"
-      :default-epss-range="defaultEpssRange"
-      :active-filters="activeFilters"
-      :has-active-filters="hasActiveFilters"
-      :has-active-filter-chips="hasActiveFilterChips"
-      @reset="resetFilters"
-      @clear-filter="clearFilter"
-    />
-
-    <FocusControlsSlideover
-      v-model:open="showFocusSlideover"
-      v-model:show-owned-only="showOwnedOnly"
-      v-model:show-well-known-only="showWellKnownOnly"
-      v-model:show-ransomware-only="showRansomwareOnly"
-      v-model:show-internet-exposed-only="showInternetExposedOnly"
-      :tracked-products-ready="trackedProductsReady"
-      :tracked-product-count="trackedProductCount"
-    />
-
-    <MySoftwareSlideover
-      v-model:open="showMySoftwareSlideover"
-      v-model:show-owned-only="showOwnedOnly"
-      :tracked-products-ready="trackedProductsReady"
-      :tracked-products="trackedProducts"
-      :tracked-product-count="trackedProductCount"
-      :has-tracked-products="hasTrackedProducts"
-      :saving="savingTrackedProducts"
-      :save-error="trackedProductError"
-      @remove="removeTrackedProduct"
-      @clear="clearTrackedProducts"
-    />
-
-    <TrendExplorerSlideover
-      v-model:open="showTrendSlideover"
-      v-model:show-risk-details="showRiskDetails"
-      v-model:show-trend-lines="showTrendLines"
-      :is-busy="isBusy"
-      :matching-results-label="matchingResultsLabel"
-      :high-severity-share-label="highSeverityShareLabel"
-      :high-severity-summary="highSeveritySummary"
-      :average-cvss-label="averageCvssLabel"
-      :average-cvss-summary="averageCvssSummary"
-      :ransomware-share-label="ransomwareShareLabel"
-      :ransomware-summary="ransomwareSummary"
-      :internet-exposed-share-label="internetExposedShareLabel"
-      :internet-exposed-summary="internetExposedSummary"
-      :severity-distribution="severityDistribution"
-      :latest-addition-summaries="latestAdditionSummaries"
-      :source-badge-map="sourceBadgeMap"
-      :catalog-updated-at="catalogUpdatedAt"
-      :entries="results"
-      @open-details="openDetails"
-    />
-  </UPageBody>
-  </UPage>
+  </UDashboardGroup>
 </template>
