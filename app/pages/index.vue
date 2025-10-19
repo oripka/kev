@@ -1061,87 +1061,6 @@ const columns: TableColumn<KevEntry>[] = [
     <UPageBody>
       <div class="grid grid-cols-1 gap-3 w-full px-8 mx-auto">
         <UCard>
-          <div
-            class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div class="space-y-2">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Data freshness
-              </p>
-              <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                Last imported release: <span class="font-medium">{{ catalogUpdatedAt }}</span>
-              </p>
-              <p
-                v-if="totalEntries > 0"
-                class="text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                {{ totalEntries.toLocaleString() }} entries cached locally for instant filtering.
-              </p>
-              <p
-                v-else
-                class="text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                No entries cached yet. Use the import button to fetch the latest KEV and ENISA data.
-              </p>
-              <p
-                v-if="importSummaryMessage && !importError"
-                class="text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                {{ importSummaryMessage }}
-              </p>
-            </div>
-            <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-              <UButton
-                color="primary"
-                icon="i-lucide-cloud-download"
-                :loading="importing"
-                :disabled="importing"
-                @click="handleImport"
-              >
-                {{ importing ? "Importing…" : "Import latest data" }}
-              </UButton>
-              <UAlert
-                v-if="importError"
-                color="error"
-                variant="soft"
-                icon="i-lucide-alert-triangle"
-                title="Import failed"
-                :description="importError"
-              />
-              <div
-                v-else-if="showImportProgress"
-                class="w-full space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
-              >
-                <div class="flex items-center justify-between gap-3">
-                  <span class="font-medium text-neutral-700 dark:text-neutral-200">
-                    Import status
-                  </span>
-                  <span
-                    v-if="hasProgressValue"
-                    class="tabular-nums text-neutral-600 dark:text-neutral-300"
-                  >
-                    {{ importProgressPercent }}%
-                  </span>
-                </div>
-                <UProgress
-                  v-if="hasProgressValue"
-                  :value="importProgressPercent"
-                  size="xs"
-                  :ui="{
-                    rounded: 'rounded-md',
-                    track: 'bg-neutral-200 dark:bg-neutral-800',
-                    indicator: 'bg-primary-500 dark:bg-primary-400'
-                  }"
-                />
-                <p class="text-[0.78rem] text-neutral-500 dark:text-neutral-400">
-                  {{ importProgressMessage }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </UCard>
-
-        <UCard>
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="space-y-1">
@@ -1313,6 +1232,231 @@ const columns: TableColumn<KevEntry>[] = [
             </div>
           </div>
         </UCard>
+
+        <UCard>
+          <div
+            class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div class="space-y-2">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                Data freshness
+              </p>
+              <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                Last imported release: <span class="font-medium">{{ catalogUpdatedAt }}</span>
+              </p>
+              <p
+                v-if="totalEntries > 0"
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                {{ totalEntries.toLocaleString() }} entries cached locally for instant filtering.
+              </p>
+              <p
+                v-else
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                No entries cached yet. Use the import button to fetch the latest KEV and ENISA data.
+              </p>
+              <p
+                v-if="importSummaryMessage && !importError"
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                {{ importSummaryMessage }}
+              </p>
+            </div>
+            <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+              <UButton
+                color="primary"
+                icon="i-lucide-cloud-download"
+                :loading="importing"
+                :disabled="importing"
+                @click="handleImport"
+              >
+                {{ importing ? "Importing…" : "Import latest data" }}
+              </UButton>
+              <UAlert
+                v-if="importError"
+                color="error"
+                variant="soft"
+                icon="i-lucide-alert-triangle"
+                title="Import failed"
+                :description="importError"
+              />
+              <div
+                v-else-if="showImportProgress"
+                class="w-full space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                    Import status
+                  </span>
+                  <span
+                    v-if="hasProgressValue"
+                    class="tabular-nums text-neutral-600 dark:text-neutral-300"
+                  >
+                    {{ importProgressPercent }}%
+                  </span>
+                </div>
+                <UProgress
+                  v-if="hasProgressValue"
+                  :value="importProgressPercent"
+                  size="xs"
+                  :ui="{
+                    rounded: 'rounded-md',
+                    track: 'bg-neutral-200 dark:bg-neutral-800',
+                    indicator: 'bg-primary-500 dark:bg-primary-400'
+                  }"
+                />
+                <p class="text-[0.78rem] text-neutral-500 dark:text-neutral-400">
+                  {{ importProgressMessage }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                Filters
+              </p>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                @click="resetFilters"
+                :disabled="!hasActiveFilters"
+              >
+                Reset filters
+              </UButton>
+            </div>
+          </template>
+
+          <div class="space-y-6">
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              <UFormField label="Search">
+                <UInput
+                  v-model="searchInput"
+                  class="w-full"
+                  placeholder="Filter by CVE, vendor, product, or description"
+                />
+              </UFormField>
+
+              <UFormField label="Well-known focus">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                    Only show named, high-profile CVEs
+                  </p>
+                  <USwitch v-model="showWellKnownOnly" />
+                </div>
+              </UFormField>
+
+              <UFormField label="Data source">
+                <div class="flex flex-wrap gap-2">
+                  <UButton
+                    v-for="option in ['all', 'kev', 'enisa']"
+                    :key="option"
+                    size="sm"
+                    :color="selectedSource === option ? 'primary' : 'neutral'"
+                    :variant="selectedSource === option ? 'solid' : 'outline'"
+                    @click="setSourceFilter(option as 'all' | 'kev' | 'enisa')"
+                  >
+                    {{
+                      option === "all"
+                        ? "All sources"
+                        : option === "kev"
+                          ? "CISA KEV"
+                          : "ENISA"
+                    }}
+                  </UButton>
+                </div>
+              </UFormField>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <UFormField label="Year range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="yearRange"
+                    :min="yearSliderMin"
+                    :max="yearSliderMax"
+                    :step="1"
+                    class="px-1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Filter vulnerabilities by the year CISA added them to the KEV catalog.
+                  </p>
+                </div>
+              </UFormField>
+
+              <UFormField label="CVSS range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="cvssRange"
+                    :min="defaultCvssRange[0]"
+                    :max="defaultCvssRange[1]"
+                    :step="0.1"
+                    :min-steps-between-thumbs="1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Common Vulnerability Scoring System (0–10) shows vendor-assigned severity.
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ cvssRange[0].toFixed(1) }} – {{ cvssRange[1].toFixed(1) }}
+                  </p>
+                </div>
+              </UFormField>
+
+              <UFormField label="EPSS range">
+                <div class="space-y-2">
+                  <USlider
+                    v-model="epssRange"
+                    :min="defaultEpssRange[0]"
+                    :max="defaultEpssRange[1]"
+                    :step="1"
+                    :min-steps-between-thumbs="1"
+                    tooltip
+                  />
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Exploit Prediction Scoring System (0–100%) estimates likelihood of exploitation.
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
+                  </p>
+                </div>
+              </UFormField>
+            </div>
+
+            <div v-if="activeFilters.length" class="flex flex-wrap items-center gap-2">
+              <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Active filters</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  v-for="item in activeFilters"
+                  :key="`${item.key}-${item.value}`"
+                  type="button"
+                  class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-neutral-600"
+                  @click="clearFilter(item.key)"
+                >
+                  <span>{{ item.label }}: {{ item.value }}</span>
+                  <UIcon name="i-lucide-x" class="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div v-if="hasActiveFilters">
+              <UAlert
+                color="info"
+                variant="soft"
+                icon="i-lucide-filters"
+                :title="`${results.length} matching vulnerabilities`"
+              />
+            </div>
+          </div>
+        </UCard>
+
 
         <UCard>
           <template #header>

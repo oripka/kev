@@ -75,6 +75,43 @@ const domainRules: Array<{
 const matchesAny = (value: string, patterns: RegExp[]) =>
   patterns.some(pattern => pattern.test(value))
 
+type CvssVectorTraits = {
+  attackVector?: 'P' | 'L' | 'A' | 'N'
+  privilegesRequired?: 'N' | 'L' | 'H'
+  userInteraction?: 'N' | 'R'
+}
+
+const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
+  if (!vector) {
+    return null
+  }
+
+  const metrics: Record<string, string> = {}
+  const tokens = vector.trim().split('/')
+
+  for (const token of tokens) {
+    const [metric, value] = token.split(':')
+    if (!value) {
+      continue
+    }
+
+    const upperMetric = metric.toUpperCase()
+    if (upperMetric === 'AV' || upperMetric === 'PR' || upperMetric === 'UI') {
+      metrics[upperMetric] = value.toUpperCase()
+    }
+  }
+
+  if (!metrics.AV && !metrics.PR && !metrics.UI) {
+    return null
+  }
+
+  return {
+    attackVector: metrics.AV as CvssVectorTraits['attackVector'] | undefined,
+    privilegesRequired: metrics.PR as CvssVectorTraits['privilegesRequired'] | undefined,
+    userInteraction: metrics.UI as CvssVectorTraits['userInteraction'] | undefined
+  }
+}
+
 const webProductPatterns: RegExp[] = [
   /(jenkins)/i,
   /(phpmailer)/i,
@@ -548,11 +585,20 @@ export const classifyExploitLayers = (
   entry: {
     vulnerabilityName: string
     description: string
+    cvssVector?: string | null
   },
   domainCategories: KevDomainCategory[]
 ): KevExploitLayer[] => {
   const text = normalise(`${entry.vulnerabilityName} ${entry.description}`)
   const layers = new Set<KevExploitLayer>()
+
+  const cvssTraits = parseCvssVector(entry.cvssVector)
+  const cvssSuggestsLocal =
+    cvssTraits?.attackVector === 'L' || cvssTraits?.attackVector === 'P'
+  const cvssSuggestsRemote =
+    cvssTraits?.attackVector === 'N' || cvssTraits?.attackVector === 'A'
+  const cvssRequiresUserInteraction = cvssTraits?.userInteraction === 'R'
+  const cvssPreAuth = cvssTraits?.privilegesRequired === 'N'
 
   const hasPrivilegeSignal = privilegePatterns.some(pattern => pattern.test(text))
 
@@ -563,7 +609,7 @@ export const classifyExploitLayers = (
   const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns)
   const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns)
   const hasRemoteContext =
-    hasExplicitRemoteRce || matchesAny(text, remoteContextPatterns)
+    hasExplicitRemoteRce || matchesAny(text, remoteContextPatterns) || Boolean(cvssSuggestsRemote)
 
   const qualifiesForRce =
     hasExplicitRemoteRce || (hasCodeExecutionSignal && hasRemoteContext)
@@ -573,8 +619,10 @@ export const classifyExploitLayers = (
   const hasClientSignal = matchesAny(text, clientSignalPatterns)
   const hasClientApplicationSignal = matchesAny(text, clientApplicationPatterns)
   const hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns)
-  const hasClientUserInteractionSignal = matchesAny(text, clientUserInteractionPatterns)
-  const hasClientLocalExecutionSignal = matchesAny(text, clientLocalExecutionPatterns)
+  const hasClientUserInteractionSignal =
+    matchesAny(text, clientUserInteractionPatterns) || Boolean(cvssRequiresUserInteraction)
+  const hasClientLocalExecutionSignal =
+    matchesAny(text, clientLocalExecutionPatterns) || Boolean(cvssSuggestsLocal)
   const hasServerSignal = serverSignalPatterns.some(pattern => pattern.test(text))
 
   const domainSuggestsClient = domainCategories.some(category =>
@@ -590,9 +638,14 @@ export const classifyExploitLayers = (
     (hasClientFileSignal ? 2 : 0) +
     (hasClientUserInteractionSignal ? 1 : 0) +
     (hasClientLocalExecutionSignal ? 1 : 0) +
+    (cvssSuggestsLocal ? 1 : 0) +
+    (cvssRequiresUserInteraction ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0)
   const serverScore =
-    (hasServerSignal ? 2 : 0) + (domainSuggestsServer ? 1 : 0)
+    (hasServerSignal ? 2 : 0) +
+    (cvssSuggestsRemote ? 1 : 0) +
+    (cvssPreAuth ? 1 : 0) +
+    (domainSuggestsServer ? 1 : 0)
 
   const determineSide = (): 'Client-side' | 'Server-side' => {
     if (clientScore > serverScore) {
@@ -612,6 +665,18 @@ export const classifyExploitLayers = (
     }
 
     if (domainSuggestsClient && !domainSuggestsServer) {
+      return 'Client-side'
+    }
+
+    if (cvssSuggestsRemote && !cvssSuggestsLocal) {
+      return 'Server-side'
+    }
+
+    if (cvssSuggestsLocal && !cvssSuggestsRemote) {
+      return 'Client-side'
+    }
+
+    if (cvssRequiresUserInteraction && !hasServerSignal) {
       return 'Client-side'
     }
 
