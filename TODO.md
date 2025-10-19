@@ -1,8 +1,5 @@
 # TODO
 
-
-
-
 some of these might already be implmented if yes just check - [x] them . if not fix it 
 
 
@@ -31,12 +28,7 @@ some of these might already be implmented if yes just check - [x] them . if not 
 - [x] Fix the tables in admin to be TanStack / NuxtUI3 compatible — columns require an `id` when using a non-string header.
 
 
-## Performance
-
-- [ ] enhance performance by precalculating as much as possibel. when i switch my software it takes a long time to rerender. show a laoding incdicator or somethign at least or make it blatzing fast 
-- [x] make the bade from focus on my software just show the title not twice the title orasomeith Focus on my software
-- [ ] add a max-w-xs to the software title table column if not we have to scrol lto see the add button and son it should fit neatla
-
+## Duplicates
 - there seesm to be a lot of duplciates e.g. this shouod be just Google Chrome not so many versions in the software slection list
 Chrome 137.0.7151.68 <137.0.7151.68	Google	0	ENISA	Add to focus
 Chrome 138.0.7204.157 <138.0.7204.157	Google	0	ENISA	Add to focus
@@ -57,6 +49,7 @@ we want to concentraton products and major versions not evdry little thing
 Office/WordPad Office 2007 SP3, Microsoft Office 2010 SP2, Microsoft Office 2013 SP1, Microsoft Office 2016, Microsoft Windows Vista SP2, Windows Server 2008 SP2, Windows 7 SP1, And Windows 8.1	
 
 ## Layout
+- [ ] add a max-w-xs to the software title table column if not we have to scrol lto see the add button and son it should fit neatla
 
 - [ ] Revise the layout especiall the fitlering stuff. it seems to me it takes too much space aawafr om show ign the actually results
 - [ ] can weh show a floating roudned long pill that shwos the current active fitlers and allows to remove them and shiws somw dense statistixs?
@@ -70,3 +63,10 @@ Last imported release: 2025-10-19 14:58
 1,443 entries cached locally for instant filte
 - [ ] but there should stil be an indicator when the data was last importeed in the index page
 - [ ] the filter focus, tend explorer and filters should be open slideover so the focus can be on the data and not on the filter-mabye in a pageaside compnent and a navigationmenu  or toolbar that just has the icosn wiht hover tooltips?
+
+
+## Performance
+
+- [ ] enhance performance by precalculating as much as possibel. when i switch my software it takes a long time to rerender. show a laoding incdicator or somethign at least or make it blatzing fast 
+- [x] make the bade from focus on my software just show the title not twice the title orasomeith Focus on my software
+
