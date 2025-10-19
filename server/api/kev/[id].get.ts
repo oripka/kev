@@ -46,7 +46,7 @@ export default defineEventHandler(async event => {
         ce.date_updated_ts,
         ce.exploited_since,
         ce.source_url,
-        ce."references" AS "references",
+        ce.reference_links,
         ce.aliases,
         ce.is_well_known,
         ce.domain_categories,

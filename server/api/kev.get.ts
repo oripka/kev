@@ -35,6 +35,7 @@ type CatalogQuery = {
   toUpdatedDate?: string
   ransomwareOnly?: boolean
   internetExposedOnly?: boolean
+  limit?: number
 }
 
 type SqlFilter = {
@@ -52,6 +53,8 @@ const toTimestamp = (value?: string): number | null => {
   }
   return timestamp
 }
+
+const DEFAULT_ENTRY_LIMIT = 25
 
 const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const getString = (key: string): string | undefined => {
@@ -221,6 +224,11 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const toUpdatedDate = getString('toUpdatedDate')
   if (toUpdatedDate) {
     filters.toUpdatedDate = toUpdatedDate
+  }
+
+  const limit = getInt('limit')
+  if (typeof limit === 'number' && limit > 0) {
+    filters.limit = Math.max(1, Math.min(500, limit))
   }
 
   return filters
@@ -403,10 +411,12 @@ const buildWhereClause = (where: string[]): string => {
 
 const queryEntries = (
   db: ReturnType<typeof getDatabase>,
-  filters: CatalogQuery
+  filters: CatalogQuery,
+  limitOverride?: number
 ): KevEntrySummary[] => {
   const { where, params } = buildSqlFilter(filters)
   const whereClause = buildWhereClause(where)
+  const limit = Math.max(1, Math.min(500, limitOverride ?? filters.limit ?? DEFAULT_ENTRY_LIMIT))
   const rows = db
     .prepare<CatalogSummaryRow>(
       `SELECT
@@ -419,6 +429,7 @@ const queryEntries = (
         ce.product_key,
         ce.vulnerability_name,
         ce.description,
+        ce.due_date,
         ce.date_added,
         ce.ransomware_use,
         ce.cvss_score,
@@ -430,9 +441,10 @@ const queryEntries = (
         ce.internet_exposed
       FROM catalog_entries ce
       ${whereClause}
-      ORDER BY (ce.date_added_ts IS NULL) ASC, ce.date_added_ts DESC, ce.cve_id ASC`
+      ORDER BY (ce.date_added_ts IS NULL) ASC, ce.date_added_ts DESC, ce.cve_id ASC
+      LIMIT @limit`
     )
-    .all(params) as CatalogSummaryRow[]
+    .all({ ...params, limit }) as CatalogSummaryRow[]
 
   return rows.map(catalogRowToSummary)
 }
@@ -535,6 +547,21 @@ const queryProductCounts = (
   }))
 }
 
+const countEntries = (
+  db: ReturnType<typeof getDatabase>,
+  filters: CatalogQuery
+): number => {
+  const { where, params } = buildSqlFilter(filters)
+  const whereClause = buildWhereClause(where)
+  const row = db
+    .prepare<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM catalog_entries ce ${whereClause}`
+    )
+    .get(params) as { count: number } | undefined
+
+  return row?.count ?? 0
+}
+
 const getCatalogBounds = (
   db: ReturnType<typeof getDatabase>
 ): { earliest: string | null; latest: string | null } => {
@@ -584,10 +611,12 @@ const computeUpdatedAt = (db: ReturnType<typeof getDatabase>): string => {
 
 export default defineEventHandler(async (event): Promise<KevResponse> => {
   const filters = normaliseQuery(getQuery(event))
+  const entryLimit = Math.max(1, Math.min(500, filters.limit ?? DEFAULT_ENTRY_LIMIT))
+  const db = getDatabase()
 
   if (filters.ownedOnly && !(filters.productKeys?.length ?? 0)) {
     return {
-      updatedAt: computeUpdatedAt(getDatabase()),
+      updatedAt: computeUpdatedAt(db),
       entries: [],
       counts: {
         domain: [],
@@ -596,12 +625,14 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         vendor: [],
         product: []
       },
-      catalogBounds: getCatalogBounds(getDatabase())
+      catalogBounds: getCatalogBounds(db),
+      totalEntries: 0,
+      entryLimit
     }
   }
 
-  const db = getDatabase()
-  const entries = queryEntries(db, filters)
+  const entries = queryEntries(db, filters, entryLimit)
+  const totalEntries = countEntries(db, filters)
 
   const counts = {
     domain: queryDimensionCounts(
@@ -651,6 +682,8 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     updatedAt,
     entries,
     counts,
-    catalogBounds
+    catalogBounds,
+    totalEntries,
+    entryLimit
   }
 })

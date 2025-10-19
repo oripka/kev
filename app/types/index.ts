@@ -93,6 +93,7 @@ export type KevEntrySummary = Pick<
   | 'productKey'
   | 'vulnerabilityName'
   | 'description'
+  | 'dueDate'
   | 'dateAdded'
   | 'ransomwareUse'
   | 'cvssScore'
@@ -133,6 +134,8 @@ export type KevResponse = {
     earliest: string | null
     latest: string | null
   }
+  totalEntries: number
+  entryLimit: number
 }
 
 export type ProductCatalogItem = {
@@ -161,6 +164,18 @@ export type ImportPhase =
 
 export type ImportProgress = {
   phase: ImportPhase
+  completed: number
+  total: number
+  message: string
+  startedAt: string | null
+  updatedAt: string | null
+  error: string | null
+}
+
+export type ClassificationPhase = 'idle' | 'preparing' | 'rebuilding' | 'complete' | 'error'
+
+export type ClassificationProgress = {
+  phase: ClassificationPhase
   completed: number
   total: number
   message: string

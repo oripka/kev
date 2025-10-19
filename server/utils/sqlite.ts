@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import type { Database as SqliteDatabase } from 'better-sqlite3'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 let instance: SqliteDatabase | null = null
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS catalog_entries (
   date_updated_ts INTEGER,
   exploited_since TEXT,
   source_url TEXT,
-  "references" TEXT NOT NULL,
+  reference_links TEXT NOT NULL,
   aliases TEXT NOT NULL,
   is_well_known INTEGER NOT NULL DEFAULT 0,
   domain_categories TEXT NOT NULL,
@@ -70,8 +70,10 @@ CREATE INDEX IF NOT EXISTS idx_catalog_entry_dimensions_dimension_value
 `
 
 const MIGRATIONS = `
-CREATE TABLE IF NOT EXISTS kev_entries (
-  cve_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS vulnerability_entries (
+  id TEXT PRIMARY KEY,
+  cve_id TEXT,
+  source TEXT NOT NULL,
   vendor TEXT,
   product TEXT,
   vulnerability_name TEXT,
@@ -86,40 +88,36 @@ CREATE TABLE IF NOT EXISTS kev_entries (
   cvss_vector TEXT,
   cvss_version TEXT,
   cvss_severity TEXT,
-  domain_categories TEXT,
-  exploit_layers TEXT,
-  vulnerability_categories TEXT,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS kev_metadata (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS enisa_entries (
-  enisa_id TEXT PRIMARY KEY,
-  cve_id TEXT,
-  vendor TEXT,
-  product TEXT,
-  vulnerability_name TEXT,
-  description TEXT,
+  epss_score REAL,
   assigner TEXT,
   date_published TEXT,
   date_updated TEXT,
   exploited_since TEXT,
-  cvss_score REAL,
-  cvss_vector TEXT,
-  cvss_version TEXT,
-  cvss_severity TEXT,
-  epss_score REAL,
+  source_url TEXT,
   reference_links TEXT,
   aliases TEXT,
-  domain_categories TEXT,
-  exploit_layers TEXT,
-  vulnerability_categories TEXT,
-  source_url TEXT,
+  internet_exposed INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vulnerability_entry_categories (
+  entry_id TEXT NOT NULL,
+  category_type TEXT NOT NULL,
+  value TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (entry_id, category_type, value),
+  FOREIGN KEY (entry_id) REFERENCES vulnerability_entries(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_vulnerability_entry_categories_type_value
+  ON vulnerability_entry_categories(category_type, value);
+
+CREATE INDEX IF NOT EXISTS idx_vulnerability_entry_categories_entry
+  ON vulnerability_entry_categories(entry_id);
+
+CREATE TABLE IF NOT EXISTS kev_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS product_catalog (
@@ -165,6 +163,21 @@ const ensureColumn = (db: SqliteDatabase, table: string, column: string, definit
 
 const ensureCatalogSchema = (db: SqliteDatabase) => {
   db.exec(CATALOG_SCHEMA_SQL)
+
+  const columns = db
+    .prepare<{ name: string }>('PRAGMA table_info(catalog_entries)')
+    .all() as Array<{ name: string }>
+
+  const hasLegacyReferences = columns.some(column => column.name === 'references')
+  const hasReferenceLinks = columns.some(column => column.name === 'reference_links')
+
+  if (hasLegacyReferences && !hasReferenceLinks) {
+    try {
+      db.exec('ALTER TABLE catalog_entries RENAME COLUMN "references" TO reference_links')
+    } catch {
+      // Ignore rename failures; the reset endpoint can rebuild the schema if needed.
+    }
+  }
 }
 
 export const getDatabase = () => {
@@ -182,43 +195,28 @@ export const getDatabase = () => {
   instance = new Database(databasePath)
   instance.pragma('journal_mode = WAL')
   instance.pragma('busy_timeout = 5000')
+  instance.pragma('foreign_keys = ON')
   instance.exec(MIGRATIONS)
   ensureCatalogSchema(instance)
-
-  ensureColumn(instance, 'kev_entries', 'cvss_score', 'REAL')
-  ensureColumn(instance, 'kev_entries', 'cvss_vector', 'TEXT')
-  ensureColumn(instance, 'kev_entries', 'cvss_version', 'TEXT')
-  ensureColumn(instance, 'kev_entries', 'cvss_severity', 'TEXT')
-  ensureColumn(instance, 'kev_entries', 'internet_exposed', 'INTEGER DEFAULT 0')
-  ensureColumn(instance, 'kev_entries', 'updated_at', 'TEXT DEFAULT CURRENT_TIMESTAMP')
-
-  ensureColumn(instance, 'enisa_entries', 'cve_id', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'vendor', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'product', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'vulnerability_name', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'description', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'assigner', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'date_published', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'date_updated', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'exploited_since', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'cvss_score', 'REAL')
-  ensureColumn(instance, 'enisa_entries', 'cvss_vector', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'cvss_version', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'cvss_severity', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'epss_score', 'REAL')
-  ensureColumn(instance, 'enisa_entries', 'reference_links', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'aliases', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'domain_categories', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'exploit_layers', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'vulnerability_categories', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'source_url', 'TEXT')
-  ensureColumn(instance, 'enisa_entries', 'internet_exposed', 'INTEGER DEFAULT 0')
-  ensureColumn(instance, 'enisa_entries', 'updated_at', 'TEXT DEFAULT CURRENT_TIMESTAMP')
 
   ensureColumn(instance, 'product_catalog', 'sources', 'TEXT NOT NULL DEFAULT "[\"kev\"]"')
   ensureColumn(instance, 'product_catalog', 'search_terms', 'TEXT NOT NULL DEFAULT ""')
 
   return instance
+}
+
+const getDatabasePath = () => join(process.cwd(), 'data', DB_FILENAME)
+
+export const resetDatabase = () => {
+  if (instance) {
+    instance.close()
+    instance = null
+  }
+
+  const databasePath = getDatabasePath()
+  if (existsSync(databasePath)) {
+    rmSync(databasePath)
+  }
 }
 
 export const ensureCatalogTables = (db?: SqliteDatabase) => {

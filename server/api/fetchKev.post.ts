@@ -181,11 +181,14 @@ export default defineEventHandler(async event => {
       const existingRows = db
         .prepare<ExistingCvssRow>(
           `SELECT cve_id, cvss_score, cvss_vector, cvss_version, cvss_severity
-          FROM kev_entries
-          WHERE cvss_score IS NOT NULL
-            OR cvss_vector IS NOT NULL
-            OR cvss_version IS NOT NULL
-            OR cvss_severity IS NOT NULL`
+          FROM vulnerability_entries
+          WHERE source = 'kev'
+            AND (
+              cvss_score IS NOT NULL
+              OR cvss_vector IS NOT NULL
+              OR cvss_version IS NOT NULL
+              OR cvss_severity IS NOT NULL
+            )`
         )
         .all() as ExistingCvssRow[]
 
@@ -271,51 +274,76 @@ export default defineEventHandler(async event => {
       return enrichEntry(enrichedBase)
     })
 
-    const deleteEntries = db.prepare('DELETE FROM kev_entries')
+    const deleteEntries = db.prepare(`DELETE FROM vulnerability_entries WHERE source = 'kev'`)
     const insertEntry = db.prepare(
-      `INSERT INTO kev_entries (
-      cve_id,
-      vendor,
-      product,
-      vulnerability_name,
-      description,
-      required_action,
-      date_added,
-      due_date,
-      ransomware_use,
-      notes,
-      cwes,
-      cvss_score,
-      cvss_vector,
-      cvss_version,
-      cvss_severity,
-      domain_categories,
-      exploit_layers,
-      vulnerability_categories,
-      internet_exposed,
-      updated_at
-    ) VALUES (
-      @cve_id,
-      @vendor,
-      @product,
-      @vulnerability_name,
-      @description,
-      @required_action,
-      @date_added,
-      @due_date,
-      @ransomware_use,
-      @notes,
-      @cwes,
-      @cvss_score,
-      @cvss_vector,
-      @cvss_version,
-      @cvss_severity,
-      @domain_categories,
-      @exploit_layers,
-      @vulnerability_categories,
-      @internet_exposed,
-      CURRENT_TIMESTAMP
-    )`
+      `INSERT INTO vulnerability_entries (
+        id,
+        cve_id,
+        source,
+        vendor,
+        product,
+        vulnerability_name,
+        description,
+        required_action,
+        date_added,
+        due_date,
+        ransomware_use,
+        notes,
+        cwes,
+        cvss_score,
+        cvss_vector,
+        cvss_version,
+        cvss_severity,
+        epss_score,
+        assigner,
+        date_published,
+        date_updated,
+        exploited_since,
+        source_url,
+        reference_links,
+        aliases,
+        internet_exposed
+      ) VALUES (
+        @id,
+        @cve_id,
+        @source,
+        @vendor,
+        @product,
+        @vulnerability_name,
+        @description,
+        @required_action,
+        @date_added,
+        @due_date,
+        @ransomware_use,
+        @notes,
+        @cwes,
+        @cvss_score,
+        @cvss_vector,
+        @cvss_version,
+        @cvss_severity,
+        @epss_score,
+        @assigner,
+        @date_published,
+        @date_updated,
+        @exploited_since,
+        @source_url,
+        @reference_links,
+        @aliases,
+        @internet_exposed
+      )`
+    )
+    const insertCategory = db.prepare(
+      `INSERT INTO vulnerability_entry_categories (
+        entry_id,
+        category_type,
+        value,
+        name
+      ) VALUES (
+        @entry_id,
+        @category_type,
+        @value,
+        @name
+      )`
     )
     const upsertMetadata = db.prepare(
       `INSERT INTO kev_metadata (key, value) VALUES (@key, @value)
@@ -337,8 +365,12 @@ export default defineEventHandler(async event => {
 
         for (let index = 0; index < items.length; index += 1) {
           const entry = items[index]
+          const entryId = entry.id
+
           insertEntry.run({
+            id: entryId,
             cve_id: entry.cveId,
+            source: 'kev',
             vendor: entry.vendor,
             product: entry.product,
             vulnerability_name: entry.vulnerabilityName,
@@ -353,11 +385,34 @@ export default defineEventHandler(async event => {
             cvss_vector: entry.cvssVector,
             cvss_version: entry.cvssVersion,
             cvss_severity: entry.cvssSeverity,
-            domain_categories: toJson(entry.domainCategories),
-            exploit_layers: toJson(entry.exploitLayers),
-            vulnerability_categories: toJson(entry.vulnerabilityCategories),
+            epss_score: null,
+            assigner: null,
+            date_published: entry.datePublished,
+            date_updated: entry.dateUpdated,
+            exploited_since: entry.exploitedSince,
+            source_url: entry.sourceUrl ?? null,
+            reference_links: toJson(entry.references),
+            aliases: toJson(entry.aliases),
             internet_exposed: entry.internetExposed ? 1 : 0
           })
+
+          const pushCategories = (
+            values: string[],
+            type: 'domain' | 'exploit' | 'vulnerability'
+          ) => {
+            for (const value of values) {
+              insertCategory.run({
+                entry_id: entryId,
+                category_type: type,
+                value,
+                name: value
+              })
+            }
+          }
+
+          pushCategories(entry.domainCategories, 'domain')
+          pushCategories(entry.exploitLayers, 'exploit')
+          pushCategories(entry.vulnerabilityCategories, 'vulnerability')
 
           if ((index + 1) % 25 === 0 || index + 1 === items.length) {
             setImportPhase('saving', {

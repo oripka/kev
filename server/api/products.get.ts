@@ -57,7 +57,8 @@ export default defineEventHandler((event): ProductCatalogResponse => {
   const kevCountRows = db
     .prepare<KevCountRow>(
       `SELECT vendor, product, COUNT(*) as count
-       FROM kev_entries
+       FROM vulnerability_entries
+       WHERE source = 'kev'
        GROUP BY vendor, product`
     )
     .all() as KevCountRow[]

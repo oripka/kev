@@ -306,88 +306,130 @@ export const importEnisaCatalog = async (
     total: entries.length
   })
 
-  const deleteEntries = db.prepare('DELETE FROM enisa_entries')
+  const deleteEntries = db.prepare(`DELETE FROM vulnerability_entries WHERE source = 'enisa'`)
   const insertEntry = db.prepare(
-    `INSERT INTO enisa_entries (
-      enisa_id,
+    `INSERT INTO vulnerability_entries (
+      id,
       cve_id,
+      source,
       vendor,
       product,
       vulnerability_name,
       description,
-      assigner,
-      date_published,
-      date_updated,
-      exploited_since,
+      required_action,
+      date_added,
+      due_date,
+      ransomware_use,
+      notes,
+      cwes,
       cvss_score,
       cvss_vector,
       cvss_version,
       cvss_severity,
       epss_score,
+      assigner,
+      date_published,
+      date_updated,
+      exploited_since,
+      source_url,
       reference_links,
       aliases,
-      domain_categories,
-      exploit_layers,
-      vulnerability_categories,
-      source_url,
-      internet_exposed,
-      updated_at
+      internet_exposed
     ) VALUES (
-      @enisa_id,
+      @id,
       @cve_id,
+      @source,
       @vendor,
       @product,
       @vulnerability_name,
       @description,
-      @assigner,
-      @date_published,
-      @date_updated,
-      @exploited_since,
+      @required_action,
+      @date_added,
+      @due_date,
+      @ransomware_use,
+      @notes,
+      @cwes,
       @cvss_score,
       @cvss_vector,
       @cvss_version,
       @cvss_severity,
       @epss_score,
+      @assigner,
+      @date_published,
+      @date_updated,
+      @exploited_since,
+      @source_url,
       @reference_links,
       @aliases,
-      @domain_categories,
-      @exploit_layers,
-      @vulnerability_categories,
-      @source_url,
-      @internet_exposed,
-      CURRENT_TIMESTAMP
+      @internet_exposed
+    )`
+  )
+  const insertCategory = db.prepare(
+    `INSERT INTO vulnerability_entry_categories (
+      entry_id,
+      category_type,
+      value,
+      name
+    ) VALUES (
+      @entry_id,
+      @category_type,
+      @value,
+      @name
     )`
   )
 
   const transaction = db.transaction((itemsToSave: KevEntry[]) => {
     deleteEntries.run()
 
+    const pushCategories = (
+      entryId: string,
+      values: string[],
+      type: 'domain' | 'exploit' | 'vulnerability'
+    ) => {
+      for (const value of values) {
+        insertCategory.run({
+          entry_id: entryId,
+          category_type: type,
+          value,
+          name: value
+        })
+      }
+    }
+
     for (let index = 0; index < itemsToSave.length; index += 1) {
       const entry = itemsToSave[index]
       insertEntry.run({
-        enisa_id: entry.id,
+        id: entry.id,
         cve_id: entry.cveId,
+        source: 'enisa',
         vendor: entry.vendor,
         product: entry.product,
         vulnerability_name: entry.vulnerabilityName,
         description: entry.description,
-        assigner: entry.assigner,
-        date_published: entry.datePublished,
-        date_updated: entry.dateUpdated,
-        exploited_since: entry.exploitedSince,
+        required_action: entry.requiredAction,
+        date_added: entry.dateAdded,
+        due_date: entry.dueDate,
+        ransomware_use: entry.ransomwareUse,
+        notes: toJson(entry.notes),
+        cwes: toJson(entry.cwes),
         cvss_score: entry.cvssScore,
         cvss_vector: entry.cvssVector,
         cvss_version: entry.cvssVersion,
         cvss_severity: entry.cvssSeverity,
         epss_score: entry.epssScore,
+        assigner: entry.assigner,
+        date_published: entry.datePublished,
+        date_updated: entry.dateUpdated,
+        exploited_since: entry.exploitedSince,
+        source_url: entry.sourceUrl,
         reference_links: toJson(entry.references),
         aliases: toJson(entry.aliases),
-        domain_categories: toJson(entry.domainCategories),
-        exploit_layers: toJson(entry.exploitLayers),
-        vulnerability_categories: toJson(entry.vulnerabilityCategories),
-        source_url: entry.sourceUrl,
         internet_exposed: entry.internetExposed ? 1 : 0
       })
+
+      pushCategories(entry.id, entry.domainCategories, 'domain')
+      pushCategories(entry.id, entry.exploitLayers, 'exploit')
+      pushCategories(entry.id, entry.vulnerabilityCategories, 'vulnerability')
 
       if ((index + 1) % 25 === 0 || index + 1 === itemsToSave.length) {
         setImportPhase('savingEnisa', {

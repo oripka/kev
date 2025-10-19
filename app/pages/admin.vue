@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { format, parseISO } from "date-fns";
 import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
+import type { ClassificationProgress } from "~/types";
 
 interface ProductStat {
   vendorKey: string;
@@ -103,6 +104,9 @@ const {
   lastImportSummary,
   importProgress,
   entries,
+  totalEntries,
+  entryLimit,
+  refresh: refreshKevData,
 } = useKevData();
 
 const formatTimestamp = (value: string) => {
@@ -181,7 +185,7 @@ const hasProgressValue = computed(() => {
   return Number.isFinite(percent) && percent > 0 && percent <= 100;
 });
 
-const totalEntries = computed(() => entries.value.length);
+const totalCachedEntries = computed(() => totalEntries.value);
 
 const importSummaryMessage = computed(() => {
   const summary = lastImportSummary.value;
@@ -200,6 +204,166 @@ const importSummaryMessage = computed(() => {
 
   return `Imported ${kevCount} CISA KEV entries and ${enisaCount} ENISA entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${enisaDetail}`;
 });
+
+const createDefaultClassificationProgress = (): ClassificationProgress => ({
+  phase: "idle",
+  completed: 0,
+  total: 0,
+  message: "",
+  startedAt: null,
+  updatedAt: null,
+  error: null,
+});
+
+const {
+  data: classificationProgress,
+  refresh: refreshClassificationProgress,
+} = await useFetch<ClassificationProgress>("/api/admin/reclassify/progress", {
+  default: createDefaultClassificationProgress,
+  headers: {
+    "cache-control": "no-store",
+  },
+});
+
+const classificationPhase = computed(() => classificationProgress.value.phase);
+
+const classificationPercent = computed(() => {
+  const { phase, total, completed } = classificationProgress.value;
+  if (phase === "complete") {
+    return 100;
+  }
+  if (total > 0) {
+    return Math.min(100, Math.round((completed / total) * 100));
+  }
+  if (phase === "preparing") {
+    return 10;
+  }
+  if (phase === "rebuilding") {
+    return total === 0 ? 50 : Math.min(100, Math.round((completed / total) * 100));
+  }
+  return 0;
+});
+
+const classificationHasProgressValue = computed(() => {
+  const percent = classificationPercent.value;
+  return Number.isFinite(percent) && percent > 0 && percent <= 100;
+});
+
+const classificationMessage = computed(() => {
+  const { message, phase, error: classificationError } = classificationProgress.value;
+  if (phase === "error" && classificationError) {
+    return classificationError;
+  }
+  if (message) {
+    return message;
+  }
+  return "Reclassifying cached catalog…";
+});
+
+const showClassificationProgress = computed(
+  () => classificationPhase.value === "preparing" || classificationPhase.value === "rebuilding",
+);
+
+const classificationCompleteMessage = computed(() =>
+  classificationPhase.value === "complete" ? classificationProgress.value.message : null,
+);
+
+const classificationErrorMessage = computed(() => {
+  if (classificationPhase.value !== "error") {
+    return null;
+  }
+
+  return (
+    classificationProgress.value.error ??
+    classificationProgress.value.message ??
+    "Unable to reclassify cached data"
+  );
+});
+
+const isClassificationRunning = computed(
+  () => classificationPhase.value === "preparing" || classificationPhase.value === "rebuilding",
+);
+
+const reclassifyingCatalog = ref(false);
+const resettingDatabase = ref(false);
+
+let classificationTimer: ReturnType<typeof setInterval> | null = null;
+const shouldPollClassification = (phase: ClassificationProgress["phase"]) =>
+  phase === "preparing" || phase === "rebuilding";
+
+const startClassificationPolling = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!classificationTimer) {
+    void refreshClassificationProgress();
+    classificationTimer = setInterval(() => {
+      void refreshClassificationProgress();
+    }, 2_000);
+  }
+};
+
+const stopClassificationPolling = () => {
+  if (classificationTimer) {
+    clearInterval(classificationTimer);
+    classificationTimer = null;
+  }
+};
+
+if (typeof window !== "undefined") {
+  watch(
+    () => classificationProgress.value.phase,
+    (phase) => {
+      if (shouldPollClassification(phase)) {
+        startClassificationPolling();
+      } else {
+        stopClassificationPolling();
+      }
+    },
+    { immediate: true },
+  );
+
+  onMounted(() => {
+    void refreshClassificationProgress();
+  });
+
+  onBeforeUnmount(() => {
+    stopClassificationPolling();
+  });
+}
+
+const handleReclassify = async () => {
+  reclassifyingCatalog.value = true;
+
+  try {
+    if (typeof window !== "undefined") {
+      startClassificationPolling();
+    }
+
+    await $fetch("/api/admin/reclassify", { method: "POST" });
+  } catch (exception) {
+    console.error(exception);
+  } finally {
+    reclassifyingCatalog.value = false;
+    await refreshClassificationProgress();
+    await refreshKevData();
+  }
+};
+
+const handleResetDatabase = async () => {
+  resettingDatabase.value = true;
+
+  try {
+    stopClassificationPolling();
+    await $fetch("/api/admin/reset", { method: "POST" });
+  } catch (exception) {
+    console.error(exception);
+  } finally {
+    await refreshKevData();
+    await refreshClassificationProgress();
+    resettingDatabase.value = false;
+  }
+};
 
 const catalogRangeLabel = computed(() => {
   const { earliest, latest } = catalogBounds.value;
@@ -293,10 +457,13 @@ const catalogRangeLabel = computed(() => {
           <div class="space-y-4">
             <div class="space-y-2">
               <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                Cached entries: <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ totalEntries.toLocaleString() }}</span>
+                Cached entries: <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ totalCachedEntries.toLocaleString() }}</span>
               </p>
               <p class="text-xs text-neutral-500 dark:text-neutral-400">
                 Catalog coverage: {{ catalogRangeLabel }}
+              </p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                Dashboard lists the latest {{ entryLimit }} entries by default.
               </p>
               <p
                 v-if="importSummaryMessage && !importError"
@@ -326,45 +493,112 @@ const catalogRangeLabel = computed(() => {
                 >
                   Reimport cached data
                 </UButton>
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  icon="i-lucide-layers"
+                  :loading="reclassifyingCatalog"
+                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning"
+                  @click="handleReclassify"
+                >
+                  {{ reclassifyingCatalog ? "Reclassifying…" : "Reclassify cached data" }}
+                </UButton>
+                <UButton
+                  color="error"
+                  variant="soft"
+                  icon="i-lucide-database-off"
+                  :loading="resettingDatabase"
+                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning"
+                  @click="handleResetDatabase"
+                >
+                  {{ resettingDatabase ? "Resetting cache…" : "Reset local cache" }}
+                </UButton>
               </div>
 
-              <UAlert
-                v-if="importError"
-                color="error"
-                variant="soft"
-                icon="i-lucide-alert-triangle"
-                title="Import failed"
-                :description="importError"
-                class="md:w-80"
-              />
-              <div
-                v-else-if="showImportProgress"
-                class="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300 md:w-80"
-              >
-                <div class="flex items-center justify-between gap-3">
-                  <span class="font-medium text-neutral-700 dark:text-neutral-200">
-                    Import status
-                  </span>
-                  <span
-                    v-if="hasProgressValue"
-                    class="tabular-nums text-neutral-600 dark:text-neutral-300"
-                  >
-                    {{ importProgressPercent }}%
-                  </span>
-                </div>
-                <UProgress
-                  v-if="hasProgressValue"
-                  :value="importProgressPercent"
-                  size="xs"
-                  :ui="{
-                    rounded: 'rounded-md',
-                    track: 'bg-neutral-200 dark:bg-neutral-800',
-                    indicator: 'bg-primary-500 dark:bg-primary-400'
-                  }"
+              <div class="flex w-full flex-col gap-3 md:w-80">
+                <UAlert
+                  v-if="importError"
+                  color="error"
+                  variant="soft"
+                  icon="i-lucide-alert-triangle"
+                  title="Import failed"
+                  :description="importError"
                 />
-                <p class="mt-2 text-[0.78rem] text-neutral-500 dark:text-neutral-400">
-                  {{ importProgressMessage }}
-                </p>
+                <div
+                  v-else-if="showImportProgress"
+                  class="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                      Import status
+                    </span>
+                    <span
+                      v-if="hasProgressValue"
+                      class="tabular-nums text-neutral-600 dark:text-neutral-300"
+                    >
+                      {{ importProgressPercent }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    v-if="hasProgressValue"
+                    :value="importProgressPercent"
+                    size="xs"
+                    :ui="{
+                      rounded: 'rounded-md',
+                      track: 'bg-neutral-200 dark:bg-neutral-800',
+                      indicator: 'bg-primary-500 dark:bg-primary-400'
+                    }"
+                  />
+                  <p class="mt-2 text-[0.78rem] text-neutral-500 dark:text-neutral-400">
+                    {{ importProgressMessage }}
+                  </p>
+                </div>
+
+                <div
+                  v-if="showClassificationProgress"
+                  class="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                      Classification status
+                    </span>
+                    <span
+                      v-if="classificationHasProgressValue"
+                      class="tabular-nums text-neutral-600 dark:text-neutral-300"
+                    >
+                      {{ classificationPercent }}%
+                    </span>
+                  </div>
+                  <UProgress
+                    v-if="classificationHasProgressValue"
+                    :value="classificationPercent"
+                    size="xs"
+                    :ui="{
+                      rounded: 'rounded-md',
+                      track: 'bg-neutral-200 dark:bg-neutral-800',
+                      indicator: 'bg-primary-500 dark:bg-primary-400'
+                    }"
+                  />
+                  <p class="mt-2 text-[0.78rem] text-neutral-500 dark:text-neutral-400">
+                    {{ classificationMessage }}
+                  </p>
+                </div>
+                <UAlert
+                  v-else-if="classificationErrorMessage"
+                  color="error"
+                  variant="soft"
+                  icon="i-lucide-alert-octagon"
+                  title="Reclassification failed"
+                  :description="classificationErrorMessage"
+                />
+                <UAlert
+                  v-else-if="classificationCompleteMessage"
+                  color="success"
+                  variant="soft"
+                  icon="i-lucide-check-circle"
+                  title="Reclassification complete"
+                  :description="classificationCompleteMessage"
+                />
               </div>
             </div>
           </div>

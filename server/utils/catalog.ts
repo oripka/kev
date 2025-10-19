@@ -4,8 +4,10 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { CatalogSource, KevEntry, KevEntrySummary } from '~/types'
 import { ensureCatalogTables, setMetadata } from './sqlite'
 
-type KevRow = {
-  cve_id: string
+type VulnerabilityEntryRow = {
+  id: string
+  cve_id: string | null
+  source: string
   vendor: string | null
   product: string | null
   vulnerability_name: string | null
@@ -20,37 +22,35 @@ type KevRow = {
   cvss_vector: string | null
   cvss_version: string | null
   cvss_severity: string | null
-  domain_categories: string | null
-  exploit_layers: string | null
-  vulnerability_categories: string | null
-  internet_exposed: number | null
-  updated_at: string | null
-}
-
-type EnisaRow = {
-  enisa_id: string
-  cve_id: string | null
-  vendor: string | null
-  product: string | null
-  vulnerability_name: string | null
-  description: string | null
+  epss_score: number | null
   assigner: string | null
   date_published: string | null
   date_updated: string | null
   exploited_since: string | null
-  cvss_score: number | null
-  cvss_vector: string | null
-  cvss_version: string | null
-  cvss_severity: string | null
-  epss_score: number | null
+  source_url: string | null
   reference_links: string | null
   aliases: string | null
-  domain_categories: string | null
-  exploit_layers: string | null
-  vulnerability_categories: string | null
-  source_url: string | null
   internet_exposed: number | null
   updated_at: string | null
+}
+
+type EntryCategoryRow = {
+  entry_id: string
+  category_type: string
+  value: string
+  name: string
+}
+
+type EntryCategories = {
+  domain: string[]
+  exploit: string[]
+  vulnerability: string[]
+}
+
+type RebuildOptions = {
+  onStart?: (total: number) => void
+  onProgress?: (completed: number, total: number) => void
+  onComplete?: (total: number) => void
 }
 
 type CatalogDimension = 'domain' | 'exploit' | 'vulnerability'
@@ -85,7 +85,7 @@ export type CatalogEntryRow = {
   date_updated_ts: number | null
   exploited_since: string | null
   source_url: string | null
-  references: string
+  reference_links: string
   aliases: string
   is_well_known: number
   domain_categories: string
@@ -106,6 +106,7 @@ export type CatalogSummaryRow = {
   product_key: string
   vulnerability_name: string
   description: string
+  due_date: string | null
   date_added: string | null
   ransomware_use: string | null
   cvss_score: number | null
@@ -232,17 +233,38 @@ const sortByChronology = (a: KevEntry, b: KevEntry): number => {
   return a.cveId.localeCompare(b.cveId)
 }
 
-const toKevEntry = (row: KevRow): KevEntry => {
-  const cveId = normaliseCve(row.cve_id)
+const createEmptyCategories = (): EntryCategories => ({
+  domain: [],
+  exploit: [],
+  vulnerability: []
+})
+
+const getEntryCategories = (
+  entryId: string,
+  categories: Map<string, EntryCategories>
+): EntryCategories => {
+  const existing = categories.get(entryId)
+  if (existing) {
+    return existing
+  }
+
+  const empty = createEmptyCategories()
+  categories.set(entryId, empty)
+  return empty
+}
+
+const toKevEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry => {
+  const cveId = normaliseCve(row.cve_id ?? row.id)
   const notes = parseJsonArray(row.notes)
   const cwes = parseJsonArray(row.cwes)
-  const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
-  const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
-  const vulnerabilityCategories = parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
   const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
+  const aliasList = parseAliasArray(row.aliases)
 
   return {
-    id: `kev:${cveId}`,
+    id: row.id,
     cveId,
     sources: ['kev'],
     vendor: normalised.vendor.label,
@@ -269,17 +291,20 @@ const toKevEntry = (row: KevRow): KevEntry => {
     datePublished: row.date_added ?? null,
     dateUpdated: row.updated_at ?? null,
     exploitedSince: row.date_added ?? null,
-    sourceUrl: null,
-    references: [],
-    aliases: [cveId],
-    domainCategories,
-    exploitLayers,
-    vulnerabilityCategories,
+    sourceUrl: row.source_url ?? null,
+    references: parseJsonArray(row.reference_links),
+    aliases: aliasList.length ? aliasList : [cveId],
+    domainCategories: categories.domain as KevEntry['domainCategories'],
+    exploitLayers: categories.exploit as KevEntry['exploitLayers'],
+    vulnerabilityCategories: categories.vulnerability as KevEntry['vulnerabilityCategories'],
     internetExposed: row.internet_exposed === 1
   }
 }
 
-const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
+const toEnisaEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry | null => {
   if (!row.cve_id) {
     return null
   }
@@ -287,13 +312,10 @@ const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
   const cveId = normaliseCve(row.cve_id)
   const references = parseJsonArray(row.reference_links)
   const aliases = parseAliasArray(row.aliases)
-  const domainCategories = parseJsonArray(row.domain_categories) as KevEntry['domainCategories']
-  const exploitLayers = parseJsonArray(row.exploit_layers) as KevEntry['exploitLayers']
-  const vulnerabilityCategories = parseJsonArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
   const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
 
   return {
-    id: `enisa:${row.enisa_id}`,
+    id: row.id,
     cveId,
     sources: ['enisa'],
     vendor: normalised.vendor.label,
@@ -323,9 +345,9 @@ const toEnisaEntry = (row: EnisaRow): KevEntry | null => {
     sourceUrl: row.source_url ?? null,
     references,
     aliases: aliases.length ? aliases : [cveId],
-    domainCategories,
-    exploitLayers,
-    vulnerabilityCategories,
+    domainCategories: categories.domain as KevEntry['domainCategories'],
+    exploitLayers: categories.exploit as KevEntry['exploitLayers'],
+    vulnerabilityCategories: categories.vulnerability as KevEntry['vulnerabilityCategories'],
     internetExposed: row.internet_exposed === 1
   }
 }
@@ -516,10 +538,12 @@ const toKnownRansomwareFlag = (value: string | null): number =>
 
 export const rebuildCatalog = (db: SqliteDatabase) => {
   ensureCatalogTables(db)
-  const kevRows = db
-    .prepare<KevRow>(
+  const entryRows = db
+    .prepare<VulnerabilityEntryRow>(
       `SELECT
+        id,
         cve_id,
+        source,
         vendor,
         product,
         vulnerability_name,
@@ -534,48 +558,60 @@ export const rebuildCatalog = (db: SqliteDatabase) => {
         cvss_vector,
         cvss_version,
         cvss_severity,
-        domain_categories,
-        exploit_layers,
-        vulnerability_categories,
-        internet_exposed,
-        updated_at
-      FROM kev_entries`
-    )
-    .all() as KevRow[]
-
-  const enisaRows = db
-    .prepare<EnisaRow>(
-      `SELECT
-        enisa_id,
-        cve_id,
-        vendor,
-        product,
-        vulnerability_name,
-        description,
+        epss_score,
         assigner,
         date_published,
         date_updated,
         exploited_since,
-        cvss_score,
-        cvss_vector,
-        cvss_version,
-        cvss_severity,
-        epss_score,
+        source_url,
         reference_links,
         aliases,
-        domain_categories,
-        exploit_layers,
-        vulnerability_categories,
-        source_url,
         internet_exposed,
         updated_at
-      FROM enisa_entries`
+      FROM vulnerability_entries`
     )
-    .all() as EnisaRow[]
+    .all() as VulnerabilityEntryRow[]
 
-  const kevEntries = kevRows.map(toKevEntry)
-  const enisaEntries = enisaRows
-    .map(toEnisaEntry)
+  const categoryRows = db
+    .prepare<EntryCategoryRow>(
+      `SELECT entry_id, category_type, value, name FROM vulnerability_entry_categories`
+    )
+    .all() as EntryCategoryRow[]
+
+  const categoryMap = new Map<string, EntryCategories>()
+
+  for (const row of categoryRows) {
+    const target = getEntryCategories(row.entry_id, categoryMap)
+    const value = row.name?.trim() || row.value?.trim()
+    if (!value) {
+      continue
+    }
+
+    const targetList =
+      row.category_type === 'domain'
+        ? target.domain
+        : row.category_type === 'exploit'
+          ? target.exploit
+          : row.category_type === 'vulnerability'
+            ? target.vulnerability
+            : null
+
+    if (!targetList) {
+      continue
+    }
+
+    if (!targetList.includes(value)) {
+      targetList.push(value as string)
+    }
+  }
+
+  const kevEntries = entryRows
+    .filter(row => row.source === 'kev')
+    .map(row => toKevEntry(row, getEntryCategories(row.id, categoryMap)))
+
+  const enisaEntries = entryRows
+    .filter(row => row.source === 'enisa')
+    .map(row => toEnisaEntry(row, getEntryCategories(row.id, categoryMap)))
     .filter((entry): entry is KevEntry => entry !== null)
 
   const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries)
@@ -652,7 +688,7 @@ export const rebuildCatalog = (db: SqliteDatabase) => {
       date_updated_ts,
       exploited_since,
       source_url,
-      "references",
+      reference_links,
       aliases,
       is_well_known,
       domain_categories,
@@ -691,7 +727,7 @@ export const rebuildCatalog = (db: SqliteDatabase) => {
       @date_updated_ts,
       @exploited_since,
       @source_url,
-      @references,
+      @reference_links,
       @aliases,
       @is_well_known,
       @domain_categories,
@@ -726,7 +762,10 @@ export const rebuildCatalog = (db: SqliteDatabase) => {
     deleteDimensions.run()
     deleteCatalog.run()
 
-    for (const entry of entriesToSave) {
+    options.onStart?.(entriesToSave.length)
+
+    for (let index = 0; index < entriesToSave.length; index += 1) {
+      const entry = entriesToSave[index]
       const dateAddedTs = toTimestamp(entry.dateAdded)
       const dateUpdatedTs = toTimestamp(entry.dateUpdated)
       const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
@@ -764,7 +803,7 @@ export const rebuildCatalog = (db: SqliteDatabase) => {
         date_updated_ts: dateUpdatedTs,
         exploited_since: entry.exploitedSince,
         source_url: entry.sourceUrl,
-        references: toJson(entry.references),
+        reference_links: toJson(entry.references),
         aliases: toJson(entry.aliases),
         is_well_known: isWellKnown,
         domain_categories: toJson(entry.domainCategories),
@@ -790,10 +829,16 @@ export const rebuildCatalog = (db: SqliteDatabase) => {
           })
         }
       }
+
+      if ((index + 1) % 25 === 0 || index + 1 === entriesToSave.length) {
+        options.onProgress?.(index + 1, entriesToSave.length)
+      }
     }
   })
 
   transaction(catalogEntries)
+
+  options.onComplete?.(catalogEntries.length)
 
   const bounds = extractBounds(catalogEntries)
 
@@ -824,7 +869,7 @@ export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
   const sources = parseJsonStringArray(row.sources) as CatalogSource[]
   const notes = parseJsonStringArray(row.notes)
   const cwes = parseJsonStringArray(row.cwes)
-  const references = parseJsonStringArray(row.references)
+  const references = parseJsonStringArray(row.reference_links)
   const aliases = parseJsonStringArray(row.aliases)
   const domainCategories = parseJsonStringArray(row.domain_categories) as KevEntry['domainCategories']
   const exploitLayers = parseJsonStringArray(row.exploit_layers) as KevEntry['exploitLayers']
@@ -890,6 +935,7 @@ export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => 
     productKey: row.product_key,
     vulnerabilityName: row.vulnerability_name,
     description: row.description,
+    dueDate: row.due_date ?? null,
     dateAdded: row.date_added ?? '',
     ransomwareUse: row.ransomware_use,
     cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,

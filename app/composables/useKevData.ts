@@ -40,6 +40,8 @@ type UseKevDataResult = {
     vendor: KevCountDatum[]
     product: KevCountDatum[]
   }>
+  totalEntries: ComputedRef<number>
+  entryLimit: ComputedRef<number>
   updatedAt: ComputedRef<string>
   catalogBounds: ComputedRef<{ earliest: string | null; latest: string | null }>
   pending: Ref<boolean>
@@ -65,6 +67,8 @@ const createDefaultCounts = (): DefaultCounts => ({
   vendor: [],
   product: []
 })
+
+const DEFAULT_ENTRY_LIMIT = 25
 
 const normaliseQuery = (source?: KevQueryParams): NormalisedQuery => {
   if (!source) {
@@ -98,7 +102,9 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
       updatedAt: '',
       entries: [],
       counts: createDefaultCounts(),
-      catalogBounds: { earliest: null, latest: null }
+      catalogBounds: { earliest: null, latest: null },
+      totalEntries: 0,
+      entryLimit: DEFAULT_ENTRY_LIMIT
     })
   })
 
@@ -200,6 +206,8 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
 
   const entries = computed(() => data.value?.entries ?? [])
   const counts = computed(() => data.value?.counts ?? createDefaultCounts())
+  const totalEntries = computed(() => data.value?.totalEntries ?? 0)
+  const entryLimit = computed(() => data.value?.entryLimit ?? DEFAULT_ENTRY_LIMIT)
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
   const catalogBounds = computed(() => data.value?.catalogBounds ?? { earliest: null, latest: null })
 
@@ -226,6 +234,8 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   return {
     entries,
     counts,
+    totalEntries,
+    entryLimit,
     updatedAt,
     catalogBounds,
     pending,

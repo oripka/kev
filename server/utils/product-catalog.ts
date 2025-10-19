@@ -61,11 +61,15 @@ const collectProducts = (
 
 export const rebuildProductCatalog = (db: SqliteDatabase) => {
   const kevRows = db
-    .prepare<ProductRow>('SELECT DISTINCT vendor, product FROM kev_entries')
+    .prepare<ProductRow>(
+      `SELECT DISTINCT vendor, product FROM vulnerability_entries WHERE source = 'kev'`
+    )
     .all() as ProductRow[]
 
   const enisaRows = db
-    .prepare<ProductRow>('SELECT DISTINCT vendor, product FROM enisa_entries')
+    .prepare<ProductRow>(
+      `SELECT DISTINCT vendor, product FROM vulnerability_entries WHERE source = 'enisa'`
+    )
     .all() as ProductRow[]
 
   const catalog = new Map<string, CatalogRecord>()
