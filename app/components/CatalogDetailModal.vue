@@ -206,6 +206,41 @@ const sortedTimelineEvents = computed<KevEntryTimelineEvent[]>(() => {
 
   const events = [...(entry.timeline ?? [])];
 
+  const addSyntheticEvent = (
+    timestamp: string | null | undefined,
+    build: (value: string) => KevEntryTimelineEvent,
+  ) => {
+    const value = timestamp?.trim?.();
+    if (!value) {
+      return;
+    }
+
+    const alreadyPresent = events.some(event => event.timestamp === value);
+    if (alreadyPresent) {
+      return;
+    }
+
+    events.push(build(value));
+  };
+
+  addSyntheticEvent(entry.exploitedSince, value => ({
+    id: `exploited_since:${value}`,
+    type: "custom",
+    timestamp: value,
+    title: "Exploited since",
+    description: "Earliest exploitation date reported in the KEV catalog.",
+    icon: "i-lucide-flame",
+  }));
+
+  addSyntheticEvent(entry.dateUpdated, value => ({
+    id: `last_updated:${value}`,
+    type: "custom",
+    timestamp: value,
+    title: "Last updated",
+    description: "Most recent catalog update recorded for this entry.",
+    icon: "i-lucide-rotate-cw",
+  }));
+
   if (entry.metasploitModulePublishedAt) {
     const hasMetasploitEvent = events.some(event => event.type === "metasploit_module");
     if (!hasMetasploitEvent) {
@@ -486,22 +521,6 @@ const timelineStats = computed(() => {
                   </p>
                   <p class="text-base text-neutral-900 dark:text-neutral-100">
                     {{ props.entry.assigner || 'Not available' }}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                    Exploited since
-                  </p>
-                  <p class="text-base text-neutral-900 dark:text-neutral-100">
-                    {{ props.formatOptionalTimestamp(props.entry.exploitedSince) }}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                    Last updated
-                  </p>
-                  <p class="text-base text-neutral-900 dark:text-neutral-100">
-                    {{ props.formatOptionalTimestamp(props.entry.dateUpdated) }}
                   </p>
                 </div>
               </div>
