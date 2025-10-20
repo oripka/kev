@@ -1,0 +1,1 @@
+ALTER TABLE `catalog_entries` ADD `has_source_historic` integer DEFAULT 0 NOT NULL;

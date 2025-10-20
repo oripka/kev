@@ -31,7 +31,7 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     <NuxtRouteAnnouncer />
     <NuxtLoadingIndicator />
     <UToaster />
-    <UHeader title="KEV Watch" to="/">
+    <UHeader title="In the Wild" to="/">
       <template #right>
         <UNavigationMenu :items="navigationItems" />
       </template>
