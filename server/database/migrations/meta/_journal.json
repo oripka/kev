@@ -29,6 +29,13 @@
       "when": 1764988800000,
       "tag": "0003_metasploit_module_paths",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1760955364817,
+      "tag": "0004_futuristic_rage",
+      "breakpoints": true
     }
   ]
 }
