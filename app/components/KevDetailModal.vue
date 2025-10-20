@@ -108,7 +108,6 @@ const handleYearQuickFilter = (value: string | null) => {
 
 type TimelineMeta = {
   icon: string;
-  indicator: string;
   title: (event: KevEntryTimelineEvent, entry: KevEntryDetail) => string;
   description?: (event: KevEntryTimelineEvent, entry: KevEntryDetail) => string | null;
 };
@@ -128,7 +127,6 @@ const getSourceLabel = (source: KevEntryTimelineEvent["source"]): string | null 
 const timelineMeta: Record<KevTimelineEventType | "default", TimelineMeta> = {
   cve_published: {
     icon: "i-lucide-scroll-text",
-    indicator: "bg-sky-500 text-white",
     title: () => "CVE published",
     description: (_event, entry) =>
       entry.assigner?.trim()
@@ -137,21 +135,18 @@ const timelineMeta: Record<KevTimelineEventType | "default", TimelineMeta> = {
   },
   kev_listed: {
     icon: "i-lucide-shield-check",
-    indicator: "bg-rose-500 text-white",
     title: () => `Flagged in ${catalogSourceLabels.kev}`,
     description: () =>
       "CISA confirmed active exploitation and added the CVE to the Known Exploited Vulnerabilities catalog.",
   },
   enisa_listed: {
     icon: "i-lucide-shield-half",
-    indicator: "bg-amber-500 text-white",
     title: () => `Listed by ${catalogSourceLabels.enisa}`,
     description: () =>
       "ENISA highlighted this CVE as actively exploited in the Threat Landscape for exploited vulnerabilities.",
   },
   metasploit_module: {
     icon: "i-lucide-swords",
-    indicator: "bg-emerald-500 text-white",
     title: () => "Metasploit module published",
     description: event => {
       const modulePath =
@@ -163,25 +158,21 @@ const timelineMeta: Record<KevTimelineEventType | "default", TimelineMeta> = {
   },
   historic_reference: {
     icon: "i-lucide-archive",
-    indicator: "bg-indigo-500 text-white",
     title: () => "Historic exploitation noted",
     description: () => "Captured in the historic exploited vulnerability archive.",
   },
   exploitation_observed: {
     icon: "i-lucide-flame",
-    indicator: "bg-orange-500 text-white",
     title: () => "Exploitation observed",
     description: () => "Earliest available signal of in-the-wild exploitation.",
   },
   custom: {
     icon: "i-lucide-clock-8",
-    indicator: "bg-neutral-500 text-white",
     title: () => "Timeline event",
     description: event => (typeof event.description === "string" ? event.description : null),
   },
   default: {
     icon: "i-lucide-clock-8",
-    indicator: "bg-neutral-500 text-white",
     title: () => "Timeline event",
   },
 };
@@ -196,12 +187,52 @@ const parseEventTimestamp = (value: string): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const timelineDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+const formatTimelineDate = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = parseEventTimestamp(value);
+  return parsed ? timelineDateFormatter.format(parsed) : value;
+};
+
 const sortedTimelineEvents = computed<KevEntryTimelineEvent[]>(() => {
-  if (!props.entry?.timeline?.length) {
+  const entry = props.entry;
+  if (!entry) {
     return [];
   }
 
-  const events = [...props.entry.timeline];
+  const events = [...(entry.timeline ?? [])];
+
+  if (entry.metasploitModulePublishedAt) {
+    const hasMetasploitEvent = events.some(event => event.type === "metasploit_module");
+    if (!hasMetasploitEvent) {
+      const metadata = (
+        typeof entry.metasploitModulePath === "string" && entry.metasploitModulePath.trim().length
+      )
+        ? { modulePath: entry.metasploitModulePath }
+        : undefined;
+
+      events.push({
+        id: `metasploit_module:${entry.metasploitModulePublishedAt}`,
+        type: "metasploit_module",
+        timestamp: entry.metasploitModulePublishedAt,
+        source: "metasploit",
+        ...(metadata ? { metadata } : {}),
+      });
+    }
+  }
+
+  if (!events.length) {
+    return [];
+  }
+
   events.sort((first, second) => {
     const firstDate = parseEventTimestamp(first.timestamp);
     const secondDate = parseEventTimestamp(second.timestamp);
@@ -245,17 +276,14 @@ const timelineItems = computed<TimelineItem[]>(() => {
         : `Source: ${datasetLabel}`;
     }
 
-    const formattedDate = props.formatOptionalTimestamp(event.timestamp);
+    const formattedDate = formatTimelineDate(event.timestamp);
 
     return {
       value: index,
-      date: formattedDate,
+      date: formattedDate ?? event.timestamp,
       title,
       ...(description ? { description } : {}),
       icon: event.icon ?? meta.icon,
-      ui: {
-        indicator: `${meta.indicator} ring-4 ring-white/80 dark:ring-neutral-950/80 shadow-lg`,
-      },
     } satisfies TimelineItem;
   });
 });
@@ -291,18 +319,6 @@ const timelineStats = computed(() => {
   };
 });
 
-const timelineUi = {
-  root: "space-y-6",
-  item: "relative",
-  container: "items-stretch",
-  indicator: "ring-offset-2 ring-offset-white dark:ring-offset-neutral-950 transition",
-  separator:
-    "bg-gradient-to-b from-primary-500/10 via-neutral-200 to-transparent dark:from-primary-500/10 dark:via-neutral-800 dark:to-transparent",
-  wrapper: "pb-6 space-y-1",
-  date: "text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-400",
-  title: "text-sm font-semibold text-neutral-900 dark:text-neutral-100",
-  description: "text-sm leading-relaxed text-neutral-600 dark:text-neutral-300",
-};
 </script>
 
 <template>
@@ -517,7 +533,7 @@ const timelineUi = {
                     <UTimeline
                       :items="timelineItems"
                       :default-value="activeTimelineIndex"
-                      :ui="timelineUi"
+                      color="primary"
                       class="relative"
                     />
                   </div>
