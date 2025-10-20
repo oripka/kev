@@ -77,7 +77,7 @@ const showTrendLines = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
-const showTrackedReport = ref(false);
+const showMySoftwareSlideover = ref(false);
 
 const latestAdditionWindowDays = 14;
 const latestAdditionWindowMs = latestAdditionWindowDays * 24 * 60 * 60 * 1000;
@@ -3086,24 +3086,45 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #mySoftware>
-          <div class="relative">
+          <div class="space-y-4 py-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Review coverage and exploit activity for the software you track
+              without leaving the table.
+            </p>
+
             <div
-              v-if="!trackedProductsReady"
-              class="pointer-events-none absolute inset-0 rounded-xl bg-neutral-200/70 backdrop-blur-sm dark:bg-neutral-800/60"
-            />
-            <TrackedSoftwareSummary
-              v-model="showOwnedOnly"
-              :tracked-products="trackedProducts"
-              :tracked-product-count="trackedProductCount"
-              :has-tracked-products="hasTrackedProducts"
-              :saving="savingTrackedProducts"
-              :save-error="trackedProductError"
-              :product-insights="trackedProductInsights"
-              :summary="trackedProductSummary"
-              @remove="removeTrackedProduct"
-              @clear="clearTrackedProducts"
-              @show-report="showTrackedReport = true"
-            />
+              class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-neutral-700 dark:text-neutral-100">
+                    {{ trackedProductCount.toLocaleString() }} tracked product{{
+                      trackedProductCount === 1 ? '' : 's'
+                    }}
+                  </p>
+                  <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ trackedProductSummary.recentCount.toLocaleString() }} new ·
+                    {{ trackedProductSummary.recentWindowLabel }}
+                  </p>
+                </div>
+                <UBadge color="primary" variant="soft" class="font-semibold">
+                  {{ trackedProductSummary.totalCount.toLocaleString() }} total CVEs
+                </UBadge>
+              </div>
+              <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+                Open the panel to manage tracked items and view severity
+                breakdowns.
+              </p>
+            </div>
+
+            <UButton
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-layers"
+              @click="showMySoftwareSlideover = true"
+            >
+              Open my software panel
+            </UButton>
           </div>
         </template>
 
@@ -3231,7 +3252,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         @add-to-tracked="handleAddToTracked"
       />
       <MySoftwareSlideover
-        v-model:open="showTrackedReport"
+        v-model:open="showMySoftwareSlideover"
         v-model:show-owned-only="showOwnedOnly"
         :tracked-products-ready="trackedProductsReady"
         :tracked-products="trackedProducts"

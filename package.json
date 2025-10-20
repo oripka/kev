@@ -29,6 +29,7 @@
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.70",
     "drizzle-kit": "^0.31.5",
+    "path-browserify": "^1.0.1",
     "wrangler": "^4.43.0"
   },
   "packageManager": "pnpm@10.18.3"

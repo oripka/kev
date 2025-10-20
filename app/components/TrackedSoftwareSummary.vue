@@ -30,7 +30,21 @@ const emits = defineEmits<{
 
 const manageHref = computed(() => props.manageHref ?? '/settings/software')
 const showReportCta = computed(() => props.showReportCta !== false)
-const insights = computed(() => props.productInsights ?? [])
+const sortedInsights = computed(() => {
+  const list = props.productInsights ?? []
+
+  return [...list].sort((a, b) => {
+    if (b.recentCount !== a.recentCount) {
+      return b.recentCount - a.recentCount
+    }
+
+    if (b.totalCount !== a.totalCount) {
+      return b.totalCount - a.totalCount
+    }
+
+    return a.product.productName.localeCompare(b.product.productName)
+  })
+})
 const summary = computed<TrackedProductSummary>(() =>
   props.summary ?? {
     productCount: props.trackedProductCount,
@@ -89,7 +103,7 @@ const headerStatus = computed(() => {
   } selected`
 })
 
-const hasInsights = computed(() => insights.value.length > 0)
+const hasInsights = computed(() => sortedInsights.value.length > 0)
 
 const getTrendMax = (trend: TrackedProductTrendPoint[]) =>
   trend.reduce((max, item) => (item.count > max ? item.count : max), 0)
@@ -226,7 +240,7 @@ const handleReportClick = () => {
 
         <div v-if="hasInsights" class="grid gap-3 md:grid-cols-2">
           <div
-            v-for="insight in insights"
+            v-for="insight in sortedInsights"
             :key="insight.product.productKey"
             class="space-y-3 rounded-xl border border-neutral-200 bg-white/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/50"
           >

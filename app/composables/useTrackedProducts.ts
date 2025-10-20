@@ -428,60 +428,72 @@ export const useTrackedProducts = () => {
       }
     }
 
-    return tracked.map(product => {
-      const data = productData.get(product.productKey) ?? {
-        severityCounts: baseSeverityRecord(),
-        recentCount: 0,
-        trend: Array.from({ length: monthMeta.length }, () => 0),
-        latestAddedAt: null
-      }
+    return tracked
+      .map(product => {
+        const data = productData.get(product.productKey) ?? {
+          severityCounts: baseSeverityRecord(),
+          recentCount: 0,
+          trend: Array.from({ length: monthMeta.length }, () => 0),
+          latestAddedAt: null
+        }
 
-      const totalFromCounts = productCountMap.get(product.productKey)
-      const totalFromEntries = severityOrder.reduce(
-        (sum, key) => sum + data.severityCounts[key],
-        0
-      )
+        const totalFromCounts = productCountMap.get(product.productKey)
+        const totalFromEntries = severityOrder.reduce(
+          (sum, key) => sum + data.severityCounts[key],
+          0
+        )
 
-      const totalCount =
-        typeof totalFromCounts === 'number' && totalFromCounts >= totalFromEntries
-          ? totalFromCounts
-          : totalFromEntries
+        const totalCount =
+          typeof totalFromCounts === 'number' && totalFromCounts >= totalFromEntries
+            ? totalFromCounts
+            : totalFromEntries
 
-      const severityBreakdown = severityOrder
-        .map<TrackedProductSeveritySlice | null>(key => {
-          const count = data.severityCounts[key]
-          if (!count) {
-            return null
-          }
+        const severityBreakdown = severityOrder
+          .map<TrackedProductSeveritySlice | null>(key => {
+            const count = data.severityCounts[key]
+            if (!count) {
+              return null
+            }
 
-          const percent = totalCount ? (count / totalCount) * 100 : 0
-          const meta = severityDisplayMeta[key]
-          return {
-            key,
-            label: meta.label,
-            color: meta.color,
-            count,
-            percent,
-            percentLabel: percentFormatter.format(percent)
-          }
-        })
-        .filter((item): item is TrackedProductSeveritySlice => Boolean(item))
+            const percent = totalCount ? (count / totalCount) * 100 : 0
+            const meta = severityDisplayMeta[key]
+            return {
+              key,
+              label: meta.label,
+              color: meta.color,
+              count,
+              percent,
+              percentLabel: percentFormatter.format(percent)
+            }
+          })
+          .filter((item): item is TrackedProductSeveritySlice => Boolean(item))
 
-      const trend: TrackedProductTrendPoint[] = monthMeta.map((item, index) => ({
-        label: item.label,
-        count: data.trend[index] ?? 0
-      }))
+        const trend: TrackedProductTrendPoint[] = monthMeta.map((item, index) => ({
+          label: item.label,
+          count: data.trend[index] ?? 0
+        }))
 
-      return {
-        product,
-        totalCount,
-        recentCount: data.recentCount,
-        severityBreakdown,
-        severityCounts: data.severityCounts,
-        trend,
-        latestAddedAt: data.latestAddedAt
-      }
-    })
+        return {
+          product,
+          totalCount,
+          recentCount: data.recentCount,
+          severityBreakdown,
+          severityCounts: data.severityCounts,
+          trend,
+          latestAddedAt: data.latestAddedAt
+        }
+      })
+      .sort((a, b) => {
+        if (b.recentCount !== a.recentCount) {
+          return b.recentCount - a.recentCount
+        }
+
+        if (b.totalCount !== a.totalCount) {
+          return b.totalCount - a.totalCount
+        }
+
+        return a.product.productName.localeCompare(b.product.productName)
+      })
   })
 
   const trackedProductSummary = computed<TrackedProductSummary>(() => {
