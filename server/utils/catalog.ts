@@ -127,6 +127,7 @@ export type CatalogSummaryRow = {
   cvss_score: number | null
   cvss_severity: string | null
   epss_score: number | null
+  aliases: string
   domain_categories: string
   exploit_layers: string
   vulnerability_categories: string
@@ -848,6 +849,7 @@ export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
 
 export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => {
   const sources = parseJsonStringArray(row.sources) as CatalogSource[]
+  const aliases = parseJsonStringArray(row.aliases)
   const domainCategories = parseJsonStringArray(
     row.domain_categories
   ) as KevEntrySummary['domainCategories']
@@ -881,6 +883,7 @@ export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => 
     domainCategories,
     exploitLayers,
     vulnerabilityCategories,
-    internetExposed: row.internet_exposed === 1
+    internetExposed: row.internet_exposed === 1,
+    aliases: aliases.length ? aliases : [row.cve_id]
   }
 }

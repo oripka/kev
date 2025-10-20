@@ -182,6 +182,339 @@ onBeforeUnmount(() => {
   }
 });
 
+const route = useRoute();
+const router = useRouter();
+
+type RouteQuery = Record<string, unknown>;
+
+const extractQueryString = (value: unknown): string | null => {
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return null;
+    }
+
+    return extractQueryString(value[value.length - 1]);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
+};
+
+const parseQueryBoolean = (value: unknown): boolean | null => {
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return null;
+    }
+
+    return parseQueryBoolean(value[value.length - 1]);
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    const normalised = value.trim().toLowerCase();
+    if (!normalised) {
+      return null;
+    }
+
+    if (normalised === "true" || normalised === "1") {
+      return true;
+    }
+
+    if (normalised === "false" || normalised === "0") {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const parseQueryInteger = (value: unknown): number | null => {
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return null;
+    }
+
+    return parseQueryInteger(value[value.length - 1]);
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+};
+
+const parseQueryFloat = (value: unknown): number | null => {
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return null;
+    }
+
+    return parseQueryFloat(value[value.length - 1]);
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseFloat(trimmed);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+};
+
+const normaliseNumericRange = (
+  minimum: number | null,
+  maximum: number | null,
+  defaults: readonly [number, number],
+  clamp: (value: number) => number,
+): [number, number] => {
+  let start =
+    typeof minimum === "number" && Number.isFinite(minimum)
+      ? minimum
+      : defaults[0];
+  let end =
+    typeof maximum === "number" && Number.isFinite(maximum)
+      ? maximum
+      : defaults[1];
+
+  start = clamp(start);
+  end = clamp(end);
+
+  if (start > end) {
+    [start, end] = [end, start];
+  }
+
+  return [start, end];
+};
+
+const applyRouteQueryState = (rawQuery: RouteQuery) => {
+  const getValue = (key: string) => rawQuery[key];
+
+  const searchValue = extractQueryString(getValue("search")) ?? "";
+  if (searchInput.value !== searchValue || debouncedSearch.value !== searchValue) {
+    if (searchDebounce) {
+      clearTimeout(searchDebounce);
+      searchDebounce = undefined;
+    }
+
+    searchInput.value = searchValue;
+    debouncedSearch.value = searchValue;
+  }
+
+  (Object.entries(filters) as Array<[FilterKey, string | null]>).forEach(
+    ([key, currentValue]) => {
+      const nextValue = extractQueryString(getValue(key));
+      const normalised = nextValue ?? null;
+
+      if (currentValue !== normalised) {
+        filters[key] = normalised;
+      }
+    },
+  );
+
+  const startYear = parseQueryInteger(getValue("startYear"));
+  const endYear = parseQueryInteger(getValue("endYear"));
+  const [defaultStartYear, defaultEndYear] = defaultYearRange.value;
+  const nextYearRange =
+    startYear === null && endYear === null
+      ? [defaultStartYear, defaultEndYear]
+      : normaliseNumericRange(
+          startYear,
+          endYear,
+          [defaultStartYear, defaultEndYear],
+          (value) => Math.min(Math.max(value, sliderMinYear), sliderMaxYear),
+        );
+
+  if (
+    yearRange.value[0] !== nextYearRange[0] ||
+    yearRange.value[1] !== nextYearRange[1]
+  ) {
+    yearRange.value = nextYearRange;
+  }
+
+  const cvssMin = parseQueryFloat(getValue("cvssMin"));
+  const cvssMax = parseQueryFloat(getValue("cvssMax"));
+  const nextCvssRange =
+    cvssMin === null && cvssMax === null
+      ? [defaultCvssRange[0], defaultCvssRange[1]]
+      : normaliseNumericRange(
+          cvssMin,
+          cvssMax,
+          defaultCvssRange,
+          (value) =>
+            Math.min(Math.max(value, defaultCvssRange[0]), defaultCvssRange[1]),
+        );
+
+  if (
+    cvssRange.value[0] !== nextCvssRange[0] ||
+    cvssRange.value[1] !== nextCvssRange[1]
+  ) {
+    cvssRange.value = nextCvssRange;
+  }
+
+  const epssMin = parseQueryFloat(getValue("epssMin"));
+  const epssMax = parseQueryFloat(getValue("epssMax"));
+  const nextEpssRange =
+    epssMin === null && epssMax === null
+      ? [defaultEpssRange[0], defaultEpssRange[1]]
+      : normaliseNumericRange(
+          epssMin,
+          epssMax,
+          defaultEpssRange,
+          (value) =>
+            Math.min(Math.max(value, defaultEpssRange[0]), defaultEpssRange[1]),
+        );
+
+  if (
+    epssRange.value[0] !== nextEpssRange[0] ||
+    epssRange.value[1] !== nextEpssRange[1]
+  ) {
+    epssRange.value = nextEpssRange;
+  }
+
+  const sourceParam = extractQueryString(getValue("source"));
+  let resolvedSource: typeof selectedSource.value = "all";
+  if (
+    sourceParam === "kev" ||
+    sourceParam === "enisa" ||
+    sourceParam === "historic" ||
+    sourceParam === "metasploit"
+  ) {
+    resolvedSource = sourceParam;
+  }
+
+  if (selectedSource.value !== resolvedSource) {
+    selectedSource.value = resolvedSource;
+  }
+
+  const updateBooleanFlag = (
+    target: { value: boolean },
+    key: string,
+    fallback: boolean,
+  ) => {
+    const parsed = parseQueryBoolean(getValue(key));
+    const nextValue = parsed ?? fallback;
+
+    if (target.value !== nextValue) {
+      target.value = nextValue;
+    }
+  };
+
+  updateBooleanFlag(showWellKnownOnly, "wellKnownOnly", false);
+  updateBooleanFlag(showRansomwareOnly, "ransomwareOnly", false);
+  updateBooleanFlag(showInternetExposedOnly, "internetExposedOnly", false);
+
+  const ownedOnly =
+    parseQueryBoolean(getValue("ownedOnly")) ??
+    parseQueryBoolean(getValue("showOwnedOnly")) ??
+    false;
+  if (showOwnedOnly.value !== ownedOnly) {
+    showOwnedOnly.value = ownedOnly;
+  }
+
+  updateBooleanFlag(showAllResults, "showAllResults", true);
+
+  const sortParam = extractQueryString(getValue("sort"));
+  const resolvedSort: SortOption =
+    sortParam === "cvssScore" ||
+    sortParam === "epssScore" ||
+    sortParam === "cveId" ||
+    sortParam === "publicationDate"
+      ? sortParam
+      : "publicationDate";
+
+  if (sortOption.value !== resolvedSort) {
+    sortOption.value = resolvedSort;
+  }
+
+  const directionParam = extractQueryString(getValue("sortDirection"));
+  const resolvedDirection: SortDirection =
+    directionParam === "asc" || directionParam === "desc"
+      ? directionParam
+      : "desc";
+
+  if (sortDirection.value !== resolvedDirection) {
+    sortDirection.value = resolvedDirection;
+  }
+};
+
+const toRouteQueryRecord = (source: RouteQuery): Record<string, string> => {
+  const record: Record<string, string> = {};
+
+  for (const [key, rawValue] of Object.entries(source)) {
+    if (Array.isArray(rawValue)) {
+      if (!rawValue.length) {
+        continue;
+      }
+
+      const candidate = rawValue[rawValue.length - 1];
+      if (typeof candidate === "string") {
+        record[key] = candidate;
+      } else if (typeof candidate === "number" || typeof candidate === "boolean") {
+        record[key] = String(candidate);
+      }
+
+      continue;
+    }
+
+    if (typeof rawValue === "string") {
+      record[key] = rawValue;
+    } else if (typeof rawValue === "number" || typeof rawValue === "boolean") {
+      record[key] = String(rawValue);
+    }
+  }
+
+  return record;
+};
+
+const areRouteQueryRecordsEqual = (
+  first: Record<string, string>,
+  second: Record<string, string>,
+) => {
+  const firstKeys = Object.keys(first);
+  const secondKeys = Object.keys(second);
+
+  if (firstKeys.length !== secondKeys.length) {
+    return false;
+  }
+
+  return firstKeys.every((key) => first[key] === second[key]);
+};
+
+
 const {
   trackedProducts,
   trackedProductSet,
@@ -197,6 +530,126 @@ const {
   trackedProductSummary,
   recentWindowDays: trackedRecentWindowDays,
 } = useTrackedProducts();
+
+const routeQueryState = computed<Record<string, string>>(() => {
+  const query: Record<string, string> = {};
+  const searchTerm = debouncedSearch.value.trim();
+
+  if (searchTerm) {
+    query.search = searchTerm;
+  }
+
+  (Object.entries(filters) as Array<[FilterKey, string | null]>).forEach(
+    ([key, value]) => {
+      if (value) {
+        query[key] = value;
+      }
+    },
+  );
+
+  const [defaultStartYear, defaultEndYear] = defaultYearRange.value;
+  const [currentStartYear, currentEndYear] = yearRange.value;
+  if (
+    currentStartYear !== defaultStartYear ||
+    currentEndYear !== defaultEndYear
+  ) {
+    query.startYear = String(currentStartYear);
+    query.endYear = String(currentEndYear);
+  }
+
+  const [currentCvssMin, currentCvssMax] = cvssRange.value;
+  if (
+    currentCvssMin !== defaultCvssRange[0] ||
+    currentCvssMax !== defaultCvssRange[1]
+  ) {
+    query.cvssMin = String(currentCvssMin);
+    query.cvssMax = String(currentCvssMax);
+  }
+
+  const [currentEpssMin, currentEpssMax] = epssRange.value;
+  if (
+    currentEpssMin !== defaultEpssRange[0] ||
+    currentEpssMax !== defaultEpssRange[1]
+  ) {
+    query.epssMin = String(currentEpssMin);
+    query.epssMax = String(currentEpssMax);
+  }
+
+  if (selectedSource.value !== "all") {
+    query.source = selectedSource.value;
+  }
+
+  if (showWellKnownOnly.value) {
+    query.wellKnownOnly = "true";
+  }
+
+  if (showRansomwareOnly.value) {
+    query.ransomwareOnly = "true";
+  }
+
+  if (showInternetExposedOnly.value) {
+    query.internetExposedOnly = "true";
+  }
+
+  if (showOwnedOnly.value) {
+    query.ownedOnly = "true";
+  }
+
+  if (!showAllResults.value) {
+    query.showAllResults = "false";
+  }
+
+  if (sortOption.value !== "publicationDate") {
+    query.sort = sortOption.value;
+  }
+
+  if (sortDirection.value !== "desc") {
+    query.sortDirection = sortDirection.value;
+  }
+
+  return query;
+});
+
+let hasAppliedInitialRoute = false;
+let isApplyingRouteToState = false;
+let isReplacingRouteQuery = false;
+
+watch(
+  () => route.query,
+  (next) => {
+    if (isReplacingRouteQuery) {
+      return;
+    }
+
+    isApplyingRouteToState = true;
+    applyRouteQueryState(next as RouteQuery);
+    isApplyingRouteToState = false;
+    hasAppliedInitialRoute = true;
+  },
+  { immediate: true, deep: true },
+);
+
+watch(
+  routeQueryState,
+  (next) => {
+    if (!hasAppliedInitialRoute || isApplyingRouteToState) {
+      return;
+    }
+
+    const current = toRouteQueryRecord(route.query as RouteQuery);
+    if (areRouteQueryRecordsEqual(current, next)) {
+      return;
+    }
+
+    isReplacingRouteQuery = true;
+    router
+      .replace({ query: next })
+      .finally(() => {
+        isReplacingRouteQuery = false;
+      });
+  },
+  { deep: true },
+);
 
 const trackedProductKeys = computed(() =>
   trackedProducts.value.map((item) => item.productKey)
@@ -811,12 +1264,19 @@ const results = computed(() => {
       typeof value === "string" && value.toLowerCase().includes(term);
 
     collection = collection.filter((entry) => {
+      const aliasMatch = Array.isArray(entry.aliases)
+        ? entry.aliases.some((alias) => includesTerm(alias))
+        : false;
+      const wellKnownName = getWellKnownCveName(entry.cveId);
+
       return (
         includesTerm(entry.cveId) ||
         includesTerm(entry.vendor) ||
         includesTerm(entry.product) ||
         includesTerm(entry.vulnerabilityName) ||
-        includesTerm(entry.description)
+        includesTerm(entry.description) ||
+        aliasMatch ||
+        (typeof wellKnownName === "string" && includesTerm(wellKnownName))
       );
     });
   }

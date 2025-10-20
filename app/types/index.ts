@@ -131,6 +131,7 @@ export type KevEntrySummary = Pick<
   | 'exploitLayers'
   | 'vulnerabilityCategories'
   | 'internetExposed'
+  | 'aliases'
 >
 
 export type KevCountDatum = {

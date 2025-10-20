@@ -264,6 +264,7 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
         OR lower(${ce.product}) LIKE ${pattern}
         OR lower(${ce.vulnerabilityName}) LIKE ${pattern}
         OR lower(${ce.description}) LIKE ${pattern}
+        OR lower(${ce.aliases}) LIKE ${pattern}
       )`
     )
   }
@@ -413,6 +414,7 @@ const queryEntries = (
       cvss_score: ce.cvssScore,
       cvss_severity: ce.cvssSeverity,
       epss_score: ce.epssScore,
+      aliases: ce.aliases,
       domain_categories: ce.domainCategories,
       exploit_layers: ce.exploitLayers,
       vulnerability_categories: ce.vulnerabilityCategories,
