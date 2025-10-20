@@ -766,6 +766,16 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
   ]
     .filter(Boolean)
     .join(' ')
+  const vendorContext = [
+    metadata.name,
+    metadata.description,
+    metadata.targets.join(' '),
+    metadata.aliases.join(' '),
+    referenceText
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 
   const hinted = matchExploitProduct(contextText)
   if (hinted) {
@@ -777,7 +787,13 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
       return null
     }
     const mapping = PLATFORM_VENDOR_MAP[token.toLowerCase()]
-    return mapping ?? null
+    if (!mapping) {
+      return null
+    }
+    if (mapping.vendor === 'Microsoft' && !vendorContext.includes('microsoft')) {
+      return null
+    }
+    return mapping
   }
 
   for (const platform of metadata.platforms) {
@@ -802,7 +818,9 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
   if (metadata.targets.length) {
     const joinedTargets = metadata.targets.join(' ').toLowerCase()
     if (joinedTargets.includes('windows')) {
-      return { vendor: 'Microsoft', product: 'Windows' }
+      if (vendorContext.includes('microsoft')) {
+        return { vendor: 'Microsoft', product: 'Windows' }
+      }
     }
     if (joinedTargets.includes('linux')) {
       return { vendor: 'Linux', product: 'Linux' }

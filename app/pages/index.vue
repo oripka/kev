@@ -332,6 +332,50 @@ const {
   pending: dataPending,
 } = useKevData(filterParams);
 
+const filterParamsWithoutYear = computed(() => {
+  const [cvssStart, cvssEnd] = cvssRange.value;
+  const [epssStart, epssEnd] = epssRange.value;
+
+  const params: Record<string, unknown> = {
+    search: debouncedSearch.value || undefined,
+    domain: filters.domain || undefined,
+    exploit: filters.exploit || undefined,
+    vulnerability: filters.vulnerability || undefined,
+    vendor: filters.vendor || undefined,
+    product: filters.product || undefined,
+    wellKnownOnly: showWellKnownOnly.value ? true : undefined,
+    ransomwareOnly: showRansomwareOnly.value ? true : undefined,
+    ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
+    internetExposedOnly: showInternetExposedOnly.value ? true : undefined,
+    limit: 1,
+  };
+
+  if (showOwnedOnlyEffective.value && trackedProductKeys.value.length) {
+    params.products = trackedProductKeys.value.join(",");
+  }
+
+  if (selectedSource.value !== "all") {
+    params.source = selectedSource.value;
+  }
+
+  if (cvssStart > defaultCvssRange[0] || cvssEnd < defaultCvssRange[1]) {
+    params.cvssMin = cvssStart;
+    params.cvssMax = cvssEnd;
+  }
+
+  if (epssStart > defaultEpssRange[0] || epssEnd < defaultEpssRange[1]) {
+    params.epssMin = epssStart;
+    params.epssMax = epssEnd;
+  }
+
+  return params;
+});
+
+const {
+  totalEntries: totalEntriesAnyYear,
+  pending: anyYearPending,
+} = useKevData(filterParamsWithoutYear);
+
 const earliestDataYear = computed(() => {
   const value = catalogBounds.value.earliest;
   if (!value) {
@@ -366,6 +410,12 @@ const hasCustomYearRange = computed(
     yearRange.value[0] !== defaultYearRange.value[0] ||
     yearRange.value[1] !== defaultYearRange.value[1]
 );
+
+const isYearRangeLimited = computed(() => {
+  const [start, end] = yearRange.value;
+  const [min, max] = yearBounds.value;
+  return start > min || end < max;
+});
 
 watch(
   yearBounds,
@@ -889,6 +939,34 @@ const matchingResultsCount = computed(() => results.value.length);
 const matchingResultsLabel = computed(() =>
   matchingResultsCount.value.toLocaleString()
 );
+
+const showCatalogEmptyState = computed(
+  () => !isBusy.value && results.value.length === 0
+);
+
+const hasMatchesOutsideYearRange = computed(() => {
+  if (!showCatalogEmptyState.value) {
+    return false;
+  }
+
+  if (!isYearRangeLimited.value) {
+    return false;
+  }
+
+  if (anyYearPending.value) {
+    return false;
+  }
+
+  return totalEntriesAnyYear.value > 0;
+});
+
+const catalogEmptyMessage = computed(() => {
+  if (hasMatchesOutsideYearRange.value) {
+    return `No vulnerabilities match these filters within ${quickFilterYearLabel.value}, but matches exist outside this timeframe. Expand the year filter to include more years.`;
+  }
+
+  return "No vulnerabilities match the current filters.";
+});
 
 const riskFocusContext = computed(() => ({
   active: showOwnedOnlyEffective.value && hasTrackedProducts.value,
@@ -1968,27 +2046,8 @@ const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
   },
 ]);
 
-const resetDownstreamFilters = (key: FilterKey) => {
-  if (key === "domain") {
-    filters.exploit = null;
-    filters.vulnerability = null;
-    filters.vendor = null;
-    filters.product = null;
-  } else if (key === "exploit") {
-    filters.vulnerability = null;
-    filters.vendor = null;
-    filters.product = null;
-  } else if (key === "vulnerability") {
-    filters.vendor = null;
-    filters.product = null;
-  } else if (key === "vendor") {
-    filters.product = null;
-  }
-};
-
 const toggleFilter = (key: FilterKey, value: string) => {
   filters[key] = filters[key] === value ? null : value;
-  resetDownstreamFilters(key);
 };
 
 const openAccordionSections = (...sections: string[]) => {
@@ -2228,7 +2287,6 @@ const clearFilter = (
   }
 
   filters[key] = null;
-  resetDownstreamFilters(key);
 };
 
 const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
@@ -3327,7 +3385,14 @@ const tableMeta = {
             animation="swing"
             color="primary"
           />
+          <div
+            v-if="showCatalogEmptyState"
+            class="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-6 py-10 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400"
+          >
+            {{ catalogEmptyMessage }}
+          </div>
           <UTable
+            v-else
             :data="results"
             :columns="columns"
             :meta="tableMeta"
