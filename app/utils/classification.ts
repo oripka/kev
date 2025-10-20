@@ -992,7 +992,7 @@ const clientApplicationPatterns: RegExp[] = [
 
 const clientFileInteractionPatterns: RegExp[] = [
   // "specially crafted" or "malicious" within a short window before file-like tokens
-  /\b(?:specially[-\s]?crafted|malicious|crafted)[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
+  /\b(?:specially[-\s]?crafted|malicious)[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
 
   // verbs that indicate opening/processing/parsing a file or content (limited context window)
   /\b(?:open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|process(?:ing)?|parse|parsing|render(?:ing)?)'?\b[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|content|payload)\b/i,
@@ -1037,7 +1037,12 @@ const clientLocalExecutionPatterns: RegExp[] = [
   /\b(?:local file inclusion|lfi|file inclusion)\b/i,
 ];
 
+const networkProtocolPatterns: RegExp[] = [
+  /\b(smb|cifs|nfs|rpc|rdp|ldap|ftp|smtp|imap|pop3|snmp|telnet|ssh|dcerpc|tcp|udp)\b/i,
+];
+
 const serverSignalPatterns: RegExp[] = [
+  ...networkProtocolPatterns,
   // generic server/service tokens with word boundaries
   /\b(?:server|service|daemon|appliance|controller)\b/i,
 
@@ -1373,6 +1378,7 @@ export const classifyExploitLayers = (
   const hasServerSignal = serverSignalPatterns.some((pattern) =>
     pattern.test(text)
   );
+  const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
 
   const domainSuggestsClient = domainCategories.some((category) =>
     clientDomainHints.has(category)
@@ -1405,11 +1411,19 @@ export const classifyExploitLayers = (
     (cvssSuggestsLocal ? 1 : 0) +
     (cvssRequiresUserInteraction ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0);
-  const serverScore =
+  let serverScore =
     (hasServerSignal ? 2 : 0) +
     (cvssSuggestsRemote ? 1 : 0) +
     (cvssPreAuth ? 1 : 0) +
     (domainSuggestsServer ? 1 : 0);
+
+  if (hasStrongServerProtocol) {
+    serverScore += 3;
+  }
+
+  if (domainCategories.includes("Operating Systems")) {
+    serverScore += 2;
+  }
 
   const determineSide = (): "Client-side" | "Server-side" => {
     if (clientScore > serverScore) {
@@ -1474,6 +1488,14 @@ export const classifyExploitLayers = (
 
     if (strongClientIndicators) {
       return "Client-side";
+    }
+
+    if (
+      matchesAny(text, networkProtocolPatterns) ||
+      text.includes("server") ||
+      text.includes("protocol")
+    ) {
+      return "Server-side";
     }
 
     return "Server-side";
