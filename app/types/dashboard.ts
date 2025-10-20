@@ -1,4 +1,4 @@
-import type { KevEntrySummary } from "~/types";
+import type { CatalogSource, KevEntrySummary } from "~/types";
 
 export type FilterKey = "domain" | "exploit" | "vulnerability" | "vendor" | "product";
 
@@ -8,6 +8,21 @@ export type FilterState = {
   vulnerability: string | null;
   vendor: string | null;
   product: string | null;
+};
+
+export type QuickFilterUpdate = {
+  filters?: Partial<Record<FilterKey, string | null>>;
+  source?: CatalogSource | "all";
+  year?: number;
+  yearRange?: [number, number];
+  search?: string;
+  showWellKnownOnly?: boolean;
+  showRansomwareOnly?: boolean;
+  showInternetExposedOnly?: boolean;
+  showOwnedOnly?: boolean;
+  cvssRange?: [number, number];
+  epssRange?: [number, number];
+  showAllResults?: boolean;
 };
 
 export type ActiveFilterKey =
@@ -29,6 +44,15 @@ export type ActiveFilter = {
 };
 
 export type QuickActionKey = "filters" | "focus" | "my-software" | "trends";
+
+export type QuickFilterPreset = {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+  color: string;
+  update: QuickFilterUpdate;
+};
 
 export type SeverityKey = NonNullable<KevEntrySummary["cvssSeverity"]> | "Unknown";
 

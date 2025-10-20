@@ -14,6 +14,7 @@ import type { AccordionItem, SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
+import { createFilterPresets } from "~/utils/filterPresets";
 import { defaultQuickFilterSummaryConfig, quickFilterSummaryMetricInfo } from "~/utils/quickFilterSummaryConfig";
 import {
   catalogSourceBadgeMap as sourceBadgeMap,
@@ -33,6 +34,8 @@ import type {
   StatTrend,
   QuickFilterSummaryConfig,
   QuickFilterSummaryMetricKey,
+  QuickFilterPreset,
+  QuickFilterUpdate,
 } from "~/types/dashboard";
 
 const formatTimestamp = (value: string) => {
@@ -86,12 +89,6 @@ const latestAdditionSortOptions: LatestAdditionSortOption[] = [
   { label: "EPSS", value: "epss", icon: "i-lucide-activity" },
   { label: "CVSS", value: "cvss", icon: "i-lucide-gauge" },
 ];
-
-type QuickFilterUpdate = {
-  filters?: Partial<Record<FilterKey, string | null>>;
-  source?: CatalogSource;
-  year?: number;
-};
 
 const catalogPreferences = useCatalogPreferences();
 
@@ -1309,6 +1306,137 @@ const showQuickFilterResetButton = computed(() => quickFilterSummaryConfig.value
 
 const hasActiveFilterChips = computed(() => activeFilters.value.length > 0);
 
+const resolveYearWindowStart = computed(() =>
+  Math.max(yearSliderMax.value - 1, yearSliderMin.value),
+);
+
+const filterPresets = computed<QuickFilterPreset[]>(() =>
+  createFilterPresets({
+    currentYear: yearSliderMax.value,
+    previousYear: resolveYearWindowStart.value,
+    defaultYearRange: [
+      defaultYearRange.value[0],
+      defaultYearRange.value[1],
+    ],
+    sliderBounds: [yearSliderMin.value, yearSliderMax.value],
+    defaultCvssRange,
+    defaultEpssRange,
+  }),
+);
+
+const rangesEqual = (
+  first: readonly [number, number],
+  second: readonly [number, number],
+) => first[0] === second[0] && first[1] === second[1];
+
+const matchesPresetState = (update: QuickFilterUpdate) => {
+  if (update.filters) {
+    for (const [rawKey, rawValue] of Object.entries(update.filters) as Array<[
+      FilterKey,
+      string | null | undefined,
+    ]>) {
+      const key = rawKey as FilterKey;
+      if ((filters[key] ?? null) !== (rawValue ?? null)) {
+        return false;
+      }
+    }
+  }
+
+  if (update.source && selectedSource.value !== update.source) {
+    return false;
+  }
+
+  if (Array.isArray(update.yearRange)) {
+    if (!rangesEqual(yearRange.value, update.yearRange)) {
+      return false;
+    }
+  } else if (typeof update.year === "number") {
+    if (
+      yearRange.value[0] !== update.year ||
+      yearRange.value[1] !== update.year
+    ) {
+      return false;
+    }
+  }
+
+  if (typeof update.search === "string") {
+    if (debouncedSearch.value.trim() !== update.search.trim()) {
+      return false;
+    }
+  }
+
+  if (
+    typeof update.showWellKnownOnly === "boolean" &&
+    showWellKnownOnly.value !== update.showWellKnownOnly
+  ) {
+    return false;
+  }
+
+  if (
+    typeof update.showRansomwareOnly === "boolean" &&
+    showRansomwareOnly.value !== update.showRansomwareOnly
+  ) {
+    return false;
+  }
+
+  if (
+    typeof update.showInternetExposedOnly === "boolean" &&
+    showInternetExposedOnly.value !== update.showInternetExposedOnly
+  ) {
+    return false;
+  }
+
+  if (
+    typeof update.showOwnedOnly === "boolean" &&
+    showOwnedOnly.value !== update.showOwnedOnly
+  ) {
+    return false;
+  }
+
+  if (Array.isArray(update.cvssRange)) {
+    if (!rangesEqual(cvssRange.value, update.cvssRange)) {
+      return false;
+    }
+  }
+
+  if (Array.isArray(update.epssRange)) {
+    if (!rangesEqual(epssRange.value, update.epssRange)) {
+      return false;
+    }
+  }
+
+  if (
+    typeof update.showAllResults === "boolean" &&
+    showAllResults.value !== update.showAllResults
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const activeFilterPresetIds = computed(() => {
+  const active = new Set<string>();
+  for (const preset of filterPresets.value) {
+    if (matchesPresetState(preset.update)) {
+      active.add(preset.id);
+    }
+  }
+  return active;
+});
+
+const isFilterPresetActive = (presetId: string) =>
+  activeFilterPresetIds.value.has(presetId);
+
+const presetIconClassMap: Record<string, string> = {
+  primary: "text-primary-500 dark:text-primary-400",
+  secondary: "text-secondary-500 dark:text-secondary-400",
+  warning: "text-amber-500 dark:text-amber-400",
+  error: "text-red-500 dark:text-red-400",
+  info: "text-sky-500 dark:text-sky-400",
+  neutral: "text-neutral-500 dark:text-neutral-300",
+};
+
 const severityDistribution = computed(
   () => derivedResultSnapshot.value.severityDistribution
 );
@@ -1716,6 +1844,13 @@ const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
     badgeText: productTotalCount.value.toLocaleString(),
   },
   {
+    value: "presets",
+    label: "Filter presets",
+    slot: "presets",
+    badgeColor: "info",
+    badgeText: filterPresets.value.length.toString(),
+  },
+  {
     value: "filters",
     label: "Filters",
     slot: "filters",
@@ -1793,10 +1928,29 @@ const openAccordionSections = (...sections: string[]) => {
 };
 
 const applyQuickFilters = (update: QuickFilterUpdate) => {
-  const { filters: filterUpdates, source, year } = update;
+  const {
+    filters: filterUpdates,
+    source,
+    year,
+    yearRange: yearRangeUpdate,
+    search,
+    showWellKnownOnly: nextWellKnownOnly,
+    showRansomwareOnly: nextRansomwareOnly,
+    showInternetExposedOnly: nextInternetExposedOnly,
+    showOwnedOnly: nextOwnedOnly,
+    cvssRange: nextCvssRange,
+    epssRange: nextEpssRange,
+    showAllResults: nextShowAllResults,
+  } = update;
 
   if (replaceFiltersOnQuickApply.value) {
     resetFilters();
+  }
+
+  if (typeof search === "string") {
+    const trimmed = search.trim();
+    searchInput.value = trimmed;
+    debouncedSearch.value = trimmed;
   }
 
   if (filterUpdates) {
@@ -1813,31 +1967,87 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     selectedSource.value = source;
   }
 
-  if (typeof year === "number" && Number.isFinite(year)) {
+  if (Array.isArray(yearRangeUpdate) && yearRangeUpdate.length === 2) {
+    yearRange.value = [yearRangeUpdate[0], yearRangeUpdate[1]];
+  } else if (typeof year === "number" && Number.isFinite(year)) {
     yearRange.value = [year, year];
   }
 
-  const sectionsToOpen: string[] = ["filters"];
+  if (Array.isArray(nextCvssRange) && nextCvssRange.length === 2) {
+    cvssRange.value = [nextCvssRange[0], nextCvssRange[1]];
+  }
+
+  if (Array.isArray(nextEpssRange) && nextEpssRange.length === 2) {
+    epssRange.value = [nextEpssRange[0], nextEpssRange[1]];
+  }
+
+  if (typeof nextWellKnownOnly === "boolean") {
+    showWellKnownOnly.value = nextWellKnownOnly;
+  }
+
+  if (typeof nextRansomwareOnly === "boolean") {
+    showRansomwareOnly.value = nextRansomwareOnly;
+  }
+
+  if (typeof nextInternetExposedOnly === "boolean") {
+    showInternetExposedOnly.value = nextInternetExposedOnly;
+  }
+
+  if (typeof nextOwnedOnly === "boolean") {
+    showOwnedOnly.value = nextOwnedOnly;
+  }
+
+  const sectionsToOpen = new Set<string>(["filters"]);
 
   if (filterUpdates?.domain) {
-    sectionsToOpen.push("domain");
+    sectionsToOpen.add("domain");
   }
   if (filterUpdates?.exploit) {
-    sectionsToOpen.push("exploit");
+    sectionsToOpen.add("exploit");
   }
   if (filterUpdates?.vulnerability) {
-    sectionsToOpen.push("vulnerability");
+    sectionsToOpen.add("vulnerability");
   }
   if (filterUpdates?.vendor) {
-    sectionsToOpen.push("top-vendors");
+    sectionsToOpen.add("top-vendors");
   }
   if (filterUpdates?.product) {
-    sectionsToOpen.push("top-products");
+    sectionsToOpen.add("top-products");
   }
 
-  openAccordionSections(...sectionsToOpen);
+  if (
+    typeof nextWellKnownOnly === "boolean" ||
+    typeof nextRansomwareOnly === "boolean" ||
+    typeof nextInternetExposedOnly === "boolean" ||
+    typeof nextOwnedOnly === "boolean"
+  ) {
+    sectionsToOpen.add("focus");
+  }
 
-  showAllResults.value = true;
+  if (Array.isArray(nextCvssRange) || Array.isArray(nextEpssRange)) {
+    sectionsToOpen.add("filters");
+  }
+
+  if (typeof search === "string" && search.trim()) {
+    sectionsToOpen.add("filters");
+  }
+
+  if (Array.isArray(yearRangeUpdate) || typeof year === "number") {
+    sectionsToOpen.add("filters");
+  }
+
+  openAccordionSections(...Array.from(sectionsToOpen));
+
+  if (typeof nextShowAllResults === "boolean") {
+    showAllResults.value = nextShowAllResults;
+  } else {
+    showAllResults.value = true;
+  }
+};
+
+const handleApplyFilterPreset = (preset: QuickFilterPreset) => {
+  applyQuickFilters(preset.update);
+  openAccordionSections("presets");
 };
 
 const clearFilter = (
@@ -2312,10 +2522,55 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               </div>
             </template>
 
+        <template #presets>
+          <div class="space-y-6 px-2">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Jump to curated combinations of catalog filters.
+            </p>
+            <div class="grid grid-cols-1 gap-3">
+              <button
+                v-for="preset in filterPresets"
+                :key="preset.id"
+                type="button"
+                :class="[
+                  'group flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                  isFilterPresetActive(preset.id)
+                    ? 'border-primary-300 bg-primary-50/70 dark:border-primary-500/60 dark:bg-primary-500/10'
+                    : 'border-neutral-200 bg-white hover:border-primary-200 hover:bg-primary-50/60 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40 dark:hover:bg-primary-500/10',
+                ]"
+                @click="handleApplyFilterPreset(preset)"
+              >
+                <div
+                  :class="[
+                    'flex size-9 items-center justify-center rounded-lg border text-lg transition',
+                    isFilterPresetActive(preset.id)
+                      ? 'border-primary-300 bg-primary-100 dark:border-primary-500/60 dark:bg-primary-500/10'
+                      : 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900',
+                  ]"
+                >
+                  <UIcon
+                    :name="preset.icon"
+                    class="size-5"
+                    :class="presetIconClassMap[preset.color] ?? presetIconClassMap.neutral"
+                  />
+                </div>
+                <div class="flex-1 space-y-1">
+                  <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                    {{ preset.label }}
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ preset.description }}
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </template>
+
         <template #filters>
-              <div class="space-y-6 px-2">
-                <div class="flex items-start justify-between gap-3">
-                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+          <div class="space-y-6 px-2">
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-sm text-neutral-500 dark:text-neutral-400">
                     Tune the dataset without leaving the table view.
                   </p>
                   <UButton
