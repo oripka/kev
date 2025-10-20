@@ -12,6 +12,12 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     active: route.path === "/",
   },
   {
+    label: "Last 14 days",
+    to: "/vulns-last-two-weeks",
+    icon: "i-lucide-hourglass",
+    active: route.path === "/vulns-last-two-weeks",
+  },
+  {
     label: "My software",
     to: "/settings/software",
     icon: "i-lucide-monitor-cog",
