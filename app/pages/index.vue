@@ -74,6 +74,7 @@ const showTrendLines = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
+const showTrackedReport = ref(false);
 
 const latestAdditionWindowDays = 14;
 const latestAdditionWindowMs = latestAdditionWindowDays * 24 * 60 * 60 * 1000;
@@ -191,6 +192,9 @@ const {
   isSaving: savingTrackedProducts,
   saveError: trackedProductError,
   isReady: trackedProductsReady,
+  connectKevData: connectTrackedProductsKevData,
+  trackedProductInsights,
+  trackedProductSummary,
 } = useTrackedProducts();
 
 const trackedProductKeys = computed(() =>
@@ -557,6 +561,11 @@ const vendorCounts = computed(() => counts.value.vendor);
 
 const productCounts = computed(() => counts.value.product);
 
+connectTrackedProductsKevData({
+  entries,
+  productCounts,
+});
+
 const getPublicationTimestamp = (entry: KevEntrySummary) => {
   const candidates = [entry.datePublished, entry.dateAdded];
 
@@ -804,6 +813,11 @@ const matchingResultsCount = computed(() => results.value.length);
 const matchingResultsLabel = computed(() =>
   matchingResultsCount.value.toLocaleString()
 );
+
+const riskFocusContext = computed(() => ({
+  active: showOwnedOnlyEffective.value && hasTrackedProducts.value,
+  summary: trackedProductSummary.value,
+}));
 
 type AggregatedMetrics = {
   totalCount: number;
@@ -2829,8 +2843,11 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               :has-tracked-products="hasTrackedProducts"
               :saving="savingTrackedProducts"
               :save-error="trackedProductError"
+              :product-insights="trackedProductInsights"
+              :summary="trackedProductSummary"
               @remove="removeTrackedProduct"
               @clear="clearTrackedProducts"
+              @show-report="showTrackedReport = true"
             />
           </div>
         </template>
@@ -2954,8 +2971,23 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         :source-badge-map="sourceBadgeMap"
         :catalog-updated-at="catalogUpdatedAt"
         :entries="results"
+        :focus-context="riskFocusContext"
         @open-details="openDetails"
         @add-to-tracked="handleAddToTracked"
+      />
+      <MySoftwareSlideover
+        v-model:open="showTrackedReport"
+        v-model:show-owned-only="showOwnedOnly"
+        :tracked-products-ready="trackedProductsReady"
+        :tracked-products="trackedProducts"
+        :tracked-product-count="trackedProductCount"
+        :has-tracked-products="hasTrackedProducts"
+        :saving="savingTrackedProducts"
+        :save-error="trackedProductError"
+        :product-insights="trackedProductInsights"
+        :summary="trackedProductSummary"
+        @remove="removeTrackedProduct"
+        @clear="clearTrackedProducts"
       />
     </div>
   </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { KevEntrySummary } from "~/types";
+import type { TrackedProductSummary } from "~/composables/useTrackedProducts";
 import type {
   LatestAdditionSortKey,
   LatestAdditionSortOption,
@@ -38,6 +39,7 @@ const props = defineProps<{
   sourceBadgeMap: SourceBadgeMap;
   catalogUpdatedAt: string;
   entries: KevEntrySummary[];
+  focusContext?: { active: boolean; summary: TrackedProductSummary | null };
 }>();
 
 const emit = defineEmits<{
@@ -116,6 +118,7 @@ const handleAddToTracked = (entry: KevEntrySummary) => {
           :latest-addition-sort-options="props.latestAdditionSortOptions"
           :tracked-products-ready="props.trackedProductsReady"
           :source-badge-map="props.sourceBadgeMap"
+          :focus-context="props.focusContext"
           @open-details="handleOpenDetails"
           @add-to-tracked="handleAddToTracked"
         />

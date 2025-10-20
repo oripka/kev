@@ -2,6 +2,12 @@
 import { computed } from "vue";
 import type { KevEntrySummary } from "~/types";
 import type {
+  TrackedProductSummary,
+  TrackedProductSeveritySlice
+} from "~/composables/useTrackedProducts";
+
+
+import type {
   LatestAdditionSortKey,
   LatestAdditionSortOption,
   LatestAdditionSummary,
@@ -10,6 +16,30 @@ import type {
   SourceBadgeMap,
   StatTrend,
 } from "~/types/dashboard";
+
+
+
+type FocusContext = {
+  active: boolean;
+  summary: TrackedProductSummary | null;
+};
+
+const severityBarClassMap: Record<string, string> = {
+  error: "bg-rose-500/80",
+  warning: "bg-amber-500/80",
+  primary: "bg-sky-500/80",
+  success: "bg-emerald-500/80",
+  neutral: "bg-neutral-500/70",
+};
+
+const severityDotClassMap: Record<string, string> = {
+  error: "bg-rose-500",
+  warning: "bg-amber-500",
+  primary: "bg-sky-500",
+  success: "bg-emerald-500",
+  neutral: "bg-neutral-500",
+};
+
 
 const props = defineProps<{
   matchingResultsLabel: string;
@@ -34,6 +64,7 @@ const props = defineProps<{
   trackedProductsReady: boolean;
   sourceBadgeMap: SourceBadgeMap;
   showRiskDetails: boolean;
+  focusContext?: FocusContext | null;
 }>();
 
 const emit = defineEmits<{
@@ -124,13 +155,15 @@ const openDetails = (entry: KevEntrySummary) => {
   emit("open-details", entry);
 };
 
-const addToTracked = (entry: KevEntrySummary) => {
-  emit("add-to-tracked", entry);
-};
+const focusSummary = computed(() => props.focusContext?.summary ?? null);
 
-const setSortKey = (value: LatestAdditionSortKey) => {
-  latestAdditionSortKey.value = value;
-};
+const focusSeveritySlices = computed<TrackedProductSeveritySlice[]>(() => {
+  const summary = focusSummary.value;
+  if (!summary || !summary.severityBreakdown.length) {
+    return [];
+  }
+  return summary.severityBreakdown;
+});
 </script>
 
 <template>
@@ -145,18 +178,67 @@ const setSortKey = (value: LatestAdditionSortKey) => {
             Quick metrics for the current selection
           </p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <UBadge color="neutral" variant="soft" class="text-sm font-semibold">
-            {{ props.periodLabel }}
-          </UBadge>
+        <div class="flex items-center gap-2">
           <UBadge color="primary" variant="soft" class="text-sm font-semibold">
             {{ props.matchingResultsLabel }} matching exploits
+          </UBadge>
+          <UBadge
+            v-if="props.focusContext?.active"
+            color="primary"
+            variant="ghost"
+            class="text-xs font-semibold"
+          >
+            Focus: My software
           </UBadge>
         </div>
       </div>
     </template>
 
     <div class="space-y-6">
+      <div
+        v-if="props.focusContext?.active && focusSummary?.hasData"
+        class="space-y-3 rounded-lg border border-primary-200/80 bg-primary-50/60 p-4 text-xs text-neutral-700 dark:border-primary-500/50 dark:bg-primary-500/10 dark:text-neutral-200"
+      >
+        <div class="flex flex-wrap items-center gap-2 font-semibold">
+          <UBadge color="primary" variant="soft" class="font-semibold">
+            {{ focusSummary.productCount.toLocaleString() }} tracked product{{
+              focusSummary.productCount === 1 ? '' : 's'
+            }}
+          </UBadge>
+          <UBadge color="neutral" variant="soft" class="font-semibold">
+            {{ focusSummary.totalCount.toLocaleString() }} CVEs in scope
+          </UBadge>
+          <UBadge color="primary" variant="soft" class="font-semibold">
+            {{ focusSummary.recentCount.toLocaleString() }} new ·
+            {{ focusSummary.recentWindowLabel }}
+          </UBadge>
+        </div>
+        <div v-if="focusSeveritySlices.length" class="space-y-2">
+          <div class="h-2 overflow-hidden rounded-full bg-primary-200/60 dark:bg-primary-500/30">
+            <div
+              v-for="slice in focusSeveritySlices"
+              :key="slice.key"
+              class="h-full"
+              :class="severityBarClassMap[slice.color] ?? severityBarClassMap.neutral"
+              :style="{ width: `${slice.percent}%` }"
+            />
+          </div>
+          <div class="flex flex-wrap gap-2 text-[11px]">
+            <span
+              v-for="slice in focusSeveritySlices"
+              :key="slice.key"
+              class="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white/80 px-2 py-0.5 dark:border-neutral-700 dark:bg-neutral-900/60"
+            >
+              <span
+                class="h-2 w-2 rounded-full"
+                :class="severityDotClassMap[slice.color] ?? severityDotClassMap.neutral"
+              />
+              {{ slice.label }} · {{ slice.count.toLocaleString() }}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
           <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">

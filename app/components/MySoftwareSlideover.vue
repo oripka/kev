@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { TrackedProduct } from "~/types";
+import type {
+  TrackedProductInsight,
+  TrackedProductSummary
+} from "~/composables/useTrackedProducts";
 
 const props = defineProps<{
   open: boolean;
@@ -11,6 +15,8 @@ const props = defineProps<{
   hasTrackedProducts: boolean;
   saving: boolean;
   saveError: string | null;
+  productInsights: TrackedProductInsight[];
+  summary: TrackedProductSummary | null;
 }>();
 
 const emit = defineEmits<{
@@ -60,6 +66,9 @@ const handleClear = () => {
           :has-tracked-products="props.hasTrackedProducts"
           :saving="props.saving"
           :save-error="props.saveError"
+          :product-insights="props.productInsights"
+          :summary="props.summary"
+          :show-report-cta="false"
           @remove="handleRemove"
           @clear="handleClear"
         />
