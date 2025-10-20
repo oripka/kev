@@ -115,8 +115,8 @@ export const createFilterPresets = (
     },
     {
       id: "metasploit-ready",
-      label: "Metasploit ready",
-      description: "CVEs with public Metasploit modules available.",
+      label: "Metasploit",
+      description: "CVEs with public Metasploit coverage available.",
       icon: "i-lucide-terminal",
       color: "primary",
       update: {

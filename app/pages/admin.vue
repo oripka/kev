@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
+import { useDateDisplay } from "~/composables/useDateDisplay";
 import {
   areQuickFilterSummaryConfigsEqual,
   cloneQuickFilterSummaryConfig,
@@ -99,6 +100,8 @@ const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
   enisa: "ENISA entries",
   metasploit: "Metasploit entries",
 };
+
+const { formatDate } = useDateDisplay();
 
 const formatOptionalTimestamp = (value: string | null | undefined, fallback: string) => {
   if (!value) {
@@ -375,14 +378,8 @@ const {
   refresh: refreshKevData,
 } = useKevData();
 
-const formatTimestamp = (value: string) => {
-  const parsed = parseISO(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return format(parsed, "yyyy-MM-dd HH:mm");
-};
+const formatTimestamp = (value: string) =>
+  formatDate(value, { fallback: value, preserveInputOnError: true });
 
 const catalogUpdatedAt = computed(() => {
   const summary = lastImportSummary.value;
@@ -575,7 +572,7 @@ const importSummaryMessage = computed(() => {
         ? ` (commit ${summary.metasploitCommit.slice(0, 7)})`
         : "";
       messageParts.push(
-        `Metasploit modules processed: ${summary.metasploitModules.toLocaleString()}${commitLabel}.`,
+        `Metasploit entries processed: ${summary.metasploitModules.toLocaleString()}${commitLabel}.`,
       );
     } else if (summary.metasploitCommit) {
       messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);

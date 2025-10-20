@@ -5,7 +5,7 @@ export const catalogSourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
-  metasploit: "Metasploit modules",
+  metasploit: "Metasploit",
 };
 
 export const catalogSourceBadgeMap: SourceBadgeMap = {

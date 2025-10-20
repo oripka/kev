@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { format, formatDistanceToNowStrict, parseISO, subDays } from "date-fns";
+import { formatDistanceToNowStrict, parseISO, subDays } from "date-fns";
 import { catalogSourceBadgeMap as sourceBadgeMap } from "~/constants/catalogSources";
 import type { CatalogSource, KevEntryDetail, KevEntrySummary } from "~/types";
 import { useKevData } from "~/composables/useKevData";
+import { useDateDisplay } from "~/composables/useDateDisplay";
 
 const rangeEnd = new Date();
 const rangeStart = subDays(rangeEnd, 14);
 const rangeStartIso = rangeStart.toISOString();
 const rangeEndIso = rangeEnd.toISOString();
 
-const rangeLabel = `${format(rangeStart, "MMM d")} – ${format(rangeEnd, "MMM d, yyyy")}`;
+const { formatDate, formatDateRange } = useDateDisplay();
+
+const rangeLabel = computed(() =>
+  formatDateRange(rangeStart, rangeEnd, { fallback: "Date unavailable" })
+);
 
 const queryParams = computed(() => ({
   fromDate: rangeStartIso,
@@ -149,16 +154,11 @@ const formatEpssScoreValue = (score: number | null) =>
 
 const formatEpssScoreLabel = (score: number | null) => formatEpssScoreValue(score) ?? "—";
 
-const formatDateLabel = (value: string | null) => {
-  if (!value) {
-    return "Date unavailable";
-  }
-  const parsed = parseISO(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return format(parsed, "MMM d, yyyy");
-};
+const formatDateLabel = (value: string | null) =>
+  formatDate(value, {
+    fallback: "Date unavailable",
+    preserveInputOnError: true,
+  });
 
 const formatRelativeDate = (value: string | null) => {
   if (!value) {
@@ -171,18 +171,11 @@ const formatRelativeDate = (value: string | null) => {
   return formatDistanceToNowStrict(parsed, { addSuffix: true });
 };
 
-const formatOptionalTimestamp = (value: string | null) => {
-  if (!value) {
-    return "Not available";
-  }
-
-  const parsed = parseISO(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return format(parsed, "yyyy-MM-dd HH:mm");
-};
+const formatOptionalTimestamp = (value: string | null) =>
+  formatDate(value, {
+    fallback: "Not available",
+    preserveInputOnError: true,
+  });
 
 const buildCvssLabel = (
   severity: KevEntrySummary["cvssSeverity"],
@@ -613,7 +606,7 @@ watch(showDetails, (value) => {
           </div>
         </section>
       </div>
-      <KevDetailModal
+      <CatalogDetailModal
         v-model:open="showDetails"
         :entry="detailEntry"
         :loading="detailLoading"

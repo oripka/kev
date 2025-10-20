@@ -9,11 +9,12 @@ import {
   resolveComponent,
   watch,
 } from "vue";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import type { AccordionItem, SelectMenuItem, TableColumn, TableRow } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
+import { useDateDisplay } from "~/composables/useDateDisplay";
 import { createFilterPresets } from "~/utils/filterPresets";
 import { defaultQuickFilterSummaryConfig, quickFilterSummaryMetricInfo } from "~/utils/quickFilterSummaryConfig";
 import {
@@ -44,14 +45,10 @@ import type {
   QuickFilterUpdate,
 } from "~/types/dashboard";
 
-const formatTimestamp = (value: string) => {
-  const parsed = parseISO(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
+const { formatDate } = useDateDisplay();
 
-  return format(parsed, "yyyy-MM-dd HH:mm");
-};
+const formatTimestamp = (value: string) =>
+  formatDate(value, { fallback: value, preserveInputOnError: true });
 
 const sliderMinYear = 2021;
 const sliderMaxYear = new Date().getFullYear();
@@ -2488,7 +2485,10 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           return row.original.dateAdded;
         }
 
-        const label = format(parsed, "dd.MM.yyyy");
+        const label = formatDate(parsed, {
+          fallback: row.original.dateAdded,
+          preserveInputOnError: true,
+        });
         const year = parsed.getFullYear();
         const isActive =
           yearRange.value[0] === year && yearRange.value[1] === year;
@@ -3403,7 +3403,7 @@ const tableMeta = {
         </div>
       </UCard>
 
-      <KevDetailModal
+      <CatalogDetailModal
         v-model:open="showDetails"
         :entry="detailEntry"
         :loading="detailLoading"

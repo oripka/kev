@@ -10,12 +10,13 @@ import type {
 } from "~/types";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
+import { useDisplayPreferences } from "~/composables/useDisplayPreferences";
 
 const sourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
-  metasploit: "Metasploit modules",
+  metasploit: "Metasploit",
 };
 
 const searchTerm = ref("");
@@ -86,6 +87,7 @@ const {
 } = useTrackedProducts();
 
 const catalogPreferences = useCatalogPreferences();
+const displayPreferences = useDisplayPreferences();
 
 const replaceFiltersOnQuickApply = computed({
   get: () => catalogPreferences.value.replaceFiltersOnQuickApply,
@@ -93,6 +95,33 @@ const replaceFiltersOnQuickApply = computed({
     catalogPreferences.value.replaceFiltersOnQuickApply = value;
   },
 });
+
+const dateFormat = computed({
+  get: () => displayPreferences.value.dateFormat,
+  set: (value: string) => {
+    displayPreferences.value.dateFormat = value === "european" ? "european" : "american";
+  },
+});
+
+const showTimestamps = computed({
+  get: () => displayPreferences.value.showTime,
+  set: (value: boolean) => {
+    displayPreferences.value.showTime = value;
+  },
+});
+
+const dateFormatOptions = [
+  {
+    label: "Month / day / year",
+    value: "american",
+    description: "Example: Apr 7, 2024",
+  },
+  {
+    label: "Day / month / year",
+    value: "european",
+    description: "Example: 7 Apr 2024",
+  },
+];
 
 const trackedProductCount = computed(() => trackedProducts.value.length);
 
@@ -359,6 +388,38 @@ const columns = computed<
                 <p class="text-xs text-neutral-500 dark:text-neutral-400">
                   When off, new badge clicks add to your existing filters (OR logic). Enable this
                   to clear the active filters before applying a badge.
+                </p>
+              </div>
+
+              <div
+                class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+              >
+                <div class="space-y-1">
+                  <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                    Date display
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Choose how dates appear across the catalog, dashboards, and reports.
+                  </p>
+                </div>
+                <URadioGroup v-model="dateFormat" :items="dateFormatOptions" />
+                <div class="flex items-center justify-between gap-3">
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                      Show times
+                    </p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                      Toggle to include hours and minutes using a 24-hour clock.
+                    </p>
+                  </div>
+                  <USwitch
+                    :model-value="showTimestamps"
+                    aria-label="Toggle showing times alongside dates"
+                    @update:model-value="(value) => (showTimestamps = value)"
+                  />
+                </div>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Times are hidden by default to keep the interface focused on trends.
                 </p>
               </div>
 

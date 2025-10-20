@@ -723,7 +723,7 @@ const parseModule = (source: string, relativePath: string): ModuleMetadata | nul
   }
   return {
     path: relativePath,
-    name: name || 'Metasploit module',
+    name: name || 'Metasploit entry',
     description: description.trim(),
     authors,
     references,
@@ -1103,11 +1103,11 @@ export const importMetasploitCatalog = async (
   db: DrizzleDatabase,
   options: { useCachedRepository?: boolean } = {}
 ): Promise<{ imported: number; commit: string | null; modules: number }> => {
-  markTaskRunning('metasploit', 'Synchronising Metasploit modules')
+  markTaskRunning('metasploit', 'Synchronising Metasploit catalog')
 
   try {
     setImportPhase('fetchingMetasploit', {
-      message: 'Synchronising Metasploit modules',
+      message: 'Synchronising Metasploit catalog',
       completed: 0,
       total: 0
     })
@@ -1116,7 +1116,7 @@ export const importMetasploitCatalog = async (
 
     const modulesDirExists = await pathExists(MODULES_DIR)
     if (!modulesDirExists) {
-      throw new Error('Metasploit modules directory not available after clone')
+      throw new Error('Metasploit repository directory not available after clone')
     }
 
     const rubyFiles = await walkRubyFiles(MODULES_DIR)
@@ -1125,7 +1125,7 @@ export const importMetasploitCatalog = async (
 
     if (moduleRelativePaths.length) {
       setImportPhase('fetchingMetasploit', {
-        message: 'Resolving Metasploit module publish dates',
+        message: 'Resolving Metasploit publish dates',
         completed: 0,
         total: moduleRelativePaths.length
       })
@@ -1133,7 +1133,7 @@ export const importMetasploitCatalog = async (
         'metasploit',
         0,
         moduleRelativePaths.length,
-        'Resolving Metasploit module publish dates'
+        'Resolving Metasploit publish dates'
       )
     }
 
@@ -1142,18 +1142,18 @@ export const importMetasploitCatalog = async (
         return
       }
       if (completed === total || completed % 50 === 0) {
-        const message = `Resolving Metasploit module publish dates (${completed} of ${total})`
+        const message = `Resolving Metasploit publish dates (${completed} of ${total})`
         setImportPhase('fetchingMetasploit', { message, completed, total })
         markTaskProgress('metasploit', completed, total, message)
       }
     })
 
     setImportPhase('fetchingMetasploit', {
-      message: 'Parsing Metasploit modules',
+      message: 'Parsing Metasploit data',
       completed: 0,
       total: rubyFiles.length
     })
-    markTaskProgress('metasploit', 0, rubyFiles.length, 'Parsing Metasploit modules')
+    markTaskProgress('metasploit', 0, rubyFiles.length, 'Parsing Metasploit data')
 
     const baseEntries: KevBaseEntry[] = []
     const processedModules = new Set<string>()
@@ -1180,7 +1180,7 @@ export const importMetasploitCatalog = async (
         // Ignore modules that fail to parse; they will be skipped.
       }
       if ((index + 1) % 50 === 0 || index + 1 === rubyFiles.length) {
-        const message = `Parsing Metasploit modules (${index + 1} of ${rubyFiles.length})`
+        const message = `Parsing Metasploit data (${index + 1} of ${rubyFiles.length})`
         setImportPhase('fetchingMetasploit', {
           message,
           completed: index + 1,

@@ -72,7 +72,7 @@ const sourceLabels: Record<"all" | "kev" | "enisa" | "historic" | "metasploit", 
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
-  metasploit: "Metasploit modules",
+  metasploit: "Metasploit",
 };
 
 const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => {
