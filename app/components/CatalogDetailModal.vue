@@ -286,6 +286,45 @@ const sortedTimelineEvents = computed<KevEntryTimelineEvent[]>(() => {
   return events;
 });
 
+const getDateKey = (value: Date | null, fallback: string): string => {
+  if (!value) {
+    return fallback;
+  }
+
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildGapLabel = (days: number): string => {
+  if (!Number.isFinite(days) || days <= 0) {
+    return "";
+  }
+
+  const parts: string[] = [];
+  const years = Math.floor(days / 365);
+  if (years > 0) {
+    parts.push(`${years} year${years === 1 ? "" : "s"}`);
+  }
+
+  let remainingDays = days - years * 365;
+
+  if (years === 0 && remainingDays >= 7 && remainingDays % 7 === 0) {
+    const weeks = Math.floor(remainingDays / 7);
+    if (weeks > 0) {
+      parts.push(`${weeks} week${weeks === 1 ? "" : "s"}`);
+      remainingDays = 0;
+    }
+  }
+
+  if (remainingDays > 0) {
+    parts.push(`${remainingDays} day${remainingDays === 1 ? "" : "s"}`);
+  }
+
+  return parts.join(" ");
+};
+
 const timelineItems = computed<TimelineItem[]>(() => {
   const entry = props.entry;
   if (!entry) {
@@ -294,7 +333,37 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
   const events = sortedTimelineEvents.value;
 
-  return events.map((event, index) => {
+  type TimelineGroup = {
+    key: string;
+    formattedDate: string;
+    parsed: Date | null;
+    events: KevEntryTimelineEvent[];
+  };
+
+  const groups: TimelineGroup[] = [];
+
+  for (const event of events) {
+    const parsed = parseEventTimestamp(event.timestamp);
+    const formattedDate = formatTimelineDate(event.timestamp) ?? event.timestamp;
+    const key = getDateKey(parsed, event.timestamp);
+
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup && lastGroup.key === key) {
+      lastGroup.events.push(event);
+      continue;
+    }
+
+    groups.push({
+      key,
+      formattedDate,
+      parsed,
+      events: [event],
+    });
+  }
+
+  const items: TimelineItem[] = [];
+
+  const buildEventDescription = (event: KevEntryTimelineEvent): { title: string; description: string | null; icon: string } => {
     const meta = timelineMeta[event.type] ?? timelineMeta.default;
     const title = event.title ?? meta.title(event, entry);
     const baseDescription = meta.description?.(event, entry) ?? null;
@@ -307,17 +376,65 @@ const timelineItems = computed<TimelineItem[]>(() => {
         : `Source: ${datasetLabel}`;
     }
 
-    const formattedDate = formatTimelineDate(event.timestamp);
-
     return {
-      value: index,
-      date: formattedDate ?? event.timestamp,
       title,
-      ...(description ? { description } : {}),
+      description,
       icon: event.icon ?? meta.icon,
-    } satisfies TimelineItem;
+    };
+  };
+
+  groups.forEach((group, groupIndex) => {
+    if (groupIndex > 0) {
+      const previous = groups[groupIndex - 1];
+      if (group.parsed && previous.parsed) {
+        const span = differenceInCalendarDays(group.parsed, previous.parsed);
+        if (Number.isFinite(span) && span > 0) {
+          const label = buildGapLabel(span);
+          if (label) {
+            items.push({
+              value: items.length,
+              date: "—",
+              title: `${label} later`,
+              description: "No tracked activity was recorded during this gap.",
+              icon: "i-lucide-hourglass",
+            });
+          }
+        }
+      }
+    }
+
+    if (group.events.length === 1) {
+      const [event] = group.events;
+      const { title, description, icon } = buildEventDescription(event);
+      items.push({
+        value: items.length,
+        date: group.formattedDate,
+        title,
+        ...(description ? { description } : {}),
+        icon,
+      });
+      return;
+    }
+
+    const aggregated = group.events.map(event => {
+      const { title, description } = buildEventDescription(event);
+      const detail = description ? ` — ${description}` : "";
+      return `• ${title}${detail}`;
+    });
+
+    items.push({
+      value: items.length,
+      date: group.formattedDate,
+      title: `${group.events.length} events recorded`,
+      description: aggregated.join("\n"),
+      icon: "i-lucide-layers",
+    });
   });
+
+  return items;
 });
+
+const timelineEventCount = computed(() => sortedTimelineEvents.value.length);
 
 const activeTimelineIndex = computed<number | undefined>(() => {
   const items = timelineItems.value;
@@ -554,8 +671,8 @@ const timelineStats = computed(() => {
                         variant="soft"
                         class="text-xs font-semibold uppercase tracking-wide"
                       >
-                        {{ timelineItems.length }}
-                        {{ timelineItems.length === 1 ? "event" : "events" }}
+                        {{ timelineEventCount }}
+                        {{ timelineEventCount === 1 ? "event" : "events" }}
                       </UBadge>
                       <span
                         v-if="timelineStats?.durationLabel"

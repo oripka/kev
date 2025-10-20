@@ -46,7 +46,15 @@ const inferVendorFromProduct = (value: string | null | undefined): string | null
 
   const lower = cleaned.toLowerCase();
 
-  if (/(?:^|\b)(?:microsoft|windows|win32k|exchange|outlook|sharepoint|smbv?1)\b/.test(lower)) {
+  if (/\bmicrosoft\b/.test(lower)) {
+    return "Microsoft";
+  }
+
+  if (/^(?:windows|win32k|smbv?1)\b/.test(lower)) {
+    return "Microsoft";
+  }
+
+  if (/^(?:exchange|outlook|sharepoint)\b/.test(lower)) {
     return "Microsoft";
   }
 

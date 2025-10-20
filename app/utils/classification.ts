@@ -933,7 +933,11 @@ const clientSignalPatterns: RegExp[] = [
   /\b(?:render(?:er|ing) engine|render engine|layout engine)\b/i,
 
   // Client application hosts / runtimes / containers (desktop, mobile, electron, office viewers)
-  /\b(?:desktop|workstation|endpoint|client(?: application| app| software| program| binary)|viewer|reader|player|media player)\b/i,
+  /\bclient(?: application| app| software| program| binary)\b/i,
+  /\bdesktop (?:application|app|client)\b/i,
+  /\bworkstation (?:application|app|client)\b/i,
+  /\bendpoint (?:agent|client)\b/i,
+  /\b(?:viewer|reader|player|media player)\b/i,
   /\b(?:mobile|android|ios|ipad|iphone|tablet)\b/i,
   /\b(?:electron|nwjs|cordova|capacitor|react[-\s]?native)\b/i,
 
@@ -1377,6 +1381,21 @@ export const classifyExploitLayers = (
     serverDomainHints.has(category)
   );
 
+  const strongClientIndicators =
+    hasClientApplicationSignal ||
+    hasClientFileSignal ||
+    hasClientUserInteractionSignal ||
+    hasClientLocalExecutionSignal ||
+    Boolean(cvssSuggestsLocal) ||
+    Boolean(cvssRequiresUserInteraction) ||
+    domainSuggestsClient;
+
+  const strongServerIndicators =
+    hasServerSignal ||
+    domainSuggestsServer ||
+    Boolean(cvssSuggestsRemote && !cvssRequiresUserInteraction) ||
+    (hasRemoteContext && !strongClientIndicators);
+
   const clientScore =
     (hasClientSignal ? 2 : 0) +
     (hasClientApplicationSignal ? 2 : 0) +
@@ -1402,7 +1421,9 @@ export const classifyExploitLayers = (
     }
 
     if (hasClientFileSignal || hasClientApplicationSignal) {
-      return "Client-side";
+      if (!hasServerSignal || clientScore >= serverScore) {
+        return "Client-side";
+      }
     }
 
     if (domainSuggestsServer && !domainSuggestsClient) {
@@ -1413,15 +1434,11 @@ export const classifyExploitLayers = (
       return "Client-side";
     }
 
-    if (cvssSuggestsRemote && !cvssSuggestsLocal) {
+    if (strongServerIndicators && !strongClientIndicators) {
       return "Server-side";
     }
 
-    if (cvssSuggestsLocal && !cvssSuggestsRemote) {
-      return "Client-side";
-    }
-
-    if (cvssRequiresUserInteraction && !hasServerSignal) {
+    if (strongClientIndicators && !strongServerIndicators) {
       return "Client-side";
     }
 
@@ -1431,6 +1448,17 @@ export const classifyExploitLayers = (
 
     if (hasClientSignal && !hasServerSignal) {
       return "Client-side";
+    }
+
+    if (
+      strongServerIndicators &&
+      !hasClientFileSignal &&
+      !hasClientApplicationSignal &&
+      !hasClientUserInteractionSignal &&
+      !hasClientLocalExecutionSignal &&
+      !cvssRequiresUserInteraction
+    ) {
+      return "Server-side";
     }
 
     if (
@@ -1444,7 +1472,11 @@ export const classifyExploitLayers = (
       return "Server-side";
     }
 
-    return "Client-side";
+    if (strongClientIndicators) {
+      return "Client-side";
+    }
+
+    return "Server-side";
   };
 
   if (!qualifiesForRce) {
