@@ -7,7 +7,7 @@ import type {
 
 export type KevBaseEntry = Omit<
   KevEntry,
-  "domainCategories" | "exploitLayers" | "vulnerabilityCategories"
+  "domainCategories" | "exploitLayers" | "vulnerabilityCategories" | "timeline"
 >;
 
 const internetEdgeDomainHints: KevDomainCategory[] = [
@@ -889,7 +889,6 @@ const memoryCorruptionPatterns: RegExp[] = [
   // Well-known exploit family names and primitives lacking explicit memory wording
   /\bkernel pool\b/i,
   /\b(?:eternal(?:blue|romance|synergy|champion)|doublepulsar|smbghost|coronablue|educatedscholar)\b/i,
-];
 
 ];
 
