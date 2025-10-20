@@ -949,7 +949,10 @@ const clientSignalPatterns: RegExp[] = [
   /\bworkstation (?:application|app|client)\b/i,
   /\bendpoint (?:agent|client)\b/i,
   /\b(?:viewer|reader|player|media player)\b/i,
-  /\b(?:mobile|android|ios|ipad|iphone|tablet)\b/i,
+  /\bmobile\s+(?:app(?:lication)?|client|browser|device|endpoint)\b/i,
+  /\b(?:android\s+(?:app(?:lication)?|client|browser|device)|google\s+android)\b/i,
+  /\b(?:apple\s+ios|ios\/ipad(?:os)?|ios\s+(?:app|application|client)|ipad(?:os)?|iphone|ipod\s+touch)\b/i,
+  /\btablet\s+(?:app|application|client|device)\b/i,
   /\b(?:electron|nwjs|cordova|capacitor|react[-\s]?native)\b/i,
 
   // Local user / user interaction / prompt / click required variants
@@ -998,7 +1001,7 @@ const clientApplicationPatterns: RegExp[] = [
   /\b(?:internet explorer|iexplore|edge|msedge|browser helper object|bho)\b/i,
 
   // Generic document container / compound formats (OLE compound, compound file binary format)
-  /(?:^|[^a-z0-9])(ole(?: compound)?|compound file|cfb|c(om)?)?(?:[^a-z0-9]|$)/i,
+  /\b(?:ole(?:\s+compound)?|compound file|cfb|com)\b/i,
 ];
 
 const clientFileInteractionPatterns: RegExp[] = [
@@ -1007,7 +1010,7 @@ const clientFileInteractionPatterns: RegExp[] = [
   /\b(?:specially|specifically)\s+crafted\s+(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
 
   // verbs that indicate opening/processing/parsing a file or content (limited context window)
-  /\b(?:open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|process(?:ing)?|parse|parsing|render(?:ing)?)'?\b[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|content|payload)\b/i,
+  /\b(?:open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|render(?:ing)?)'?\b[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|content|payload)\b/i,
 
   // delivered via/through/by email
   /(?:^|[^a-z0-9])(?:delivered (?:via|through|by) (?:email|attachment|msg|eml))(?:[^a-z0-9]|$)/i,
@@ -1044,9 +1047,20 @@ const clientLocalExecutionPatterns: RegExp[] = [
   // local privilege escalation or local execution phrases
   /\b(?:local[-\s]?privilege(?:[-\s]?escalation| escalation)|LPE|privilege escalation(?: via)?)\b/i,
   /\b(?:execute(?:s|d)? arbitrary code locally|execute (?:arbitrary|remote)? code in (?:user|kernel) mode|run arbitrary code locally)\b/i,
+];
 
-  // local file inclusion / local service abuse
-  /\b(?:local file inclusion|lfi|file inclusion)\b/i,
+const explicitFileUserActionPatterns: RegExp[] = [
+  /\b(?:when|upon)\s+(?:opening|viewing|loading|double[-\s]?clicking|launching)\b/i,
+  /\b(?:user|victim|target)\s+(?:opens|open|opening|views|downloads|executes|runs|launches)\b/i,
+  /\bdouble[-\s]?click(?:ing)?\b/i,
+  /\bclicks?\s+(?:on|to)\b/i,
+];
+
+const serverFileContextPatterns: RegExp[] = [
+  /\bupload(?:ed|ing)?\b/i,
+  /\b(?:http|https|api)\s+(?:request|call|endpoint)\b/i,
+  /\bserver\s+(?:processes|parses|handles)\b/i,
+  /\bvia\s+(?:an?\s+)?(?:api|http)\s+request\b/i,
 ];
 
 const networkProtocolPatterns: RegExp[] = [
@@ -1070,6 +1084,9 @@ const serverSignalPatterns: RegExp[] = [
 
   // gateway, vpn, firewall, router, switch
   /\b(?:gateway|vpn|firewall|router|switch|load[-\s]?balancer)\b/i,
+
+  // server-side file inclusion keywords (LFI)
+  /\b(?:local file inclusion|lfi|file inclusion)\b/i,
 
   // API / REST / SOAP / RPC / management endpoints
   /\b(?:api endpoint|rest(?: API)?|soap|rpc|management endpoint|control plane)\b/i,
@@ -1379,19 +1396,39 @@ export const classifyExploitLayers = (
     pattern.test(text)
   );
   const hasDosSignal = matchesAny(text, denialOfServicePatterns);
-  const hasClientSignal = matchesAny(text, clientSignalPatterns);
+  let hasClientSignal = matchesAny(text, clientSignalPatterns);
   const hasClientApplicationSignal = matchesAny(
     text,
     clientApplicationPatterns
   );
-  const hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns);
-  const hasClientUserInteractionSignal =
-    matchesAny(text, clientUserInteractionPatterns) ||
-    Boolean(cvssRequiresUserInteraction);
+  let hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns);
+  const rawClientUserInteractionSignal = matchesAny(
+    text,
+    clientUserInteractionPatterns
+  );
+  const hasExplicitFileUserAction = matchesAny(
+    text,
+    explicitFileUserActionPatterns
+  );
+  let hasClientUserInteractionSignal =
+    rawClientUserInteractionSignal ||
+    Boolean(cvssRequiresUserInteraction) ||
+    hasExplicitFileUserAction;
+  const hasServerFileProcessingContext = matchesAny(
+    text,
+    serverFileContextPatterns
+  );
+  if (hasClientFileSignal) {
+    const hasTextualUserAction =
+      hasExplicitFileUserAction || rawClientUserInteractionSignal;
+    if (!hasTextualUserAction || (hasServerFileProcessingContext && !hasExplicitFileUserAction)) {
+      hasClientFileSignal = false;
+    }
+  }
   const hasClientLocalExecutionSignal =
     matchesAny(text, clientLocalExecutionPatterns) ||
     Boolean(cvssSuggestsLocal);
-  const hasServerSignal = serverSignalPatterns.some((pattern) =>
+  let hasServerSignal = serverSignalPatterns.some((pattern) =>
     pattern.test(text)
   );
   const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
@@ -1400,12 +1437,37 @@ export const classifyExploitLayers = (
     hasKernelDriverSignal &&
     (hasStrongServerProtocol || hasRemoteContext || hasExplicitRemoteRce);
 
+  const networkOperatingSystemSignal = /\bcisco(?:'s)?\s+ios(?:\s+(?:xe|xr))?\b/i.test(
+    text
+  ) || /\bios\s+(?:xe|xr)\b/i.test(text);
+  const mobileManagementSignal =
+    /\b(?:mobileiron|endpoint manager mobile|ivanti (?:epmm|endpoint manager mobile)|mobileiron (?:core|sentry))\b/i.test(
+      text
+    );
+  const mobileDeviceManagementContext = /\bmobile device management\b/i.test(
+    text
+  );
+
+  if (networkOperatingSystemSignal) {
+    hasServerSignal = true;
+  }
+
   const domainSuggestsClient = domainCategories.some((category) =>
     clientDomainHints.has(category)
   );
   const domainSuggestsServer = domainCategories.some((category) =>
     serverDomainHints.has(category)
   );
+
+  if (
+    hasClientSignal &&
+    (networkOperatingSystemSignal ||
+      ((mobileManagementSignal || mobileDeviceManagementContext) &&
+        domainSuggestsServer &&
+        !domainSuggestsClient))
+  ) {
+    hasClientSignal = false;
+  }
 
   const strongClientIndicators =
     hasClientApplicationSignal ||
@@ -1470,21 +1532,15 @@ export const classifyExploitLayers = (
       return "Server-side";
     }
 
-    if (hasClientFileSignal || hasClientApplicationSignal) {
-      if (!hasServerSignal || clientScore >= serverScore) {
-        return "Client-side";
-      }
+    if (strongServerIndicators && !strongClientIndicators) {
+      return "Server-side";
     }
 
     if (domainSuggestsServer && !domainSuggestsClient) {
       return "Server-side";
     }
 
-    if (domainSuggestsClient && !domainSuggestsServer) {
-      return "Client-side";
-    }
-
-    if (strongServerIndicators && !strongClientIndicators) {
+    if (hasServerSignal && !hasClientSignal) {
       return "Server-side";
     }
 
@@ -1492,33 +1548,15 @@ export const classifyExploitLayers = (
       return "Client-side";
     }
 
-    if (hasServerSignal && !hasClientSignal) {
-      return "Server-side";
+    if (domainSuggestsClient && !domainSuggestsServer) {
+      return "Client-side";
     }
 
     if (hasClientSignal && !hasServerSignal) {
       return "Client-side";
     }
 
-    if (
-      strongServerIndicators &&
-      !hasClientFileSignal &&
-      !hasClientApplicationSignal &&
-      !hasClientUserInteractionSignal &&
-      !hasClientLocalExecutionSignal &&
-      !cvssRequiresUserInteraction
-    ) {
-      return "Server-side";
-    }
-
-    if (
-      hasRemoteContext &&
-      !hasClientSignal &&
-      !hasClientApplicationSignal &&
-      !hasClientFileSignal &&
-      !hasClientUserInteractionSignal &&
-      !hasClientLocalExecutionSignal
-    ) {
+    if (strongServerIndicators) {
       return "Server-side";
     }
 
@@ -1526,15 +1564,15 @@ export const classifyExploitLayers = (
       return "Client-side";
     }
 
-    if (
-      matchesAny(text, networkProtocolPatterns) ||
-      text.includes("server") ||
-      text.includes("protocol")
-    ) {
+    if (hasServerSignal) {
       return "Server-side";
     }
 
-    return "Server-side";
+    if (hasClientSignal) {
+      return "Client-side";
+    }
+
+    return hasRemoteContext ? "Server-side" : "Client-side";
   };
 
   if (!qualifiesForRce) {
