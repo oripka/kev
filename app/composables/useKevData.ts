@@ -18,6 +18,7 @@ type NormalisedQuery = Record<string, string>
 type ImportSummary = {
   imported: number
   kevImported: number
+  historicImported: number
   enisaImported: number
   dateReleased: string
   catalogVersion: string
@@ -128,9 +129,11 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     phase === 'preparing' ||
     phase === 'fetchingCvss' ||
     phase === 'fetchingEnisa' ||
+    phase === 'fetchingHistoric' ||
     phase === 'enriching' ||
     phase === 'saving' ||
-    phase === 'savingEnisa'
+    phase === 'savingEnisa' ||
+    phase === 'savingHistoric'
 
   const stopProgressPolling = () => {
     if (progressTimer) {

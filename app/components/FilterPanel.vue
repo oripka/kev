@@ -36,7 +36,7 @@ const setVulnerabilityType = (value: unknown) => update({ vulnerabilityType: coe
 const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomwareOnly: value === true })
 const setWellKnownOnly = (value: boolean) => update({ wellKnownOnly: value })
 const setSource = (value: unknown) => {
-  if (value === 'kev' || value === 'enisa') {
+  if (value === 'kev' || value === 'enisa' || value === 'historic') {
     update({ source: value })
   } else {
     update({ source: 'all' })
@@ -157,7 +157,8 @@ const epssRangeLabel = computed(() =>
 const sourceOptions = [
   { label: 'All sources', value: 'all' },
   { label: 'CISA KEV', value: 'kev' },
-  { label: 'ENISA', value: 'enisa' }
+  { label: 'ENISA', value: 'enisa' },
+  { label: 'Historic dataset', value: 'historic' }
 ]
 </script>
 

@@ -22,7 +22,8 @@ const severityColors: Record<Exclude<KevEntrySummary['cvssSeverity'], null>, str
 
 const sourceBadgeMap: Record<KevEntrySummary['sources'][number], { label: string; color: string }> = {
   kev: { label: 'CISA KEV', color: 'primary' },
-  enisa: { label: 'ENISA', color: 'success' }
+  enisa: { label: 'ENISA', color: 'success' },
+  historic: { label: 'Historic', color: 'warning' }
 }
 
 const formatScore = (score: number | null) =>

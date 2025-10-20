@@ -13,7 +13,7 @@ import { format, parseISO } from "date-fns";
 import type { AccordionItem, SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
-import type { KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
+import type { CatalogSource, KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
 import type {
   ActiveFilter,
   FilterKey,
@@ -60,6 +60,11 @@ const showRiskDetails = ref(false);
 const showAllResults = ref(false);
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
+const catalogSourceLabels: Record<CatalogSource, string> = {
+  kev: "CISA KEV",
+  enisa: "ENISA",
+  historic: "Historic dataset",
+};
 const cvssRange = ref<[number, number]>([
   defaultCvssRange[0],
   defaultCvssRange[1],
@@ -68,10 +73,10 @@ const epssRange = ref<[number, number]>([
   defaultEpssRange[0],
   defaultEpssRange[1],
 ]);
-const selectedSource = ref<"all" | "kev" | "enisa">("all");
+const selectedSource = ref<"all" | "kev" | "enisa" | "historic">("all");
 const isFiltering = ref(false);
 
-const selectSource = (value: "all" | "kev" | "enisa") => {
+const selectSource = (value: "all" | "kev" | "enisa" | "historic") => {
   selectedSource.value = value;
 };
 
@@ -340,8 +345,9 @@ const cvssSeverityColors: Record<
 };
 
 const sourceBadgeMap: SourceBadgeMap = {
-  kev: { label: "CISA KEV", color: "primary" },
-  enisa: { label: "ENISA", color: "success" },
+  kev: { label: catalogSourceLabels.kev, color: "primary" },
+  enisa: { label: catalogSourceLabels.enisa, color: "success" },
+  historic: { label: "Historic", color: "warning" },
 };
 
 const formatCvssScore = (score: number | null) =>
@@ -1024,7 +1030,7 @@ const activeFilters = computed<ActiveFilter[]>(() => {
   }
 
   if (selectedSource.value !== "all") {
-    const label = selectedSource.value === "kev" ? "CISA KEV" : "ENISA";
+    const label = catalogSourceLabels[selectedSource.value as CatalogSource];
     items.push({ key: "source", label: "Source", value: label });
   }
 
@@ -1564,20 +1570,14 @@ const columns: TableColumn<KevEntrySummary>[] = [
               <UFormField label="Data source">
                 <div class="flex flex-wrap gap-2">
                   <UButton
-                    v-for="option in ['all', 'kev', 'enisa']"
+                    v-for="option in ['all', 'kev', 'enisa', 'historic']"
                     :key="option"
                     size="sm"
                     :color="selectedSource === option ? 'primary' : 'neutral'"
                     :variant="selectedSource === option ? 'solid' : 'outline'"
-                    @click="selectSource(option as 'all' | 'kev' | 'enisa')"
+                    @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic')"
                   >
-                    {{
-                      option === "all"
-                        ? "All sources"
-                        : option === "kev"
-                        ? "CISA KEV"
-                        : "ENISA"
-                    }}
+                    {{ option === "all" ? "All sources" : catalogSourceLabels[option as CatalogSource] }}
                   </UButton>
                 </div>
               </UFormField>

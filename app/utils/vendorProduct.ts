@@ -163,7 +163,7 @@ const removeCatalogNoise = (value: string): string => {
   const patterns: RegExp[] = [
     /\badd\s+to\s+focus\b.*$/gi,
     /\btracked\b.*$/gi,
-    /\b(?:cisa\s+kev|cisa|enisa)\b.*$/gi,
+    /\b(?:cisa\s+kev|cisa|enisa|historic)\b.*$/gi,
   ];
 
   return patterns.reduce((result, pattern) => result.replace(pattern, " "), value);

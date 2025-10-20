@@ -9,6 +9,7 @@ import { eq, sql } from 'drizzle-orm'
 import { getCachedData } from '../utils/cache'
 import { fetchCvssMetrics } from '../utils/cvss'
 import { importEnisaCatalog } from '../utils/enisa'
+import { importHistoricCatalog } from '../utils/historic'
 import {
   completeImportProgress,
   failImportProgress,
@@ -372,6 +373,8 @@ export default defineEventHandler(async event => {
       }
     })
 
+    const historicSummary = await importHistoricCatalog(db)
+
     const enisaSummary = await importEnisaCatalog(db, {
       ttlMs: ONE_DAY_MS,
       forceRefresh,
@@ -381,12 +384,13 @@ export default defineEventHandler(async event => {
     rebuildProductCatalog(db)
 
     completeImportProgress(
-      `Imported ${entries.length} KEV entries and ${enisaSummary.imported} ENISA entries (catalog size: ${catalogSummary.count})`
+      `Imported ${entries.length} KEV entries, ${historicSummary.imported} historic entries, and ${enisaSummary.imported} ENISA entries (catalog size: ${catalogSummary.count})`
     )
 
     return {
-      imported: entries.length + enisaSummary.imported,
+      imported: entries.length + enisaSummary.imported + historicSummary.imported,
       kevImported: entries.length,
+      historicImported: historicSummary.imported,
       enisaImported: enisaSummary.imported,
       dateReleased: parsed.data.dateReleased,
       catalogVersion: parsed.data.catalogVersion,

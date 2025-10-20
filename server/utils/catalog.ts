@@ -102,6 +102,7 @@ export type CatalogEntryRow = {
   internet_exposed: number
   has_source_kev: number
   has_source_enisa: number
+  has_source_historic: number
 }
 
 export type CatalogSummaryRow = {
@@ -261,9 +262,10 @@ const getEntryCategories = (
   return empty
 }
 
-const toKevEntry = (
+const toStandardEntry = (
   row: VulnerabilityEntryRow,
-  categories: EntryCategories
+  categories: EntryCategories,
+  source: 'kev' | 'historic'
 ): KevEntry => {
   const cveId = normaliseCve(row.cve_id ?? row.id)
   const notes = parseJsonArray(row.notes)
@@ -274,7 +276,7 @@ const toKevEntry = (
   return {
     id: row.id,
     cveId,
-    sources: ['kev'],
+    sources: [source],
     vendor: normalised.vendor.label,
     vendorKey: normalised.vendor.key,
     product: normalised.product.label,
@@ -294,11 +296,11 @@ const toKevEntry = (
       typeof row.cvss_severity === 'string'
         ? (row.cvss_severity as KevEntry['cvssSeverity'])
         : null,
-    epssScore: null,
-    assigner: null,
-    datePublished: row.date_added ?? null,
+    epssScore: typeof row.epss_score === 'number' ? row.epss_score : null,
+    assigner: row.assigner ?? null,
+    datePublished: row.date_published ?? row.date_added ?? null,
     dateUpdated: row.updated_at ?? null,
-    exploitedSince: row.date_added ?? null,
+    exploitedSince: row.exploited_since ?? row.date_added ?? null,
     sourceUrl: row.source_url ?? null,
     references: parseJsonArray(row.reference_links),
     aliases: aliasList.length ? aliasList : [cveId],
@@ -308,6 +310,16 @@ const toKevEntry = (
     internetExposed: row.internet_exposed === 1
   }
 }
+
+const toKevEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry => toStandardEntry(row, categories, 'kev')
+
+const toHistoricEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry => toStandardEntry(row, categories, 'historic')
 
 const toEnisaEntry = (
   row: VulnerabilityEntryRow,
@@ -454,7 +466,11 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   }
 }
 
-const buildCatalogEntries = (kevEntries: KevEntry[], enisaEntries: KevEntry[]): KevEntry[] => {
+const buildCatalogEntries = (
+  kevEntries: KevEntry[],
+  enisaEntries: KevEntry[],
+  historicEntries: KevEntry[]
+): KevEntry[] => {
   const merged = new Map<string, KevEntry>()
 
   const add = (entry: KevEntry) => {
@@ -475,6 +491,7 @@ const buildCatalogEntries = (kevEntries: KevEntry[], enisaEntries: KevEntry[]): 
 
   kevEntries.forEach(add)
   enisaEntries.forEach(add)
+  historicEntries.forEach(add)
 
   const entries = Array.from(merged.values())
   entries.sort(sortByChronology)
@@ -622,7 +639,11 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
     .map(row => toEnisaEntry(row, getEntryCategories(row.id, categoryMap)))
     .filter((entry): entry is KevEntry => entry !== null)
 
-  const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries)
+  const historicEntries = entryRows
+    .filter(row => row.source === 'historic')
+    .map(row => toHistoricEntry(row, getEntryCategories(row.id, categoryMap)))
+
+  const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries, historicEntries)
 
   db.transaction(tx => {
     tx.delete(tables.catalogEntryDimensions).run()
@@ -638,6 +659,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
       const hasKnownRansomware = toKnownRansomwareFlag(entry.ransomwareUse ?? null)
       const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
       const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
+      const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
 
       tx
         .insert(tables.catalogEntries)
@@ -679,7 +701,8 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           vulnerabilityCategories: toJson(entry.vulnerabilityCategories),
           internetExposed: toBooleanFlag(entry.internetExposed),
           hasSourceKev,
-          hasSourceEnisa
+          hasSourceEnisa,
+          hasSourceHistoric
         })
         .run()
 

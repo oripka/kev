@@ -149,7 +149,10 @@ const importProgressPercent = computed(() => {
   if (phase === "enriching") {
     return 80;
   }
-  if (phase === "saving" || phase === "savingEnisa") {
+  if (phase === "fetchingEnisa" || phase === "fetchingHistoric") {
+    return 60;
+  }
+  if (phase === "saving" || phase === "savingEnisa" || phase === "savingHistoric") {
     return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));
   }
   return 0;
@@ -195,6 +198,7 @@ const importSummaryMessage = computed(() => {
 
   const importedAt = formatTimestamp(summary.importedAt);
   const kevCount = summary.kevImported.toLocaleString();
+  const historicCount = summary.historicImported.toLocaleString();
   const enisaCount = summary.enisaImported.toLocaleString();
   const enisaDetail = summary.enisaImported
     ? ` Latest ENISA update: ${
@@ -202,7 +206,7 @@ const importSummaryMessage = computed(() => {
       }.`
     : "";
 
-  return `Imported ${kevCount} CISA KEV entries and ${enisaCount} ENISA entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${enisaDetail}`;
+  return `Imported ${kevCount} CISA KEV entries, ${historicCount} historic entries, and ${enisaCount} ENISA entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${enisaDetail}`;
 });
 
 const createDefaultClassificationProgress = (): ClassificationProgress => ({

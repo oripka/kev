@@ -3,9 +3,11 @@ type ImportPhase =
   | 'preparing'
   | 'fetchingCvss'
   | 'fetchingEnisa'
+  | 'fetchingHistoric'
   | 'enriching'
   | 'saving'
   | 'savingEnisa'
+  | 'savingHistoric'
   | 'complete'
   | 'error'
 

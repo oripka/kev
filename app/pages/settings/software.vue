@@ -13,6 +13,7 @@ import { useTrackedProducts } from "~/composables/useTrackedProducts";
 const sourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
   enisa: "ENISA",
+  historic: "Historic dataset",
 };
 
 const searchTerm = ref("");
