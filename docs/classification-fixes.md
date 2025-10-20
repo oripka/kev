@@ -42,17 +42,17 @@ Example: the Jenkins CLI deserialisation issue (`CVE-2017-1000353`) contains no 
 - [x] Tie-breaking logic favours client indicators
 When client and server scores are equal, `determineSide()` returns "Client-side" whenever `hasClientFileSignal` or `hasClientApplicationSignal` is true—even if server keywords, network protocols, and domain hints point to a server. 【F:app/utils/classification.ts†L1473-L1537】
 Because the bug above makes `hasClientApplicationSignal` true for the majority of records, this clause overwhelms the rest of the logic and pushes remote services (Cisco ISE APIs, ServiceNow platforms, WebLogic, D-Link NAS management UIs, etc.) into the client bucket. 【060fa7†L1-L299】
-- [ ] File/attachment heuristics risk additional false positives
+- [x] File/attachment heuristics risk additional false positives
 Even after fixing the catch-all regex, the `clientFileInteractionPatterns` block can still trip on server-side upload or file-processing vulnerabilities (e.g., dotCMS unrestricted upload, Veeam file API). Those descriptions legitimately mention “uploading malicious files,” but the exploit requires no user action. Without additional guards this will continue to bias results toward the client side. 【F:app/utils/classification.ts†L1004-L1023】
 
 ## Recommendations
 - [x]**Fix the regex.** Replace the optional group in `clientApplicationPatterns` with a word-boundary anchored expression, e.g. `/\b(?:ole(?:\s+compound)?|compound file|cfb|com)\b/i`, so that it only matches the intended tokens. 【F:app/utils/classification.ts†L966-L1001】
 - [x]**Strengthen the tie-breaker.** `determineSide()` now prefers server classifications whenever server protocols, domain hints, or signals stand alongside matching client cues, only returning "Client-side" when the client score is strictly higher or server evidence is absent.【F:app/utils/classification.ts†L1582-L1618】
-- [ ]**Narrow file heuristics.** Add guards to `clientFileInteractionPatterns` to require explicit user-action verbs (“when opening”, “double-click”) before scoring client points, and ignore matches that coexist with server keywords (“upload”, “API request”). 【F:app/utils/classification.ts†L1004-L1023】
+- [x]**Narrow file heuristics.** Add guards to `clientFileInteractionPatterns` to require explicit user-action verbs (“when opening”, “double-click”) before scoring client points, and ignore matches that coexist with server keywords (“upload”, “API request”). 【F:app/utils/classification.ts†L1004-L1023】
 
 ## Toward a bulletproof classifier
 
-- [ ]**Feature weighting:** Treat domain categories and network protocol mentions as hard constraints; only downgrade to client-side when both context and CVSS vectors confirm local interaction. 【F:app/utils/classification.ts†L1403-L1476】
+- [x]**Feature weighting:** Treat domain categories and network protocol mentions as hard constraints; only downgrade to client-side when both context and CVSS vectors confirm local interaction. 【F:app/utils/classification.ts†L1403-L1476】
 
 
 ---
@@ -86,15 +86,15 @@ r.
 
 - -[ ]**Augment feature extraction.** Consider layering lightweight NLP (keyword lists for “API endpoint”, “admin portal”, HTTP verbs) and CVSS hints (e.g., treat AV:N + PR:N as strong server evidence) to supplement regex matching and further separate client from server contexts.【F:app/utils/classification.ts†L1176-L1314】【F:app/utils/classification.ts†L1382-L1474】
 
-2.- [] **Rebalance scoring weights.** Gate the +2 client bonus on combined evidence (e.g., require both a client application match and a file/interaction cue) and add similar weight for `domainSuggestsServer` or explicit server signals so network appliances cannot be overridden by a stray client pattern.【F:app/utils/classification.ts†L1410-L1476】
+2.- [x] **Rebalance scoring weights.** Gate the +2 client bonus on combined evidence (e.g., require both a client application match and a file/interaction cue) and add similar weight for `domainSuggestsServer` or explicit server signals so network appliances cannot be overridden by a stray client pattern.【F:app/utils/classification.ts†L1410-L1476】
 
 
 - [ ]**Consider confidence thresholds and overrides.** When both client and server signals fire, emit dual labels (or flag as “Mixed/Needs review”) instead of forcing a tie-break, and allow manual overrides for high-value appliances until the heuristics mature. -> add a dedicated label for that so we can easily fitler and find out how to classify them better
 
 
-- [ ] **Narrow file heuristics.** Add guards to `clientFileInteractionPatterns` to require explicit user-action verbs (“when opening”, “double-click”) before scoring client points, and ignore matches that coexist with server keywords (“upload”, “API request”). 【F:app/utils/classification.ts†L1004-L1023】
+- [x] **Narrow file heuristics.** Add guards to `clientFileInteractionPatterns` to require explicit user-action verbs (“when opening”, “double-click”) before scoring client points, and ignore matches that coexist with server keywords (“upload”, “API request”). 【F:app/utils/classification.ts†L1004-L1023】
 
-- [ ] The server regex `/management (?:server|interface|console)/` treats "management console"
+- [x] The server regex `/management (?:server|interface|console)/` treats "management console"
   as server infrastructure, tipping the server score past the client score once combined
   with generic remote-context cues.【F:kev.json†L3782-L3794】【bb1e2b†L7-L9】【de87f7†L1-L12】【F:app/utils/classification.ts†L1060-L1075】
 
@@ -104,7 +104,7 @@ r.
 *Expected*: Client-side OS vulnerability (Windows MMC) that executes with user context.
 
 *Observed*: Labeled `RCE · Server-side Non-memory` because two signals fire simultaneously:
-- [ ]`/\b(?:management (?:server|interface|console))\b/i`** – this server signal is too broad.
+- [x]`/\b(?:management (?:server|interface|console))\b/i`** – this server signal is too broad.
   It forces Windows MMC, browser settings panes, and other desktop consoles into server
   territory.【F:app/utils/classification.ts†L1060-L1075】【de87f7†L1-L12】
 - [ ] **Add non-RCE exploit layer buckets.** Introduce classifications such as "Auth Bypass ·

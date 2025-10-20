@@ -1076,7 +1076,10 @@ const localFileInclusionPattern = /\b(?:local file inclusion|lfi|file inclusion)
 const serverSignalPatterns: RegExp[] = [
   ...networkProtocolPatterns,
   // management / admin interfaces
-  /\b(?:web[-\s]?based management|management (?:server|interface|console)|admin(?:istration)? (?:interface|console|portal))\b/i,
+  /\bweb[-\s]?based management\b/i,
+  /\bremote[-\s]?management(?: (?:portal|interface|server))?\b/i,
+  /(?<!windows\s)(?<!microsoft\s)\bmanagement (?:server|interface|console)\b/i,
+  /\badmin(?:istration)? (?:interface|console|portal)\b/i,
 
   // network / remote service signals
   /\b(?:remote service|http service|https service|network service|tcp service|listens on port|listening on port)\b/i,
@@ -1535,10 +1538,33 @@ export const classifyExploitLayers = (
     hasKernelServerSignal ||
     (hasRemoteContext && !strongClientIndicators);
 
+  const clientArtifactSupport =
+    hasClientFileSignal ||
+    hasClientUserInteractionSignal ||
+    hasClientLocalExecutionSignal ||
+    domainSuggestsClient;
+
+  const clientApplicationScore = hasClientApplicationSignal
+    ? clientArtifactSupport
+      ? 2
+      : 1
+    : 0;
+
+  const clientFileSupport =
+    hasClientApplicationSignal ||
+    hasExplicitFileUserAction ||
+    hasClientUserInteractionSignal;
+
+  const clientFileScore = hasClientFileSignal
+    ? clientFileSupport
+      ? 2
+      : 1
+    : 0;
+
   const clientScoreBase =
-    (hasClientSignal ? 2 : 0) +
-    (hasClientApplicationSignal ? 2 : 0) +
-    (hasClientFileSignal ? 2 : 0) +
+    (hasClientSignal ? 1 : 0) +
+    clientApplicationScore +
+    clientFileScore +
     (hasClientUserInteractionSignal ? 1 : 0) +
     (hasClientLocalExecutionSignal ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0);
@@ -1556,12 +1582,23 @@ export const classifyExploitLayers = (
 
   let serverScoreBase =
     (hasServerSignal ? 2 : 0) +
-    (domainSuggestsServer ? 1 : 0) +
+    (domainSuggestsServer ? 2 : 0) +
     (hasStrongServerProtocol ? 3 : 0) +
     (hasKernelServerSignal ? 2 : 0);
 
   if (hasRemoteContext && !strongClientIndicators) {
     serverScoreBase += 1;
+  }
+
+  const serverHardConstraint =
+    domainSuggestsServer &&
+    (hasStrongServerProtocol ||
+      hasServerSignal ||
+      networkOperatingSystemSignal ||
+      (hasRemoteContext && !cvssSuggestsLocal));
+
+  if (serverHardConstraint) {
+    serverScoreBase += 2;
   }
 
   let serverScore = serverScoreBase;
@@ -1573,6 +1610,14 @@ export const classifyExploitLayers = (
     if (cvssPreAuth) {
       serverScore += 1;
     }
+  }
+
+  if (
+    serverHardConstraint &&
+    !(cvssSuggestsLocal && hasClientLocalExecutionSignal && !hasRemoteContext) &&
+    serverScore <= clientScore
+  ) {
+    serverScore = clientScore + 1;
   }
 
   const determineSide = (): "Client-side" | "Server-side" => {
