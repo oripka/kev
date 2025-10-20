@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { format, formatDistanceToNowStrict, parseISO, subDays } from "date-fns";
-import type { CatalogSource, KevEntrySummary } from "~/types";
+import { catalogSourceBadgeMap as sourceBadgeMap } from "~/constants/catalogSources";
+import type { KevEntrySummary } from "~/types";
 import { useKevData } from "~/composables/useKevData";
 
 const rangeEnd = new Date();
@@ -135,12 +136,6 @@ const cvssSeverityColors: Record<Exclude<KevEntrySummary["cvssSeverity"], null>,
   Medium: "warning",
   High: "error",
   Critical: "error",
-};
-
-const sourceBadgeMap: Record<CatalogSource, { label: string; color: string }> = {
-  kev: { label: "CISA KEV", color: "primary" },
-  enisa: { label: "ENISA", color: "success" },
-  historic: { label: "Historic", color: "warning" },
 };
 
 const formatCvssScore = (score: number | null) =>

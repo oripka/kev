@@ -15,6 +15,10 @@ import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
 import { defaultQuickFilterSummaryConfig, quickFilterSummaryMetricInfo } from "~/utils/quickFilterSummaryConfig";
+import {
+  catalogSourceBadgeMap as sourceBadgeMap,
+  catalogSourceLabels,
+} from "~/constants/catalogSources";
 import type { CatalogSource, KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
 import type {
   ActiveFilter,
@@ -126,12 +130,6 @@ const sortBadgeText = computed(
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
 const maxEntryLimit = 10_000;
-const catalogSourceLabels: Record<CatalogSource, string> = {
-  kev: "CISA KEV",
-  enisa: "ENISA",
-  historic: "Historic dataset",
-  metasploit: "Metasploit modules",
-};
 const cvssRange = ref<[number, number]>([
   defaultCvssRange[0],
   defaultCvssRange[1],
@@ -420,12 +418,6 @@ const cvssSeverityColors: Record<
   Critical: "error",
 };
 
-const sourceBadgeMap: SourceBadgeMap = {
-  kev: { label: catalogSourceLabels.kev, color: "primary" },
-  enisa: { label: catalogSourceLabels.enisa, color: "success" },
-  historic: { label: "Historic", color: "warning" },
-  metasploit: { label: catalogSourceLabels.metasploit, color: "info" },
-};
 
 const formatCvssScore = (score: number | null) =>
   typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
+import { catalogSourceBadgeMap } from '~/constants/catalogSources'
 import type { KevEntrySummary } from '~/types'
 
 const props = defineProps<{
@@ -18,12 +19,6 @@ const severityColors: Record<Exclude<KevEntrySummary['cvssSeverity'], null>, str
   Medium: 'warning',
   High: 'error',
   Critical: 'error'
-}
-
-const sourceBadgeMap: Record<KevEntrySummary['sources'][number], { label: string; color: string }> = {
-  kev: { label: 'CISA KEV', color: 'primary' },
-  enisa: { label: 'ENISA', color: 'success' },
-  historic: { label: 'Historic', color: 'warning' }
 }
 
 const formatScore = (score: number | null) =>
@@ -77,11 +72,11 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => [
                 h(
                   UBadge,
                   {
-                    color: sourceBadgeMap[source]?.color ?? 'neutral',
+                    color: catalogSourceBadgeMap[source]?.color ?? 'neutral',
                     variant: 'soft',
                     class: 'text-xs font-semibold'
                   },
-                  () => sourceBadgeMap[source]?.label ?? source.toUpperCase()
+                  () => catalogSourceBadgeMap[source]?.label ?? source.toUpperCase()
                 )
               )
             )
