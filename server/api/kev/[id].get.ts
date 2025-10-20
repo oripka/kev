@@ -57,7 +57,8 @@ export default defineEventHandler(async event => {
         ce.internet_exposed,
         ce.has_source_kev,
         ce.has_source_enisa,
-        ce.has_source_historic
+        ce.has_source_historic,
+        ce.has_source_metasploit
       FROM ${tables.catalogEntries} ce
       WHERE ce.entry_id = ${id}
       LIMIT 1

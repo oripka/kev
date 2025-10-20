@@ -4,10 +4,12 @@ type ImportPhase =
   | 'fetchingCvss'
   | 'fetchingEnisa'
   | 'fetchingHistoric'
+  | 'fetchingMetasploit'
   | 'enriching'
   | 'saving'
   | 'savingEnisa'
   | 'savingHistoric'
+  | 'savingMetasploit'
   | 'complete'
   | 'error'
 

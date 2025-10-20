@@ -36,7 +36,7 @@ const setVulnerabilityType = (value: unknown) => update({ vulnerabilityType: coe
 const setRansomwareOnly = (value: boolean | 'indeterminate') => update({ ransomwareOnly: value === true })
 const setWellKnownOnly = (value: boolean) => update({ wellKnownOnly: value })
 const setSource = (value: unknown) => {
-  if (value === 'kev' || value === 'enisa' || value === 'historic') {
+  if (value === 'kev' || value === 'enisa' || value === 'historic' || value === 'metasploit') {
     update({ source: value })
   } else {
     update({ source: 'all' })
@@ -158,7 +158,8 @@ const sourceOptions = [
   { label: 'All sources', value: 'all' },
   { label: 'CISA KEV', value: 'kev' },
   { label: 'ENISA', value: 'enisa' },
-  { label: 'Historic dataset', value: 'historic' }
+  { label: 'Historic dataset', value: 'historic' },
+  { label: 'Metasploit modules', value: 'metasploit' }
 ]
 </script>
 

@@ -21,6 +21,7 @@ import { rebuildCatalog } from '../utils/catalog'
 import { getDatabase } from '../utils/sqlite'
 import { tables } from '../database/client'
 import { rebuildProductCatalog } from '../utils/product-catalog'
+import { importMetasploitCatalog } from '../utils/metasploit'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -380,18 +381,23 @@ export default defineEventHandler(async event => {
       forceRefresh,
       allowStale
     })
+    const metasploitSummary = await importMetasploitCatalog(db)
     const catalogSummary = rebuildCatalog(db)
     rebuildProductCatalog(db)
 
     completeImportProgress(
-      `Imported ${entries.length} KEV entries, ${historicSummary.imported} historic entries, and ${enisaSummary.imported} ENISA entries (catalog size: ${catalogSummary.count})`
+      `Imported ${entries.length} KEV entries, ${historicSummary.imported} historic entries, ${enisaSummary.imported} ENISA entries, and ${metasploitSummary.imported} Metasploit entries across ${metasploitSummary.modules} modules (catalog size: ${catalogSummary.count})`
     )
 
     return {
-      imported: entries.length + enisaSummary.imported + historicSummary.imported,
+      imported:
+        entries.length + enisaSummary.imported + historicSummary.imported + metasploitSummary.imported,
       kevImported: entries.length,
       historicImported: historicSummary.imported,
       enisaImported: enisaSummary.imported,
+      metasploitImported: metasploitSummary.imported,
+      metasploitModules: metasploitSummary.modules,
+      metasploitCommit: metasploitSummary.commit,
       dateReleased: parsed.data.dateReleased,
       catalogVersion: parsed.data.catalogVersion,
       enisaLastUpdated: enisaSummary.lastUpdated,

@@ -7,7 +7,7 @@ export type Range = {
 
 export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 
-export type CatalogSource = 'kev' | 'enisa' | 'historic'
+export type CatalogSource = 'kev' | 'enisa' | 'historic' | 'metasploit'
 
 export type KevDomainCategory =
   | 'Web Applications'
@@ -158,10 +158,12 @@ export type ImportPhase =
   | 'fetchingCvss'
   | 'fetchingEnisa'
   | 'fetchingHistoric'
+  | 'fetchingMetasploit'
   | 'enriching'
   | 'saving'
   | 'savingEnisa'
   | 'savingHistoric'
+  | 'savingMetasploit'
   | 'complete'
   | 'error'
 

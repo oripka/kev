@@ -233,10 +233,10 @@ const importProgressPercent = computed(() => {
   if (phase === "enriching") {
     return 80;
   }
-  if (phase === "fetchingEnisa" || phase === "fetchingHistoric") {
+  if (phase === "fetchingEnisa" || phase === "fetchingHistoric" || phase === "fetchingMetasploit") {
     return 60;
   }
-  if (phase === "saving" || phase === "savingEnisa" || phase === "savingHistoric") {
+  if (phase === "saving" || phase === "savingEnisa" || phase === "savingHistoric" || phase === "savingMetasploit") {
     return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));
   }
   return 0;
@@ -284,13 +284,19 @@ const importSummaryMessage = computed(() => {
   const kevCount = summary.kevImported.toLocaleString();
   const historicCount = summary.historicImported.toLocaleString();
   const enisaCount = summary.enisaImported.toLocaleString();
+  const metasploitCount = summary.metasploitImported.toLocaleString();
   const enisaDetail = summary.enisaImported
     ? ` Latest ENISA update: ${
         summary.enisaLastUpdated ? formatTimestamp(summary.enisaLastUpdated) : "not provided"
       }.`
     : "";
+  const metasploitDetail = summary.metasploitImported
+    ? ` Metasploit modules processed: ${summary.metasploitModules.toLocaleString()}${
+        summary.metasploitCommit ? ` (commit ${summary.metasploitCommit.slice(0, 7)})` : ""
+      }.`
+    : "";
 
-  return `Imported ${kevCount} CISA KEV entries, ${historicCount} historic entries, and ${enisaCount} ENISA entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${enisaDetail}`;
+  return `Imported ${kevCount} CISA KEV entries, ${historicCount} historic entries, ${enisaCount} ENISA entries, and ${metasploitCount} Metasploit entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${metasploitDetail}${enisaDetail}`;
 });
 
 const createDefaultClassificationProgress = (): ClassificationProgress => ({

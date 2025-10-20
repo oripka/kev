@@ -7,7 +7,7 @@ const props = defineProps<{
   hasActiveFilters: boolean;
   hasActiveFilterChips: boolean;
   searchInput: string;
-  selectedSource: "all" | "kev" | "enisa" | "historic";
+  selectedSource: "all" | "kev" | "enisa" | "historic" | "metasploit";
   yearRange: [number, number];
   yearSliderMin: number;
   yearSliderMax: number;
@@ -21,7 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "update:open", value: boolean): void;
   (event: "update:search-input", value: string): void;
-  (event: "update:selected-source", value: "all" | "kev" | "enisa" | "historic"): void;
+  (event: "update:selected-source", value: "all" | "kev" | "enisa" | "historic" | "metasploit"): void;
   (event: "update:year-range", value: [number, number]): void;
   (event: "update:cvss-range", value: [number, number]): void;
   (event: "update:epss-range", value: [number, number]): void;
@@ -41,7 +41,7 @@ const searchModel = computed({
 
 const selectedSource = computed({
   get: () => props.selectedSource,
-  set: (value: "all" | "kev" | "enisa" | "historic") => emit("update:selected-source", value),
+  set: (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => emit("update:selected-source", value),
 });
 
 const yearRange = computed({
@@ -67,14 +67,15 @@ const handleClearFilter = (key: ActiveFilter["key"]) => {
   emit("clear-filter", key);
 };
 
-const sourceLabels: Record<"all" | "kev" | "enisa" | "historic", string> = {
+const sourceLabels: Record<"all" | "kev" | "enisa" | "historic" | "metasploit", string> = {
   all: "All sources",
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
+  metasploit: "Metasploit modules",
 };
 
-const selectSource = (value: "all" | "kev" | "enisa" | "historic") => {
+const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => {
   selectedSource.value = value;
 };
 </script>
@@ -117,14 +118,14 @@ const selectSource = (value: "all" | "kev" | "enisa" | "historic") => {
           <UFormField label="Data source">
             <div class="flex flex-wrap gap-2">
               <UButton
-                v-for="option in ['all', 'kev', 'enisa', 'historic']"
+                v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit']"
                 :key="option"
                 size="sm"
                 :color="selectedSource === option ? 'primary' : 'neutral'"
                 :variant="selectedSource === option ? 'solid' : 'outline'"
-                @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic')"
+                @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit')"
               >
-                {{ sourceLabels[option as 'all' | 'kev' | 'enisa' | 'historic'] }}
+                {{ sourceLabels[option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit'] }}
               </UButton>
             </div>
           </UFormField>

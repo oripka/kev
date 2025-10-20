@@ -9,7 +9,7 @@ export interface KevFilterState {
   vulnerabilityType: string | null
   ransomwareOnly: boolean
   wellKnownOnly: boolean
-  source: 'all' | 'kev' | 'enisa' | 'historic'
+  source: 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit'
   startDate: string | null
   endDate: string | null
 }

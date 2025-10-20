@@ -24,7 +24,8 @@ const toSources = (value: string): CatalogSource[] => {
     const parsed = JSON.parse(value) as unknown
     if (Array.isArray(parsed)) {
       const items = parsed.filter(
-        (entry): entry is CatalogSource => entry === 'kev' || entry === 'enisa' || entry === 'historic'
+        (entry): entry is CatalogSource =>
+          entry === 'kev' || entry === 'enisa' || entry === 'historic' || entry === 'metasploit'
       )
       return items.length ? items : ['kev']
     }
@@ -62,7 +63,7 @@ export default defineEventHandler((event): ProductCatalogResponse => {
     sql<MatchCountRow>`
       SELECT vendor, product, COUNT(*) as count
       FROM ${tables.vulnerabilityEntries}
-      WHERE source IN ('kev', 'enisa', 'historic')
+      WHERE source IN ('kev', 'enisa', 'historic', 'metasploit')
       GROUP BY vendor, product
     `
   )

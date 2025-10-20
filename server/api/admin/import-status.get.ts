@@ -85,6 +85,15 @@ export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
         lastImportedAt: normaliseString(getMetadata('historic.lastImportAt')),
         cachedAt: null,
         totalCount: parseNumber(getMetadata('historic.totalCount'))
+      },
+      {
+        key: 'metasploit',
+        label: 'Metasploit modules',
+        catalogVersion: normaliseString(getMetadata('metasploit.lastCommit')),
+        dateReleased: null,
+        lastImportedAt: normaliseString(getMetadata('metasploit.lastImportAt')),
+        cachedAt: null,
+        totalCount: parseNumber(getMetadata('metasploit.totalCount'))
       }
     ]
   }

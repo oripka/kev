@@ -104,6 +104,7 @@ const catalogSourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
+  metasploit: "Metasploit modules",
 };
 const cvssRange = ref<[number, number]>([
   defaultCvssRange[0],
@@ -113,10 +114,10 @@ const epssRange = ref<[number, number]>([
   defaultEpssRange[0],
   defaultEpssRange[1],
 ]);
-const selectedSource = ref<"all" | "kev" | "enisa" | "historic">("all");
+const selectedSource = ref<"all" | "kev" | "enisa" | "historic" | "metasploit">("all");
 const isFiltering = ref(false);
 
-const selectSource = (value: "all" | "kev" | "enisa" | "historic") => {
+const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => {
   selectedSource.value = value;
 };
 
@@ -397,6 +398,7 @@ const sourceBadgeMap: SourceBadgeMap = {
   kev: { label: catalogSourceLabels.kev, color: "primary" },
   enisa: { label: catalogSourceLabels.enisa, color: "success" },
   historic: { label: "Historic", color: "warning" },
+  metasploit: { label: catalogSourceLabels.metasploit, color: "info" },
 };
 
 const formatCvssScore = (score: number | null) =>
@@ -1728,12 +1730,12 @@ const columns: TableColumn<KevEntrySummary>[] = [
                   <UFormField label="Data source">
                     <div class="flex flex-wrap gap-2">
                       <UButton
-                        v-for="option in ['all', 'kev', 'enisa', 'historic']"
+                        v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit']"
                         :key="option"
                         size="sm"
                         :color="selectedSource === option ? 'primary' : 'neutral'"
                         :variant="selectedSource === option ? 'solid' : 'outline'"
-                        @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic')"
+                        @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit')"
                       >
                         {{ option === "all" ? "All sources" : catalogSourceLabels[option as CatalogSource] }}
                       </UButton>

@@ -103,6 +103,7 @@ export type CatalogEntryRow = {
   has_source_kev: number
   has_source_enisa: number
   has_source_historic: number
+  has_source_metasploit: number
 }
 
 export type CatalogSummaryRow = {
@@ -266,7 +267,7 @@ const getEntryCategories = (
 const toStandardEntry = (
   row: VulnerabilityEntryRow,
   categories: EntryCategories,
-  source: 'kev' | 'historic'
+  source: 'kev' | 'historic' | 'metasploit'
 ): KevEntry => {
   const cveId = normaliseCve(row.cve_id ?? row.id)
   const notes = parseJsonArray(row.notes)
@@ -321,6 +322,11 @@ const toHistoricEntry = (
   row: VulnerabilityEntryRow,
   categories: EntryCategories
 ): KevEntry => toStandardEntry(row, categories, 'historic')
+
+const toMetasploitEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry => toStandardEntry(row, categories, 'metasploit')
 
 const toEnisaEntry = (
   row: VulnerabilityEntryRow,
@@ -470,7 +476,8 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
 const buildCatalogEntries = (
   kevEntries: KevEntry[],
   enisaEntries: KevEntry[],
-  historicEntries: KevEntry[]
+  historicEntries: KevEntry[],
+  metasploitEntries: KevEntry[]
 ): KevEntry[] => {
   const merged = new Map<string, KevEntry>()
 
@@ -493,6 +500,7 @@ const buildCatalogEntries = (
   kevEntries.forEach(add)
   enisaEntries.forEach(add)
   historicEntries.forEach(add)
+  metasploitEntries.forEach(add)
 
   const entries = Array.from(merged.values())
   entries.sort(sortByChronology)
@@ -644,7 +652,11 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
     .filter(row => row.source === 'historic')
     .map(row => toHistoricEntry(row, getEntryCategories(row.id, categoryMap)))
 
-  const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries, historicEntries)
+  const metasploitEntries = entryRows
+    .filter(row => row.source === 'metasploit')
+    .map(row => toMetasploitEntry(row, getEntryCategories(row.id, categoryMap)))
+
+  const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries, historicEntries, metasploitEntries)
 
   db.transaction(tx => {
     tx.delete(tables.catalogEntryDimensions).run()
@@ -661,6 +673,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
       const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
       const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
       const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
+      const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
 
       tx
         .insert(tables.catalogEntries)
@@ -703,7 +716,8 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           internetExposed: toBooleanFlag(entry.internetExposed),
           hasSourceKev,
           hasSourceEnisa,
-          hasSourceHistoric
+          hasSourceHistoric,
+          hasSourceMetasploit
         })
         .run()
 

@@ -185,7 +185,7 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   }
 
   const source = getString('source')
-  if (source === 'kev' || source === 'enisa' || source === 'historic') {
+  if (source === 'kev' || source === 'enisa' || source === 'historic' || source === 'metasploit') {
     filters.source = source
   }
 
@@ -274,6 +274,8 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
     conditions.push(eq(ce.hasSourceEnisa, 1))
   } else if (filters.source === 'historic') {
     conditions.push(eq(ce.hasSourceHistoric, 1))
+  } else if (filters.source === 'metasploit') {
+    conditions.push(eq(ce.hasSourceMetasploit, 1))
   }
 
   if (filters.internetExposedOnly) {

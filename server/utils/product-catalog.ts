@@ -75,11 +75,19 @@ export const rebuildProductCatalog = (db: DrizzleDatabase) => {
     .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
     .all()
 
+  const metasploitRows = db
+    .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
+    .from(tables.vulnerabilityEntries)
+    .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
+    .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
+    .all()
+
   const catalog = new Map<string, CatalogRecord>()
 
   collectProducts(kevRows, 'kev', catalog)
   collectProducts(enisaRows, 'enisa', catalog)
   collectProducts(historicRows, 'historic', catalog)
+  collectProducts(metasploitRows, 'metasploit', catalog)
 
   db.transaction(tx => {
     tx.delete(tables.productCatalog).run()

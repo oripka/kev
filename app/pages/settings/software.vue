@@ -14,6 +14,7 @@ const sourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
+  metasploit: "Metasploit modules",
 };
 
 const searchTerm = ref("");

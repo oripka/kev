@@ -20,6 +20,9 @@ type ImportSummary = {
   kevImported: number
   historicImported: number
   enisaImported: number
+  metasploitImported: number
+  metasploitModules: number
+  metasploitCommit: string | null
   dateReleased: string
   catalogVersion: string
   enisaLastUpdated: string | null
@@ -130,10 +133,12 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     phase === 'fetchingCvss' ||
     phase === 'fetchingEnisa' ||
     phase === 'fetchingHistoric' ||
+    phase === 'fetchingMetasploit' ||
     phase === 'enriching' ||
     phase === 'saving' ||
     phase === 'savingEnisa' ||
-    phase === 'savingHistoric'
+    phase === 'savingHistoric' ||
+    phase === 'savingMetasploit'
 
   const stopProgressPolling = () => {
     if (progressTimer) {

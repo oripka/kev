@@ -49,7 +49,8 @@ export const catalogEntries = sqliteTable(
     internetExposed: integer('internet_exposed').notNull().default(0),
     hasSourceKev: integer('has_source_kev').notNull().default(0),
     hasSourceEnisa: integer('has_source_enisa').notNull().default(0),
-    hasSourceHistoric: integer('has_source_historic').notNull().default(0)
+    hasSourceHistoric: integer('has_source_historic').notNull().default(0),
+    hasSourceMetasploit: integer('has_source_metasploit').notNull().default(0)
   },
   table => ({
     vendorKeyIdx: index('idx_catalog_entries_vendor_key').on(table.vendorKey),
