@@ -7,6 +7,7 @@ import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
+import { setMetadata } from './sqlite'
 import { setImportPhase } from './import-progress'
 
 const historicEntrySchema = z.object({
@@ -203,6 +204,10 @@ export const importHistoricCatalog = async (
       }
     }
   })
+
+  const importedAt = new Date().toISOString()
+  setMetadata('historic.lastImportAt', importedAt)
+  setMetadata('historic.totalCount', String(enrichedEntries.length))
 
   return { imported: enrichedEntries.length }
 }

@@ -69,7 +69,34 @@
     "product": "windows shell / explorer",
     "vendor": "microsoft",
     "context": "Processing of specially crafted LNK shortcut files leading to arbitrary code execution when icons were rendered.",
-    "notes": "Used by Stuxnet and other campaigns to propagate via USB to air-gapped systems."
+    "notes": "Used by Stuxnet alongside other zero-days to propagate via USB into air-gapped industrial networks."
+  },
+  {
+    "cve": "CVE-2010-0249",
+    "title": "Internet Explorer Aurora Use-After-Free",
+    "year": 2010,
+    "product": "internet explorer",
+    "vendor": "microsoft",
+    "context": "Use-after-free in IE's peer factory objects allowed remote code execution via malicious websites.",
+    "notes": "Exploited in Operation Aurora attacks against Google and other firms to install Hydraq backdoors."
+  },
+  {
+    "cve": "CVE-2010-2729",
+    "title": "Windows Print Spooler Stuxnet Propagation RCE",
+    "year": 2010,
+    "product": "windows print spooler",
+    "vendor": "microsoft",
+    "context": "Shared printer spool directory permissions allowed remote code execution when malicious printer drivers were uploaded.",
+    "notes": "One of the Stuxnet propagation vectors enabling code execution across network shares in industrial environments."
+  },
+  {
+    "cve": "CVE-2010-2743",
+    "title": "Windows Task Scheduler Stuxnet Privilege Escalation",
+    "year": 2010,
+    "product": "windows task scheduler",
+    "vendor": "microsoft",
+    "context": "Task Scheduler's handling of .JOB files allowed local privilege escalation to SYSTEM on Windows.",
+    "notes": "Used by Stuxnet to maintain elevated privileges once initial footholds were established."
   },
   {
     "cve": "CVE-2020-1472",

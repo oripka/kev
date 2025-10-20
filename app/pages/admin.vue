@@ -30,6 +30,20 @@ interface AdminSoftwareResponse {
   vendors: VendorStat[];
 }
 
+interface ImportSourceStatus {
+  key: string;
+  label: string;
+  catalogVersion: string | null;
+  dateReleased: string | null;
+  lastImportedAt: string | null;
+  cachedAt: string | null;
+  totalCount: number | null;
+}
+
+interface AdminImportStatusResponse {
+  sources: ImportSourceStatus[];
+}
+
 const { data, pending, error } = await useFetch<AdminSoftwareResponse>(
   "/api/admin/software",
   { default: () => ({
@@ -44,6 +58,18 @@ const { data, pending, error } = await useFetch<AdminSoftwareResponse>(
   }) }
 );
 
+const {
+  data: importStatusData,
+  pending: importStatusPending,
+  error: importStatusError,
+  refresh: refreshImportStatuses,
+} = await useFetch<AdminImportStatusResponse>("/api/admin/import-status", {
+  default: () => ({ sources: [] }),
+  headers: {
+    "cache-control": "no-store",
+  },
+});
+
 const totals = computed(() => data.value?.totals ?? {
   sessions: 0,
   trackedSelections: 0,
@@ -55,6 +81,56 @@ const productStats = computed(() => data.value?.products ?? []);
 const vendorStats = computed(() => data.value?.vendors ?? []);
 
 const numberFormatter = new Intl.NumberFormat("en-US");
+
+const importSources = computed(() => importStatusData.value?.sources ?? []);
+
+const formatOptionalTimestamp = (value: string | null | undefined, fallback: string) => {
+  if (!value) {
+    return fallback;
+  }
+
+  return formatTimestamp(value);
+};
+
+interface FormattedImportSource {
+  key: string;
+  label: string;
+  versionLabel: string | null;
+  lastImportedLabel: string;
+  cacheLabel: string;
+  totalCountLabel: string | null;
+  hasCache: boolean;
+}
+
+const formattedImportSources = computed<FormattedImportSource[]>(() =>
+  importSources.value.map((source) => {
+    const versionParts: string[] = [];
+    if (source.catalogVersion) {
+      versionParts.push(`Version ${source.catalogVersion}`);
+    }
+    if (source.dateReleased) {
+      versionParts.push(`Released ${formatTimestamp(source.dateReleased)}`);
+    }
+
+    const versionLabel = versionParts.length ? versionParts.join(" • ") : null;
+    const lastImportedLabel = formatOptionalTimestamp(source.lastImportedAt, "Never imported");
+    const cacheLabel = formatOptionalTimestamp(source.cachedAt, "No cached feed yet");
+    const totalCountLabel =
+      typeof source.totalCount === "number"
+        ? `${numberFormatter.format(source.totalCount)} entries cached`
+        : null;
+
+    return {
+      key: source.key,
+      label: source.label,
+      versionLabel,
+      lastImportedLabel,
+      cacheLabel,
+      totalCountLabel,
+      hasCache: Boolean(source.cachedAt),
+    } satisfies FormattedImportSource;
+  }),
+);
 
 const productColumns: TableColumn<ProductStat>[] = [
   {
@@ -127,11 +203,19 @@ const catalogUpdatedAt = computed(() => {
 });
 
 const handleImport = async () => {
-  await importLatest({ mode: "force" });
+  try {
+    await importLatest({ mode: "force" });
+  } finally {
+    await refreshImportStatuses();
+  }
 };
 
 const handleCachedReimport = async () => {
-  await importLatest({ mode: "cache" });
+  try {
+    await importLatest({ mode: "cache" });
+  } finally {
+    await refreshImportStatuses();
+  }
 };
 
 const importProgressPhase = computed(() => importProgress.value.phase);
@@ -365,6 +449,7 @@ const handleResetDatabase = async () => {
   } finally {
     await refreshKevData();
     await refreshClassificationProgress();
+    await refreshImportStatuses();
     resettingDatabase.value = false;
   }
 };
@@ -474,6 +559,81 @@ const catalogRangeLabel = computed(() => {
                 class="text-xs text-neutral-500 dark:text-neutral-400"
               >
                 {{ importSummaryMessage }}
+              </p>
+            </div>
+
+            <div class="space-y-3">
+              <UAlert
+                v-if="importStatusError"
+                color="error"
+                variant="soft"
+                icon="i-lucide-alert-triangle"
+                title="Unable to load import history"
+                :description="importStatusError.message"
+              />
+              <p
+                v-else-if="importStatusPending"
+                class="text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                Loading cached import history…
+              </p>
+              <div v-else-if="formattedImportSources.length" class="space-y-3">
+                <div
+                  v-for="source in formattedImportSources"
+                  :key="source.key"
+                  class="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50/70 p-3 dark:border-neutral-800 dark:bg-neutral-900/40 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div class="space-y-1">
+                    <p class="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
+                      {{ source.label }}
+                    </p>
+                    <p v-if="source.versionLabel" class="text-xs text-neutral-500 dark:text-neutral-400">
+                      {{ source.versionLabel }}
+                    </p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                      Last import:
+                      <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                        {{ source.lastImportedLabel }}
+                      </span>
+                    </p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                      Cache:
+                      <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                        {{ source.cacheLabel }}
+                      </span>
+                    </p>
+                    <p v-if="source.totalCountLabel" class="text-xs text-neutral-500 dark:text-neutral-400">
+                      {{ source.totalCountLabel }}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <UButton
+                      size="sm"
+                      color="primary"
+                      variant="soft"
+                      icon="i-lucide-cloud-download"
+                      :disabled="importing"
+                      :aria-label="`Fetch latest ${source.label}`"
+                      @click="handleImport"
+                    >
+                      Fetch latest
+                    </UButton>
+                    <UButton
+                      size="sm"
+                      color="neutral"
+                      variant="ghost"
+                      icon="i-lucide-hard-drive-download"
+                      :disabled="importing || !source.hasCache"
+                      :aria-label="`Use cached ${source.label}`"
+                      @click="handleCachedReimport"
+                    >
+                      Use cached feed
+                    </UButton>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="text-xs text-neutral-500 dark:text-neutral-400">
+                No cached import history available yet.
               </p>
             </div>
 

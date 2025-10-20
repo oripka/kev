@@ -32,9 +32,7 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     <NuxtLoadingIndicator />
     <UToaster />
     <UHeader title="In the Wild" to="/">
-      <template #right>
-        <UNavigationMenu :items="navigationItems" />
-      </template>
+      <UNavigationMenu :items="navigationItems" />
     </UHeader>
 
     <UMain>
