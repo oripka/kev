@@ -58,6 +58,40 @@ const showTrendLines = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(false);
+
+type SortOption = "publicationDate" | "cvssScore" | "epssScore" | "cveId";
+type SortDirection = "asc" | "desc";
+
+const sortOption = ref<SortOption>("publicationDate");
+const sortDirection = ref<SortDirection>("desc");
+
+const sortOptionItems: SelectMenuItem<SortOption>[] = [
+  { label: "Publication date", value: "publicationDate" },
+  { label: "EPSS score", value: "epssScore" },
+  { label: "CVSS score", value: "cvssScore" },
+  { label: "CVE number", value: "cveId" },
+];
+
+const sortDirectionItems: SelectMenuItem<SortDirection>[] = [
+  { label: "Descending", value: "desc" },
+  { label: "Ascending", value: "asc" },
+];
+
+const sortBadgeLabelMap: Record<SortOption, string> = {
+  publicationDate: "Published",
+  epssScore: "EPSS",
+  cvssScore: "CVSS",
+  cveId: "CVE",
+};
+
+const sortDirectionSymbolMap: Record<SortDirection, string> = {
+  asc: "↑",
+  desc: "↓",
+};
+
+const sortBadgeText = computed(
+  () => `${sortDirectionSymbolMap[sortDirection.value]} ${sortBadgeLabelMap[sortOption.value]}`
+);
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
 const catalogSourceLabels: Record<CatalogSource, string> = {
@@ -401,7 +435,7 @@ const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
   cvssVector: null,
   cvssVersion: null,
   assigner: null,
-  datePublished: null,
+  datePublished: entry.datePublished ?? null,
   dateUpdated: null,
   exploitedSince: null,
   sourceUrl: null,
@@ -459,6 +493,105 @@ const vendorCounts = computed(() => counts.value.vendor);
 
 const productCounts = computed(() => counts.value.product);
 
+const getPublicationTimestamp = (entry: KevEntrySummary) => {
+  const candidates = [entry.datePublished, entry.dateAdded];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const parsed = Date.parse(candidate);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const compareNullableNumbers = (
+  firstValue: number | null | undefined,
+  secondValue: number | null | undefined,
+  direction: SortDirection
+) => {
+  const firstHas = typeof firstValue === "number" && Number.isFinite(firstValue);
+  const secondHas = typeof secondValue === "number" && Number.isFinite(secondValue);
+
+  if (!firstHas && !secondHas) {
+    return 0;
+  }
+
+  if (!firstHas) {
+    return 1;
+  }
+
+  if (!secondHas) {
+    return -1;
+  }
+
+  return direction === "asc"
+    ? firstValue - secondValue
+    : secondValue - firstValue;
+};
+
+const applySorting = (collection: KevEntrySummary[]) => {
+  const sorted = [...collection];
+  const direction = sortDirection.value;
+
+  sorted.sort((first, second) => {
+    switch (sortOption.value) {
+      case "epssScore":
+        return compareNullableNumbers(first.epssScore, second.epssScore, direction);
+      case "cvssScore":
+        return compareNullableNumbers(first.cvssScore, second.cvssScore, direction);
+      case "cveId": {
+        const firstId = first.cveId ?? "";
+        const secondId = second.cveId ?? "";
+
+        if (!firstId && !secondId) {
+          return 0;
+        }
+
+        if (!firstId) {
+          return 1;
+        }
+
+        if (!secondId) {
+          return -1;
+        }
+
+        return direction === "asc"
+          ? firstId.localeCompare(secondId)
+          : secondId.localeCompare(firstId);
+      }
+      case "publicationDate":
+      default: {
+        const firstTimestamp = getPublicationTimestamp(first);
+        const secondTimestamp = getPublicationTimestamp(second);
+
+        if (firstTimestamp === null && secondTimestamp === null) {
+          return 0;
+        }
+
+        if (firstTimestamp === null) {
+          return 1;
+        }
+
+        if (secondTimestamp === null) {
+          return -1;
+        }
+
+        return direction === "asc"
+          ? firstTimestamp - secondTimestamp
+          : secondTimestamp - firstTimestamp;
+      }
+    }
+  });
+
+  return sorted;
+};
+
 const results = computed(() => {
   const term = normalizedSearchTerm.value;
   const trackedKeys = trackedProductSet.value;
@@ -475,22 +608,22 @@ const results = computed(() => {
     );
   }
 
-  if (!term) {
-    return collection;
+  if (term) {
+    const includesTerm = (value: string | null | undefined) =>
+      typeof value === "string" && value.toLowerCase().includes(term);
+
+    collection = collection.filter((entry) => {
+      return (
+        includesTerm(entry.cveId) ||
+        includesTerm(entry.vendor) ||
+        includesTerm(entry.product) ||
+        includesTerm(entry.vulnerabilityName) ||
+        includesTerm(entry.description)
+      );
+    });
   }
 
-  const includesTerm = (value: string | null | undefined) =>
-    typeof value === "string" && value.toLowerCase().includes(term);
-
-  return collection.filter((entry) => {
-    return (
-      includesTerm(entry.cveId) ||
-      includesTerm(entry.vendor) ||
-      includesTerm(entry.product) ||
-      includesTerm(entry.vulnerabilityName) ||
-      includesTerm(entry.description)
-    );
-  });
+  return applySorting(collection);
 });
 
 watch(
@@ -1125,6 +1258,13 @@ const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
     badgeText: activeFilterCount.value.toString(),
   },
   {
+    value: "sort",
+    label: "Sort order",
+    slot: "sort",
+    badgeColor: "neutral",
+    badgeText: sortBadgeText.value,
+  },
+  {
     value: "focus",
     label: "Focus controls",
     slot: "focus",
@@ -1500,149 +1640,174 @@ const columns: TableColumn<KevEntrySummary>[] = [
 <template>
   <div class="grid grid-cols-12">
     <div class="col-span-3 ml-8 mt-36">
-      <div class="text-xl font-bold">Filters</div>
-      <USeparator class="mt-4"  />
-      <div
-        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div
-          v-if="canShowAllResults"
-          class="flex mt-4 items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
-        >
-          <span class="font-medium">Show all results</span>
-          <USwitch
-            v-model="showAllResults"
-            aria-label="Toggle show all results"
-          />
-        </div>
-      </div>
-      <UAccordion
-        v-model="asideAccordionValue"
-        type="multiple"
-        :items="asideAccordionItems"
-        class="!w-full !col-span-3"
-      >
-        <template #default="{ item }">
-          <div class="flex items-center justify-between gap-3">
-            <span
-              class="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
-            >
-              {{ item.label }}
-            </span>
-            <UBadge
-              v-if="item.badgeText"
-              :color="item.badgeColor ?? 'neutral'"
-              variant="soft"
-              class="font-semibold"
-            >
-              {{ item.badgeText }}
-            </UBadge>
-          </div>
+      <UCard>
+        <template #header>
+          <span class="text-xl font-bold text-neutral-900 dark:text-neutral-50">
+            Filters
+          </span>
         </template>
 
+        <div class="space-y-6">
+          <div
+            v-if="canShowAllResults"
+            class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
+          >
+            <span class="font-medium">Show all results</span>
+            <USwitch
+              v-model="showAllResults"
+              aria-label="Toggle show all results"
+            />
+          </div>
+
+          <UAccordion
+            v-model="asideAccordionValue"
+            type="multiple"
+            :items="asideAccordionItems"
+            class="w-full"
+          >
+            <template #default="{ item }">
+              <div class="flex items-center justify-between gap-3">
+                <span
+                  class="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
+                >
+                  {{ item.label }}
+                </span>
+                <UBadge
+                  v-if="item.badgeText"
+                  :color="item.badgeColor ?? 'neutral'"
+                  variant="soft"
+                  class="font-semibold"
+                >
+                  {{ item.badgeText }}
+                </UBadge>
+              </div>
+            </template>
+
         <template #filters>
-          <div class="space-y-6 mx-2">
-            <div class="flex items-start justify-between gap-3">
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                Tune the dataset without leaving the table view.
-              </p>
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                icon="i-lucide-rotate-ccw"
-                :disabled="!hasActiveFilters"
-                @click="resetFilters"
-              >
-                Reset
-              </UButton>
-            </div>
-
-            <div class="grid grid-cols-1 gap-6">
-              <UFormField label="Search">
-                <UInput
-                  v-model="searchInput"
-                  class="w-full"
-                  placeholder="Filter by CVE, vendor, product, or description"
-                />
-              </UFormField>
-
-              <UFormField label="Data source">
-                <div class="flex flex-wrap gap-2">
+              <div class="space-y-6 px-2">
+                <div class="flex items-start justify-between gap-3">
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    Tune the dataset without leaving the table view.
+                  </p>
                   <UButton
-                    v-for="option in ['all', 'kev', 'enisa', 'historic']"
-                    :key="option"
+                    color="neutral"
+                    variant="ghost"
                     size="sm"
-                    :color="selectedSource === option ? 'primary' : 'neutral'"
-                    :variant="selectedSource === option ? 'solid' : 'outline'"
-                    @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic')"
+                    icon="i-lucide-rotate-ccw"
+                    :disabled="!hasActiveFilters"
+                    @click="resetFilters"
                   >
-                    {{ option === "all" ? "All sources" : catalogSourceLabels[option as CatalogSource] }}
+                    Reset
                   </UButton>
                 </div>
-              </UFormField>
-            </div>
 
-            <div class="grid grid-cols-1 gap-6">
-              <UFormField label="Year range">
-                <div class="space-y-2">
-                  <USlider
-                    v-model="yearRange"
-                    :min="yearSliderMin"
-                    :max="yearSliderMax"
-                    :step="1"
-                    class="px-1"
-                    tooltip
-                  />
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Filter vulnerabilities by the year CISA added them to the
-                    KEV catalog.
-                  </p>
-                </div>
-              </UFormField>
+                <div class="grid grid-cols-1 gap-6">
+                  <UFormField label="Search">
+                    <UInput
+                      v-model="searchInput"
+                      class="w-full"
+                      placeholder="Filter by CVE, vendor, product, or description"
+                    />
+                  </UFormField>
 
-              <UFormField label="CVSS range">
-                <div class="space-y-2">
-                  <USlider
-                    v-model="cvssRange"
-                    :min="defaultCvssRange[0]"
-                    :max="defaultCvssRange[1]"
-                    :step="0.1"
-                    :min-steps-between-thumbs="1"
-                    tooltip
-                  />
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Common Vulnerability Scoring System (0–10) shows
-                    vendor-assigned severity.
-                  </p>
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    {{ cvssRange[0].toFixed(1) }} –
-                    {{ cvssRange[1].toFixed(1) }}
-                  </p>
+                  <UFormField label="Data source">
+                    <div class="flex flex-wrap gap-2">
+                      <UButton
+                        v-for="option in ['all', 'kev', 'enisa', 'historic']"
+                        :key="option"
+                        size="sm"
+                        :color="selectedSource === option ? 'primary' : 'neutral'"
+                        :variant="selectedSource === option ? 'solid' : 'outline'"
+                        @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic')"
+                      >
+                        {{ option === "all" ? "All sources" : catalogSourceLabels[option as CatalogSource] }}
+                      </UButton>
+                    </div>
+                  </UFormField>
                 </div>
-              </UFormField>
 
-              <UFormField label="EPSS range">
-                <div class="space-y-2">
-                  <USlider
-                    v-model="epssRange"
-                    :min="defaultEpssRange[0]"
-                    :max="defaultEpssRange[1]"
-                    :step="1"
-                    :min-steps-between-thumbs="1"
-                    tooltip
-                  />
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Exploit Prediction Scoring System (0–100%) estimates
-                    likelihood of exploitation.
-                  </p>
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    {{ Math.round(epssRange[0]) }} –
-                    {{ Math.round(epssRange[1]) }}
-                  </p>
+                <div class="grid grid-cols-1 gap-6">
+                  <UFormField label="Year range">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="yearRange"
+                        :min="yearSliderMin"
+                        :max="yearSliderMax"
+                        :step="1"
+                        class="px-1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Filter vulnerabilities by the year CISA added them to the
+                        KEV catalog.
+                      </p>
+                    </div>
+                  </UFormField>
+
+                  <UFormField label="CVSS range">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="cvssRange"
+                        :min="defaultCvssRange[0]"
+                        :max="defaultCvssRange[1]"
+                        :step="0.1"
+                        :min-steps-between-thumbs="1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Common Vulnerability Scoring System (0–10) shows
+                        vendor-assigned severity.
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        {{ cvssRange[0].toFixed(1) }} –
+                        {{ cvssRange[1].toFixed(1) }}
+                      </p>
+                    </div>
+                  </UFormField>
+
+                  <UFormField label="EPSS range">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="epssRange"
+                        :min="defaultEpssRange[0]"
+                        :max="defaultEpssRange[1]"
+                        :step="1"
+                        :min-steps-between-thumbs="1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Exploit Prediction Scoring System (0–100%) estimates
+                        likelihood of exploitation.
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        {{ Math.round(epssRange[0]) }} –
+                        {{ Math.round(epssRange[1]) }}
+                      </p>
+                    </div>
+                  </UFormField>
                 </div>
-              </UFormField>
-            </div>
+              </div>
+        </template>
+
+        <template #sort>
+          <div class="space-y-4 px-2">
+            <UFormField label="Sort by">
+              <USelectMenu
+                v-model="sortOption"
+                :items="sortOptionItems"
+                value-key="value"
+                size="sm"
+              />
+            </UFormField>
+
+            <UFormField label="Order">
+              <USelectMenu
+                v-model="sortDirection"
+                :items="sortDirectionItems"
+                value-key="value"
+                size="sm"
+              />
+            </UFormField>
           </div>
         </template>
 
@@ -2102,6 +2267,8 @@ const columns: TableColumn<KevEntrySummary>[] = [
           </div>
         </template>
       </UAccordion>
+        </div>
+      </UCard>
     </div>
 
     <div class="col-span-9 mx-auto w-full px-12">

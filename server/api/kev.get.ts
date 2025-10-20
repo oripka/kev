@@ -406,6 +406,7 @@ const queryEntries = (
       description: ce.description,
       due_date: ce.dueDate,
       date_added: ce.dateAdded,
+      date_published: ce.datePublished,
       ransomware_use: ce.ransomwareUse,
       cvss_score: ce.cvssScore,
       cvss_severity: ce.cvssSeverity,

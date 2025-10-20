@@ -95,6 +95,7 @@ export type KevEntrySummary = Pick<
   | 'description'
   | 'dueDate'
   | 'dateAdded'
+  | 'datePublished'
   | 'ransomwareUse'
   | 'cvssScore'
   | 'cvssSeverity'

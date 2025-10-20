@@ -117,6 +117,7 @@ export type CatalogSummaryRow = {
   description: string
   due_date: string | null
   date_added: string | null
+  date_published: string | null
   ransomware_use: string | null
   cvss_score: number | null
   cvss_severity: string | null
@@ -833,6 +834,7 @@ export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => 
     description: row.description,
     dueDate: row.due_date ?? null,
     dateAdded: row.date_added ?? '',
+    datePublished: row.date_published ?? null,
     ransomwareUse: row.ransomware_use,
     cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
     cvssSeverity:
