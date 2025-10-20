@@ -393,7 +393,7 @@ const formatRelativeDate = (value: string | null) => {
                   <p class="text-sm text-neutral-600 dark:text-neutral-300">
                     {{ entry.vendor }} · {{ entry.product }}
                   </p>
-                  <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  <p class="text-sm text-neutral-500 dark:text-neutral-400 pb-2">
                     Added {{ formatDateLabel(entry.dateAdded) }}<span v-if="formatRelativeDate(entry.dateAdded)">
                       · {{ formatRelativeDate(entry.dateAdded) }}</span
                     >

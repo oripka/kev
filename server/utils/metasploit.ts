@@ -4,11 +4,18 @@ import { join, relative } from 'node:path'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
+import { matchExploitProduct } from '~/utils/exploitProductHints'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
-import { setImportPhase } from './import-progress'
+import {
+  markTaskComplete,
+  markTaskError,
+  markTaskProgress,
+  markTaskRunning,
+  setImportPhase
+} from './import-progress'
 
 const METASPLOIT_REPO_URL = 'https://github.com/rapid7/metasploit-framework.git'
 const METASPLOIT_BRANCH = 'master'
@@ -57,7 +64,10 @@ const ensureCacheDir = async () => {
   await mkdir(CACHE_DIR, { recursive: true })
 }
 
-const syncRepository = async (): Promise<{ commit: string | null }> => {
+const syncRepository = async (
+  options: { useCachedRepository?: boolean } = {}
+): Promise<{ commit: string | null }> => {
+  const { useCachedRepository = false } = options
   await ensureCacheDir()
 
   const repoExists = await pathExists(join(REPO_DIR, '.git'))
@@ -68,11 +78,13 @@ const syncRepository = async (): Promise<{ commit: string | null }> => {
       process.cwd()
     )
     await runGit(['sparse-checkout', 'set', 'modules'], REPO_DIR)
-  } else {
+  } else if (!useCachedRepository) {
     await runGit(['fetch', '--depth', '1', 'origin', METASPLOIT_BRANCH], REPO_DIR)
     await runGit(['reset', '--hard', `origin/${METASPLOIT_BRANCH}`], REPO_DIR)
     await runGit(['clean', '-fdx'], REPO_DIR)
     await runGit(['sparse-checkout', 'set', 'modules'], REPO_DIR)
+  } else {
+    await runGit(['sparse-checkout', 'set', 'modules'], REPO_DIR).catch(() => {})
   }
 
   const commitResult = await runGit(['rev-parse', 'HEAD'], REPO_DIR).catch(() => ({ stdout: '', stderr: '' }))
@@ -743,6 +755,23 @@ const PLATFORM_VENDOR_MAP: Record<string, { vendor: string; product: string }> =
 }
 
 const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; product: string | null } => {
+  const referenceText = metadata.references.map(record => record.value).join(' ')
+  const contextText = [
+    metadata.name,
+    metadata.description,
+    metadata.path,
+    metadata.targets.join(' '),
+    metadata.aliases.join(' '),
+    referenceText
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const hinted = matchExploitProduct(contextText)
+  if (hinted) {
+    return hinted
+  }
+
   const findMapping = (token: string | undefined): { vendor: string; product: string } | null => {
     if (!token) {
       return null
@@ -801,6 +830,7 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
 const createBaseEntries = (moduleResult: ModuleParseResult, commit: string | null): KevBaseEntry[] => {
   const { metadata, cveIds, references, aliases } = moduleResult
   const moduleId = metadata.path.replace(/\.rb$/i, '')
+  const modulePath = moduleId.replace(/^modules\//, '')
   const sourceRef = commit ?? METASPLOIT_BRANCH
   const sourceUrl = `https://github.com/rapid7/metasploit-framework/blob/${sourceRef}/${metadata.path}`
   const notes = createNotes(metadata)
@@ -839,6 +869,7 @@ const createBaseEntries = (moduleResult: ModuleParseResult, commit: string | nul
       sourceUrl,
       references,
       aliases: aliasList,
+      metasploitModulePath: modulePath,
       internetExposed: false
     }
   })
@@ -944,153 +975,178 @@ const walkRubyFiles = async (dir: string): Promise<string[]> => {
 }
 
 export const importMetasploitCatalog = async (
-  db: DrizzleDatabase
+  db: DrizzleDatabase,
+  options: { useCachedRepository?: boolean } = {}
 ): Promise<{ imported: number; commit: string | null; modules: number }> => {
-  setImportPhase('fetchingMetasploit', {
-    message: 'Synchronising Metasploit modules',
-    completed: 0,
-    total: 0
-  })
+  markTaskRunning('metasploit', 'Synchronising Metasploit modules')
 
-  const { commit } = await syncRepository()
+  try {
+    setImportPhase('fetchingMetasploit', {
+      message: 'Synchronising Metasploit modules',
+      completed: 0,
+      total: 0
+    })
 
-  const modulesDirExists = await pathExists(MODULES_DIR)
-  if (!modulesDirExists) {
-    throw new Error('Metasploit modules directory not available after clone')
-  }
+    const { commit } = await syncRepository({ useCachedRepository: options.useCachedRepository })
 
-  const rubyFiles = await walkRubyFiles(MODULES_DIR)
+    const modulesDirExists = await pathExists(MODULES_DIR)
+    if (!modulesDirExists) {
+      throw new Error('Metasploit modules directory not available after clone')
+    }
 
-  setImportPhase('fetchingMetasploit', {
-    message: 'Parsing Metasploit modules',
-    completed: 0,
-    total: rubyFiles.length
-  })
+    const rubyFiles = await walkRubyFiles(MODULES_DIR)
 
-  const baseEntries: KevBaseEntry[] = []
-  const processedModules = new Set<string>()
-  const seenIds = new Set<string>()
+    setImportPhase('fetchingMetasploit', {
+      message: 'Parsing Metasploit modules',
+      completed: 0,
+      total: rubyFiles.length
+    })
+    markTaskProgress('metasploit', 0, rubyFiles.length, 'Parsing Metasploit modules')
 
-  for (let index = 0; index < rubyFiles.length; index += 1) {
-    const filePath = rubyFiles[index]
-    try {
-      const parsed = await parseModuleFile(filePath, REPO_DIR)
-      if (!parsed) {
-        continue
-      }
-      processedModules.add(parsed.metadata.path)
-      const entries = createBaseEntries(parsed, commit)
-      for (const entry of entries) {
-        if (seenIds.has(entry.id)) {
+    const baseEntries: KevBaseEntry[] = []
+    const processedModules = new Set<string>()
+    const seenIds = new Set<string>()
+
+    for (let index = 0; index < rubyFiles.length; index += 1) {
+      const filePath = rubyFiles[index]
+      try {
+        const parsed = await parseModuleFile(filePath, REPO_DIR)
+        if (!parsed) {
           continue
         }
-        seenIds.add(entry.id)
-        baseEntries.push(entry)
+        processedModules.add(parsed.metadata.path)
+        const entries = createBaseEntries(parsed, commit)
+        for (const entry of entries) {
+          if (seenIds.has(entry.id)) {
+            continue
+          }
+          seenIds.add(entry.id)
+          baseEntries.push(entry)
+        }
+      } catch {
+        // Ignore modules that fail to parse; they will be skipped.
       }
-    } catch {
-      // Ignore modules that fail to parse; they will be skipped.
+      if ((index + 1) % 50 === 0 || index + 1 === rubyFiles.length) {
+        const message = `Parsing Metasploit modules (${index + 1} of ${rubyFiles.length})`
+        setImportPhase('fetchingMetasploit', {
+          message,
+          completed: index + 1,
+          total: rubyFiles.length
+        })
+        markTaskProgress('metasploit', index + 1, rubyFiles.length, message)
+      }
     }
-    if ((index + 1) % 50 === 0 || index + 1 === rubyFiles.length) {
-      setImportPhase('fetchingMetasploit', {
-        message: `Parsing Metasploit modules (${index + 1} of ${rubyFiles.length})`,
-        completed: index + 1,
-        total: rubyFiles.length
-      })
-    }
-  }
 
-  if (!baseEntries.length) {
-    setMetadata('metasploit.lastImportAt', new Date().toISOString())
-    setMetadata('metasploit.totalCount', '0')
+    if (!baseEntries.length) {
+      const importedAt = new Date().toISOString()
+      setMetadata('metasploit.lastImportAt', importedAt)
+      setMetadata('metasploit.totalCount', '0')
+      setMetadata('metasploit.moduleCount', String(processedModules.size))
+      if (commit) {
+        setMetadata('metasploit.lastCommit', commit)
+      }
+      markTaskComplete('metasploit', 'No Metasploit entries required an update')
+      return { imported: 0, commit, modules: processedModules.size }
+    }
+
+    const vendorAdjustedEntries = applyVendorProductOverrides(baseEntries, db)
+    const entries = vendorAdjustedEntries.map(entry => enrichEntry(entry))
+
+    setImportPhase('savingMetasploit', {
+      message: 'Saving Metasploit entries to the local cache',
+      completed: 0,
+      total: entries.length
+    })
+    markTaskProgress('metasploit', 0, entries.length, 'Saving Metasploit entries to the local cache')
+
+    db.transaction(tx => {
+      tx
+        .delete(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
+        .run()
+
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index]
+        tx
+          .insert(tables.vulnerabilityEntries)
+          .values({
+            id: entry.id,
+            cveId: entry.cveId,
+            source: 'metasploit',
+            vendor: entry.vendor,
+            product: entry.product,
+            vulnerabilityName: entry.vulnerabilityName,
+            description: entry.description,
+            requiredAction: entry.requiredAction,
+            dateAdded: entry.dateAdded,
+            dueDate: entry.dueDate,
+            ransomwareUse: entry.ransomwareUse,
+            notes: JSON.stringify(entry.notes),
+            cwes: JSON.stringify(entry.cwes),
+            cvssScore: entry.cvssScore,
+            cvssVector: entry.cvssVector,
+            cvssVersion: entry.cvssVersion,
+            cvssSeverity: entry.cvssSeverity,
+            epssScore: entry.epssScore,
+            assigner: entry.assigner,
+            datePublished: entry.datePublished,
+            dateUpdated: entry.dateUpdated,
+            exploitedSince: entry.exploitedSince,
+            sourceUrl: entry.sourceUrl,
+            referenceLinks: JSON.stringify(entry.references),
+            aliases: JSON.stringify(entry.aliases),
+            metasploitModulePath: entry.metasploitModulePath,
+            internetExposed: entry.internetExposed ? 1 : 0
+          })
+          .run()
+
+        const dimensionRecords: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
+
+        const pushCategories = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
+          for (const value of values) {
+            dimensionRecords.push({ entryId: entry.id, categoryType: type, value, name: value })
+          }
+        }
+
+        pushCategories(entry.domainCategories, 'domain')
+        pushCategories(entry.exploitLayers, 'exploit')
+        pushCategories(entry.vulnerabilityCategories, 'vulnerability')
+
+        if (dimensionRecords.length) {
+          tx.insert(tables.vulnerabilityEntryCategories).values(dimensionRecords).run()
+        }
+
+        if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
+          const message = `Saving Metasploit entries (${index + 1} of ${entries.length})`
+          setImportPhase('savingMetasploit', {
+            message,
+            completed: index + 1,
+            total: entries.length
+          })
+          markTaskProgress('metasploit', index + 1, entries.length, message)
+        }
+      }
+    })
+
+    const importedAt = new Date().toISOString()
+    setMetadata('metasploit.lastImportAt', importedAt)
+    setMetadata('metasploit.totalCount', String(entries.length))
     setMetadata('metasploit.moduleCount', String(processedModules.size))
     if (commit) {
       setMetadata('metasploit.lastCommit', commit)
     }
-    return { imported: 0, commit, modules: processedModules.size }
+
+    markTaskComplete(
+      'metasploit',
+      `${entries.length.toLocaleString()} Metasploit entries across ${processedModules.size.toLocaleString()} modules cached`
+    )
+
+    return { imported: entries.length, commit, modules: processedModules.size }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Metasploit import failed'
+    markTaskError('metasploit', message)
+    throw error instanceof Error ? error : new Error(message)
   }
-
-  const vendorAdjustedEntries = applyVendorProductOverrides(baseEntries, db)
-  const entries = vendorAdjustedEntries.map(entry => enrichEntry(entry))
-
-  setImportPhase('savingMetasploit', {
-    message: 'Saving Metasploit entries to the local cache',
-    completed: 0,
-    total: entries.length
-  })
-
-  db.transaction(tx => {
-    tx.delete(tables.vulnerabilityEntries)
-      .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
-      .run()
-
-    for (let index = 0; index < entries.length; index += 1) {
-      const entry = entries[index]
-      tx
-        .insert(tables.vulnerabilityEntries)
-        .values({
-          id: entry.id,
-          cveId: entry.cveId,
-          source: 'metasploit',
-          vendor: entry.vendor,
-          product: entry.product,
-          vulnerabilityName: entry.vulnerabilityName,
-          description: entry.description,
-          requiredAction: entry.requiredAction,
-          dateAdded: entry.dateAdded,
-          dueDate: entry.dueDate,
-          ransomwareUse: entry.ransomwareUse,
-          notes: JSON.stringify(entry.notes),
-          cwes: JSON.stringify(entry.cwes),
-          cvssScore: entry.cvssScore,
-          cvssVector: entry.cvssVector,
-          cvssVersion: entry.cvssVersion,
-          cvssSeverity: entry.cvssSeverity,
-          epssScore: entry.epssScore,
-          assigner: entry.assigner,
-          datePublished: entry.datePublished,
-          dateUpdated: entry.dateUpdated,
-          exploitedSince: entry.exploitedSince,
-          sourceUrl: entry.sourceUrl,
-          referenceLinks: JSON.stringify(entry.references),
-          aliases: JSON.stringify(entry.aliases),
-          internetExposed: entry.internetExposed ? 1 : 0
-        })
-        .run()
-
-      const dimensionRecords: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
-
-      const pushCategories = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
-        for (const value of values) {
-          dimensionRecords.push({ entryId: entry.id, categoryType: type, value, name: value })
-        }
-      }
-
-      pushCategories(entry.domainCategories, 'domain')
-      pushCategories(entry.exploitLayers, 'exploit')
-      pushCategories(entry.vulnerabilityCategories, 'vulnerability')
-
-      if (dimensionRecords.length) {
-        tx.insert(tables.vulnerabilityEntryCategories).values(dimensionRecords).run()
-      }
-
-      if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
-        setImportPhase('savingMetasploit', {
-          message: `Saving Metasploit entries (${index + 1} of ${entries.length})`,
-          completed: index + 1,
-          total: entries.length
-        })
-      }
-    }
-  })
-
-  const importedAt = new Date().toISOString()
-  setMetadata('metasploit.lastImportAt', importedAt)
-  setMetadata('metasploit.totalCount', String(entries.length))
-  setMetadata('metasploit.moduleCount', String(processedModules.size))
-  if (commit) {
-    setMetadata('metasploit.lastCommit', commit)
-  }
-
-  return { imported: entries.length, commit, modules: processedModules.size }
 }
 

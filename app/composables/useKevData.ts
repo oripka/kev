@@ -8,7 +8,13 @@ import {
   type MaybeRef,
   type Ref
 } from 'vue'
-import type { ImportProgress, KevCountDatum, KevEntrySummary, KevResponse } from '~/types'
+import type {
+  ImportProgress,
+  ImportTaskKey,
+  KevCountDatum,
+  KevEntrySummary,
+  KevResponse
+} from '~/types'
 import { lookupCveName } from '~/utils/cveToNameMap'
 
 type KevQueryParams = Record<string, string | number | boolean | undefined>
@@ -27,12 +33,14 @@ type ImportSummary = {
   catalogVersion: string
   enisaLastUpdated: string | null
   importedAt: string
+  sources: ImportTaskKey[]
 }
 
 type ImportMode = 'auto' | 'force' | 'cache'
 
 type ImportOptions = {
   mode?: ImportMode
+  source?: ImportTaskKey | 'all'
 }
 
 type UseKevDataResult = {
@@ -122,8 +130,29 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     message: '',
     startedAt: null,
     updatedAt: null,
-    error: null
+    error: null,
+    activeSources: [],
+    tasks: []
   })
+
+  const normaliseImportProgress = (
+    progress: Partial<ImportProgress> | undefined
+  ): ImportProgress => {
+    const base = defaultImportProgress()
+
+    if (!progress) {
+      return base
+    }
+
+    const tasks = Array.isArray(progress.tasks) ? progress.tasks : []
+
+    return {
+      ...base,
+      ...progress,
+      tasks
+    }
+  }
+
   const importProgress = ref<ImportProgress>(defaultImportProgress())
   const isClient = typeof window !== 'undefined'
   let progressTimer: ReturnType<typeof setInterval> | null = null
@@ -154,7 +183,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
           'cache-control': 'no-store'
         }
       })
-      importProgress.value = latest
+      importProgress.value = normaliseImportProgress(latest)
 
       if (!shouldPoll(latest.phase)) {
         stopProgressPolling()
@@ -179,6 +208,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
 
   const importLatest = async (options: ImportOptions = {}) => {
     const mode: ImportMode = options.mode ?? 'auto'
+    const source = options.source ?? 'all'
     importing.value = true
     importError.value = null
 
@@ -189,7 +219,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
 
       const response = await $fetch<ImportSummary>('/api/fetchKev', {
         method: 'POST',
-        body: { mode }
+        body: { mode, source }
       })
 
       lastImportSummary.value = response

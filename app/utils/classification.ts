@@ -793,6 +793,17 @@ export const classifyExploitLayers = (
       return 'Client-side'
     }
 
+    if (
+      hasRemoteContext &&
+      !hasClientSignal &&
+      !hasClientApplicationSignal &&
+      !hasClientFileSignal &&
+      !hasClientUserInteractionSignal &&
+      !hasClientLocalExecutionSignal
+    ) {
+      return 'Server-side'
+    }
+
     return 'Client-side'
   }
 

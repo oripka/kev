@@ -8,7 +8,13 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
-import { setImportPhase } from './import-progress'
+import {
+  markTaskComplete,
+  markTaskError,
+  markTaskProgress,
+  markTaskRunning,
+  setImportPhase
+} from './import-progress'
 
 const historicEntrySchema = z.object({
   cve: z.string(),
@@ -79,6 +85,7 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
     sourceUrl: null,
     references: [],
     aliases: [cveId.toUpperCase()],
+    metasploitModulePath: null,
     internetExposed: false
   }
 }
@@ -108,106 +115,121 @@ const collectDimensionRecords = (
 export const importHistoricCatalog = async (
   db: DrizzleDatabase
 ): Promise<{ imported: number }> => {
-  setImportPhase('fetchingHistoric', {
-    message: 'Loading historic exploit dataset',
-    completed: 0,
-    total: 0
-  })
+  markTaskRunning('historic', 'Loading historic exploit dataset')
 
-  const datasetPath = join(process.cwd(), 'historic.json')
-
-  let rawContents: string
   try {
-    rawContents = await readFile(datasetPath, 'utf8')
-  } catch (error) {
-    throw new Error(`Unable to read historic dataset: ${(error as Error).message}`)
-  }
+    setImportPhase('fetchingHistoric', {
+      message: 'Loading historic exploit dataset',
+      completed: 0,
+      total: 0
+    })
+    markTaskProgress('historic', 0, 0, 'Loading historic exploit dataset')
 
-  let parsedJson: unknown
-  try {
-    parsedJson = JSON.parse(rawContents)
-  } catch (error) {
-    throw new Error(`Unable to parse historic dataset: ${(error as Error).message}`)
-  }
+    const datasetPath = join(process.cwd(), 'historic.json')
 
-  const parsed = historicDatasetSchema.safeParse(parsedJson)
+    const rawContents = await readFile(datasetPath, 'utf8').catch(error => {
+      throw new Error(`Unable to read historic dataset: ${(error as Error).message}`)
+    })
 
-  if (!parsed.success) {
-    throw new Error('Historic dataset has an invalid format')
-  }
+    const parsedJson = (() => {
+      try {
+        return JSON.parse(rawContents)
+      } catch (error) {
+        throw new Error(`Unable to parse historic dataset: ${(error as Error).message}`)
+      }
+    })()
 
-  const baseEntries = parsed.data
-    .map(toBaseEntry)
-    .filter((entry): entry is KevBaseEntry => entry !== null)
+    const parsed = historicDatasetSchema.safeParse(parsedJson)
 
-  const enrichedEntries = baseEntries.map(entry => enrichEntry(entry))
+    if (!parsed.success) {
+      throw new Error('Historic dataset has an invalid format')
+    }
 
-  setImportPhase('savingHistoric', {
-    message: 'Saving historic entries to the local cache',
-    completed: 0,
-    total: enrichedEntries.length
-  })
+    const baseEntries = parsed.data
+      .map(toBaseEntry)
+      .filter((entry): entry is KevBaseEntry => entry !== null)
 
-  db.transaction(tx => {
-    tx.delete(tables.vulnerabilityEntries)
-      .where(eq(tables.vulnerabilityEntries.source, 'historic'))
-      .run()
+    const enrichedEntries = baseEntries.map(entry => enrichEntry(entry))
 
-    for (let index = 0; index < enrichedEntries.length; index += 1) {
-      const entry = enrichedEntries[index]
-      const entryId = entry.id
+    setImportPhase('savingHistoric', {
+      message: 'Saving historic entries to the local cache',
+      completed: 0,
+      total: enrichedEntries.length
+    })
+    markTaskProgress('historic', 0, enrichedEntries.length, 'Saving historic entries to the local cache')
 
+    db.transaction(tx => {
       tx
-        .insert(tables.vulnerabilityEntries)
-        .values({
-          id: entryId,
-          cveId: entry.cveId,
-          source: 'historic',
-          vendor: entry.vendor,
-          product: entry.product,
-          vulnerabilityName: entry.vulnerabilityName,
-          description: entry.description,
-          requiredAction: entry.requiredAction,
-          dateAdded: entry.dateAdded,
-          dueDate: entry.dueDate,
-          ransomwareUse: entry.ransomwareUse,
-          notes: toJson(entry.notes),
-          cwes: toJson(entry.cwes),
-          cvssScore: entry.cvssScore,
-          cvssVector: entry.cvssVector,
-          cvssVersion: entry.cvssVersion,
-          cvssSeverity: entry.cvssSeverity,
-          epssScore: entry.epssScore,
-          assigner: entry.assigner,
-          datePublished: entry.datePublished,
-          dateUpdated: entry.dateUpdated,
-          exploitedSince: entry.exploitedSince,
-          sourceUrl: entry.sourceUrl,
-          referenceLinks: toJson(entry.references),
-          aliases: toJson(entry.aliases),
-          internetExposed: entry.internetExposed ? 1 : 0
-        })
+        .delete(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'historic'))
         .run()
 
-      const dimensions = collectDimensionRecords(entryId, entry)
+      for (let index = 0; index < enrichedEntries.length; index += 1) {
+        const entry = enrichedEntries[index]
+        const entryId = entry.id
 
-      if (dimensions.length) {
-        tx.insert(tables.vulnerabilityEntryCategories).values(dimensions).run()
+        tx
+          .insert(tables.vulnerabilityEntries)
+          .values({
+            id: entryId,
+            cveId: entry.cveId,
+            source: 'historic',
+            vendor: entry.vendor,
+            product: entry.product,
+            vulnerabilityName: entry.vulnerabilityName,
+            description: entry.description,
+            requiredAction: entry.requiredAction,
+            dateAdded: entry.dateAdded,
+            dueDate: entry.dueDate,
+            ransomwareUse: entry.ransomwareUse,
+            notes: toJson(entry.notes),
+            cwes: toJson(entry.cwes),
+            cvssScore: entry.cvssScore,
+            cvssVector: entry.cvssVector,
+            cvssVersion: entry.cvssVersion,
+            cvssSeverity: entry.cvssSeverity,
+            epssScore: entry.epssScore,
+            assigner: entry.assigner,
+            datePublished: entry.datePublished,
+            dateUpdated: entry.dateUpdated,
+            exploitedSince: entry.exploitedSince,
+            sourceUrl: entry.sourceUrl,
+            referenceLinks: toJson(entry.references),
+            aliases: toJson(entry.aliases),
+            metasploitModulePath: entry.metasploitModulePath,
+            internetExposed: entry.internetExposed ? 1 : 0
+          })
+          .run()
+
+        const dimensions = collectDimensionRecords(entryId, entry)
+
+        if (dimensions.length) {
+          tx.insert(tables.vulnerabilityEntryCategories).values(dimensions).run()
+        }
+
+        if ((index + 1) % 25 === 0 || index + 1 === enrichedEntries.length) {
+          const message = `Saving historic entries to the local cache (${index + 1} of ${enrichedEntries.length})`
+          setImportPhase('savingHistoric', {
+            message,
+            completed: index + 1,
+            total: enrichedEntries.length
+          })
+          markTaskProgress('historic', index + 1, enrichedEntries.length, message)
+        }
       }
+    })
 
-      if ((index + 1) % 25 === 0 || index + 1 === enrichedEntries.length) {
-        setImportPhase('savingHistoric', {
-          message: `Saving historic entries to the local cache (${index + 1} of ${enrichedEntries.length})`,
-          completed: index + 1,
-          total: enrichedEntries.length
-        })
-      }
-    }
-  })
+    const importedAt = new Date().toISOString()
+    setMetadata('historic.lastImportAt', importedAt)
+    setMetadata('historic.totalCount', String(enrichedEntries.length))
 
-  const importedAt = new Date().toISOString()
-  setMetadata('historic.lastImportAt', importedAt)
-  setMetadata('historic.totalCount', String(enrichedEntries.length))
+    markTaskComplete('historic', `${enrichedEntries.length.toLocaleString()} historic entries cached`)
 
-  return { imported: enrichedEntries.length }
+    return { imported: enrichedEntries.length }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Historic import failed'
+    markTaskError('historic', message)
+    throw error instanceof Error ? error : new Error(message)
+  }
 }

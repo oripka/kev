@@ -76,6 +76,7 @@ export type KevEntry = {
   sourceUrl: string | null
   references: string[]
   aliases: string[]
+  metasploitModulePath: string | null
   domainCategories: KevDomainCategory[]
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
@@ -167,6 +168,19 @@ export type ImportPhase =
   | 'complete'
   | 'error'
 
+export type ImportTaskKey = CatalogSource
+
+export type ImportTaskStatus = 'pending' | 'running' | 'complete' | 'skipped' | 'error'
+
+export type ImportTaskProgress = {
+  key: ImportTaskKey
+  label: string
+  status: ImportTaskStatus
+  message: string
+  completed: number
+  total: number
+}
+
 export type ImportProgress = {
   phase: ImportPhase
   completed: number
@@ -175,6 +189,8 @@ export type ImportProgress = {
   startedAt: string | null
   updatedAt: string | null
   error: string | null
+  activeSources: ImportTaskKey[]
+  tasks: ImportTaskProgress[]
 }
 
 export type ClassificationPhase = 'idle' | 'preparing' | 'rebuilding' | 'complete' | 'error'

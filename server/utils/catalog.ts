@@ -38,6 +38,7 @@ type VulnerabilityEntryRow = {
   source_url: string | null
   reference_links: string | null
   aliases: string | null
+  metasploit_module_path: string | null
   internet_exposed: number | null
   updated_at: string | null
 }
@@ -95,6 +96,7 @@ export type CatalogEntryRow = {
   source_url: string | null
   reference_links: string
   aliases: string
+  metasploit_module_path: string | null
   is_well_known: number
   domain_categories: string
   exploit_layers: string
@@ -306,6 +308,7 @@ const toStandardEntry = (
     sourceUrl: row.source_url ?? null,
     references: parseJsonArray(row.reference_links),
     aliases: aliasList.length ? aliasList : [cveId],
+    metasploitModulePath: row.metasploit_module_path ?? null,
     domainCategories: categories.domain as KevEntry['domainCategories'],
     exploitLayers: categories.exploit as KevEntry['exploitLayers'],
     vulnerabilityCategories: categories.vulnerability as KevEntry['vulnerabilityCategories'],
@@ -372,6 +375,7 @@ const toEnisaEntry = (
     sourceUrl: row.source_url ?? null,
     references,
     aliases: aliases.length ? aliases : [cveId],
+    metasploitModulePath: row.metasploit_module_path ?? null,
     domainCategories: categories.domain as KevEntry['domainCategories'],
     exploitLayers: categories.exploit as KevEntry['exploitLayers'],
     vulnerabilityCategories: categories.vulnerability as KevEntry['vulnerabilityCategories'],
@@ -424,6 +428,8 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   const references = mergeUniqueStrings(existing.references, incoming.references)
   const aliases = mergeUniqueStrings(existing.aliases, incoming.aliases).map(alias => alias.toUpperCase())
 
+  const metasploitModulePath = existing.metasploitModulePath ?? incoming.metasploitModulePath ?? null
+
   const domainCategories = mergeUniqueClassification(
     existing.domainCategories,
     incoming.domainCategories
@@ -466,6 +472,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     sourceUrl,
     references,
     aliases,
+    metasploitModulePath,
     domainCategories,
     exploitLayers,
     vulnerabilityCategories,
@@ -600,6 +607,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
         source_url,
         reference_links,
         aliases,
+        metasploit_module_path,
         internet_exposed,
         updated_at
       FROM ${tables.vulnerabilityEntries}
@@ -709,6 +717,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           sourceUrl: entry.sourceUrl,
           referenceLinks: toJson(entry.references),
           aliases: toJson(entry.aliases),
+          metasploitModulePath: entry.metasploitModulePath,
           isWellKnown,
           domainCategories: toJson(entry.domainCategories),
           exploitLayers: toJson(entry.exploitLayers),

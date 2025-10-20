@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { format, parseISO } from "date-fns";
 import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
-import type { ClassificationProgress } from "~/types";
+import type { ClassificationProgress, ImportTaskKey, ImportTaskStatus } from "~/types";
 
 interface ProductStat {
   vendorKey: string;
@@ -84,6 +84,13 @@ const numberFormatter = new Intl.NumberFormat("en-US");
 
 const importSources = computed(() => importStatusData.value?.sources ?? []);
 
+const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
+  kev: "CISA KEV entries",
+  historic: "historic entries",
+  enisa: "ENISA entries",
+  metasploit: "Metasploit entries",
+};
+
 const formatOptionalTimestamp = (value: string | null | undefined, fallback: string) => {
   if (!value) {
     return fallback;
@@ -114,7 +121,8 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
 
     const versionLabel = versionParts.length ? versionParts.join(" • ") : null;
     const lastImportedLabel = formatOptionalTimestamp(source.lastImportedAt, "Never imported");
-    const cacheLabel = formatOptionalTimestamp(source.cachedAt, "No cached feed yet");
+    const cacheTimestamp = source.cachedAt ?? source.lastImportedAt;
+    const cacheLabel = formatOptionalTimestamp(cacheTimestamp, "No cached feed yet");
     const totalCountLabel =
       typeof source.totalCount === "number"
         ? `${numberFormatter.format(source.totalCount)} entries cached`
@@ -127,7 +135,7 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
       lastImportedLabel,
       cacheLabel,
       totalCountLabel,
-      hasCache: Boolean(source.cachedAt),
+      hasCache: Boolean(cacheTimestamp),
     } satisfies FormattedImportSource;
   }),
 );
@@ -202,17 +210,17 @@ const catalogUpdatedAt = computed(() => {
   return updatedAt.value ? formatTimestamp(updatedAt.value) : "Not imported yet";
 });
 
-const handleImport = async () => {
+const handleImport = async (source: ImportTaskKey | "all" = "all") => {
   try {
-    await importLatest({ mode: "force" });
+    await importLatest({ mode: "force", source });
   } finally {
     await refreshImportStatuses();
   }
 };
 
-const handleCachedReimport = async () => {
+const handleCachedReimport = async (source: ImportTaskKey | "all" = "all") => {
   try {
-    await importLatest({ mode: "cache" });
+    await importLatest({ mode: "cache", source });
   } finally {
     await refreshImportStatuses();
   }
@@ -272,6 +280,56 @@ const hasProgressValue = computed(() => {
   return Number.isFinite(percent) && percent > 0 && percent <= 100;
 });
 
+const importTasks = computed(() => importProgress.value.tasks ?? []);
+
+const taskStatusLabels: Record<ImportTaskStatus, string> = {
+  pending: "Pending",
+  running: "Running",
+  complete: "Complete",
+  skipped: "Skipped",
+  error: "Failed",
+};
+
+const taskBadgeVariants: Record<ImportTaskStatus, string> = {
+  pending: "neutral",
+  running: "primary",
+  complete: "success",
+  skipped: "neutral",
+  error: "error",
+};
+
+const taskDefaultMessages: Record<ImportTaskStatus, string> = {
+  pending: "Waiting to start",
+  running: "In progress…",
+  complete: "Finished successfully",
+  skipped: "Skipped for this run",
+  error: "Encountered an error",
+};
+
+const formattedImportTasks = computed(() =>
+  importTasks.value.map((task) => {
+    const total = Math.max(0, task.total);
+    const completed = Math.max(0, Math.min(task.completed, total || task.completed));
+    const shouldShowPercent = total > 0 && (task.status === "running" || task.status === "complete");
+    const percent = shouldShowPercent
+      ? task.status === "complete"
+        ? 100
+        : Math.min(100, Math.round((completed / total) * 100))
+      : null;
+    const displayMessage = task.message?.length ? task.message : taskDefaultMessages[task.status];
+    const progressLabel = total > 0 ? `${completed.toLocaleString()} of ${total.toLocaleString()}` : null;
+
+    return {
+      ...task,
+      percent,
+      progressLabel,
+      statusLabel: taskStatusLabels[task.status],
+      badgeVariant: taskBadgeVariants[task.status],
+      displayMessage,
+    };
+  }),
+);
+
 const totalCachedEntries = computed(() => totalEntries.value);
 
 const importSummaryMessage = computed(() => {
@@ -280,23 +338,69 @@ const importSummaryMessage = computed(() => {
     return null;
   }
 
-  const importedAt = formatTimestamp(summary.importedAt);
-  const kevCount = summary.kevImported.toLocaleString();
-  const historicCount = summary.historicImported.toLocaleString();
-  const enisaCount = summary.enisaImported.toLocaleString();
-  const metasploitCount = summary.metasploitImported.toLocaleString();
-  const enisaDetail = summary.enisaImported
-    ? ` Latest ENISA update: ${
-        summary.enisaLastUpdated ? formatTimestamp(summary.enisaLastUpdated) : "not provided"
-      }.`
-    : "";
-  const metasploitDetail = summary.metasploitImported
-    ? ` Metasploit modules processed: ${summary.metasploitModules.toLocaleString()}${
-        summary.metasploitCommit ? ` (commit ${summary.metasploitCommit.slice(0, 7)})` : ""
-      }.`
-    : "";
+  const counts: Record<ImportTaskKey, number> = {
+    kev: summary.kevImported,
+    historic: summary.historicImported,
+    enisa: summary.enisaImported,
+    metasploit: summary.metasploitImported,
+  };
 
-  return `Imported ${kevCount} CISA KEV entries, ${historicCount} historic entries, ${enisaCount} ENISA entries, and ${metasploitCount} Metasploit entries from the ${summary.dateReleased} release (${summary.catalogVersion}) on ${importedAt}.${metasploitDetail}${enisaDetail}`;
+  const segments = summary.sources
+    .map((source) => {
+      const label = SOURCE_SUMMARY_LABELS[source];
+      if (!label) {
+        return null;
+      }
+      if (source === "metasploit") {
+        const base = `${counts[source].toLocaleString()} ${label}`;
+        return summary.metasploitModules > 0
+          ? `${base} across ${summary.metasploitModules.toLocaleString()} modules`
+          : base;
+      }
+      return `${counts[source].toLocaleString()} ${label}`;
+    })
+    .filter((segment): segment is string => Boolean(segment));
+
+  const importedAt = formatTimestamp(summary.importedAt);
+  const messageParts: string[] = [];
+
+  if (segments.length) {
+    messageParts.push(`Imported ${segments.join(", ")} on ${importedAt}.`);
+  } else {
+    messageParts.push(`Import completed on ${importedAt}.`);
+  }
+
+  if (summary.sources.includes("kev")) {
+    const kevDetails: string[] = [];
+    if (summary.catalogVersion) {
+      kevDetails.push(`catalog version ${summary.catalogVersion}`);
+    }
+    if (summary.dateReleased) {
+      kevDetails.push(`release ${summary.dateReleased}`);
+    }
+    if (kevDetails.length) {
+      messageParts.push(`Latest KEV ${kevDetails.join(", ")}.`);
+    }
+  }
+
+  if (summary.sources.includes("enisa") && summary.enisaLastUpdated) {
+    messageParts.push(`ENISA last updated ${formatTimestamp(summary.enisaLastUpdated)}.`);
+  }
+
+  if (summary.sources.includes("metasploit")) {
+    if (summary.metasploitModules > 0) {
+      const commitLabel = summary.metasploitCommit
+        ? ` (commit ${summary.metasploitCommit.slice(0, 7)})`
+        : "";
+      messageParts.push(
+        `Metasploit modules processed: ${summary.metasploitModules.toLocaleString()}${commitLabel}.`,
+      );
+    } else if (summary.metasploitCommit) {
+      messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);
+    }
+  }
+
+  return messageParts.join(" ");
 });
 
 const createDefaultClassificationProgress = (): ClassificationProgress => ({
@@ -620,7 +724,7 @@ const catalogRangeLabel = computed(() => {
                       icon="i-lucide-cloud-download"
                       :disabled="importing"
                       :aria-label="`Fetch latest ${source.label}`"
-                      @click="handleImport"
+                      @click="() => handleImport(source.key as ImportTaskKey)"
                     >
                       Fetch latest
                     </UButton>
@@ -631,7 +735,7 @@ const catalogRangeLabel = computed(() => {
                       icon="i-lucide-hard-drive-download"
                       :disabled="importing || !source.hasCache"
                       :aria-label="`Use cached ${source.label}`"
-                      @click="handleCachedReimport"
+                      @click="() => handleCachedReimport(source.key as ImportTaskKey)"
                     >
                       Use cached feed
                     </UButton>
@@ -650,7 +754,7 @@ const catalogRangeLabel = computed(() => {
                   icon="i-lucide-cloud-download"
                   :loading="importing"
                   :disabled="importing"
-                  @click="handleImport"
+                  @click="() => handleImport()"
                 >
                   {{ importing ? "Importing…" : "Import latest data" }}
                 </UButton>
@@ -659,7 +763,7 @@ const catalogRangeLabel = computed(() => {
                   variant="soft"
                   icon="i-lucide-refresh-ccw"
                   :disabled="importing"
-                  @click="handleCachedReimport"
+                  @click="() => handleCachedReimport()"
                 >
                   Reimport cached data
                 </UButton>
@@ -722,6 +826,45 @@ const catalogRangeLabel = computed(() => {
                   <p class="mt-2 text-[0.78rem] text-neutral-500 dark:text-neutral-400">
                     {{ importProgressMessage }}
                   </p>
+                  <div v-if="formattedImportTasks.length" class="mt-3 space-y-2">
+                    <div
+                      v-for="task in formattedImportTasks"
+                      :key="task.key"
+                      class="rounded-md border border-neutral-200/80 bg-white/70 p-2 text-[0.72rem] dark:border-neutral-800 dark:bg-neutral-900/40"
+                    >
+                      <div class="flex items-center justify-between gap-3">
+                        <div class="space-y-1">
+                          <p class="font-medium text-neutral-700 dark:text-neutral-100">
+                            {{ task.label }}
+                          </p>
+                          <p class="text-[0.68rem] text-neutral-500 dark:text-neutral-400">
+                            {{ task.displayMessage }}
+                          </p>
+                        </div>
+                        <UBadge :color="task.badgeVariant" variant="soft" class="shrink-0 text-[0.65rem]">
+                          {{ task.statusLabel }}
+                        </UBadge>
+                      </div>
+                      <div v-if="task.percent !== null || task.progressLabel" class="mt-2 space-y-1">
+                        <UProgress
+                          v-if="task.percent !== null"
+                          :value="task.percent"
+                          size="xs"
+                          :ui="{
+                            rounded: 'rounded-md',
+                            track: 'bg-neutral-200 dark:bg-neutral-800',
+                            indicator: 'bg-primary-500 dark:bg-primary-400'
+                          }"
+                        />
+                        <p
+                          v-if="task.progressLabel"
+                          class="text-[0.65rem] uppercase tracking-wide text-neutral-400 dark:text-neutral-500"
+                        >
+                          {{ task.progressLabel }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div

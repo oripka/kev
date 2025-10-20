@@ -1,11 +1,18 @@
 import { eq } from 'drizzle-orm'
 import { ofetch } from 'ofetch'
 import { enrichEntry } from '~/utils/classification'
-import type { KevBaseEntry, KevEntry } from '~/types'
+import type { KevBaseEntry } from '~/utils/classification'
+import type { KevEntry } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { getCachedData } from './cache'
 import { setMetadata } from './sqlite'
-import { setImportPhase } from './import-progress'
+import {
+  markTaskComplete,
+  markTaskError,
+  markTaskProgress,
+  markTaskRunning,
+  setImportPhase
+} from './import-progress'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 
@@ -183,6 +190,7 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
     sourceUrl,
     references,
     aliases,
+    metasploitModulePath: null,
     internetExposed: false
   }
 
@@ -220,181 +228,165 @@ export const importEnisaCatalog = async (
 ): Promise<{ imported: number; lastUpdated: string | null }> => {
   const { ttlMs = 86_400_000, forceRefresh = false, allowStale = false } = options
 
-  setImportPhase('fetchingEnisa', {
-    message: 'Checking ENISA cache',
-    completed: 0,
-    total: 0
-  })
+  markTaskRunning('enisa', 'Checking ENISA cache')
 
-  const dataset = await getCachedData<EnisaCacheBundle>(
-    'enisa-feed',
-    async () => {
-      setImportPhase('fetchingEnisa', {
-        message: 'Fetching exploited ENISA vulnerabilities',
-        completed: 0,
-        total: 0
-      })
-
-      let page = 0
-      const items: EnisaApiItem[] = []
-      let total = 0
-
-      // Fetch paginated results
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const response = await fetchPage(page, PAGE_SIZE)
-
-        if (page === 0) {
-          total = response.total
-        }
-
-        items.push(...response.items)
-
-        setImportPhase('fetchingEnisa', {
-          message: `Fetching exploited ENISA vulnerabilities (${Math.min(items.length, total)} of ${total})`,
-          completed: Math.min(items.length, total),
-          total
-        })
-
-        if (items.length >= total || response.items.length === 0) {
-          break
-        }
-
-        page += 1
-      }
-
-      return { total, items }
-    },
-    { ttlMs, forceRefresh, allowStale }
-  )
-
-  if (dataset.cacheHit) {
-    const cachedCount = dataset.data.items.length
+  try {
     setImportPhase('fetchingEnisa', {
-      message: `Using cached ENISA vulnerabilities (${cachedCount})`,
-      completed: cachedCount,
-      total: cachedCount
+      message: 'Checking ENISA cache',
+      completed: 0,
+      total: 0
     })
-  }
+    markTaskProgress('enisa', 0, 0, 'Checking ENISA cache')
 
-  const { items } = dataset.data
-
-  const entryById = new Map<string, KevBaseEntry>()
-
-  for (const item of items) {
-    const baseEntry = toBaseEntry(item)
-    if (!baseEntry) {
-      continue
-    }
-
-    if (entryById.has(baseEntry.id)) {
-      continue
-    }
-
-    entryById.set(baseEntry.id, baseEntry)
-  }
-
-  const baseEntries = Array.from(entryById.values())
-
-  setImportPhase('enriching', {
-    message: 'Enriching ENISA entries with classification data'
-  })
-
-  const entries = baseEntries.map(enrichEntry)
-
-  setImportPhase('savingEnisa', {
-    message: 'Saving ENISA entries to the local cache',
-    completed: 0,
-    total: entries.length
-  })
-
-  db.transaction(tx => {
-    tx.delete(tables.vulnerabilityEntries)
-      .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
-      .run()
-
-    for (let index = 0; index < entries.length; index += 1) {
-      const entry = entries[index]
-
-      tx
-        .insert(tables.vulnerabilityEntries)
-        .values({
-          id: entry.id,
-          cveId: entry.cveId,
-          source: 'enisa',
-          vendor: entry.vendor,
-          product: entry.product,
-          vulnerabilityName: entry.vulnerabilityName,
-          description: entry.description,
-          requiredAction: entry.requiredAction,
-          dateAdded: entry.dateAdded,
-          dueDate: entry.dueDate,
-          ransomwareUse: entry.ransomwareUse,
-          notes: toJson(entry.notes),
-          cwes: toJson(entry.cwes),
-          cvssScore: entry.cvssScore,
-          cvssVector: entry.cvssVector,
-          cvssVersion: entry.cvssVersion,
-          cvssSeverity: entry.cvssSeverity,
-          epssScore: entry.epssScore,
-          assigner: entry.assigner,
-          datePublished: entry.datePublished,
-          dateUpdated: entry.dateUpdated,
-          exploitedSince: entry.exploitedSince,
-          sourceUrl: entry.sourceUrl,
-          referenceLinks: toJson(entry.references),
-          aliases: toJson(entry.aliases),
-          internetExposed: entry.internetExposed ? 1 : 0
+    const dataset = await getCachedData<EnisaCacheBundle>(
+      'enisa-feed',
+      async () => {
+        setImportPhase('fetchingEnisa', {
+          message: 'Fetching exploited ENISA vulnerabilities',
+          completed: 0,
+          total: 0
         })
+        markTaskProgress('enisa', 0, 0, 'Fetching exploited ENISA vulnerabilities')
+
+        let page = 0
+        const items: EnisaApiItem[] = []
+        let total = 0
+
+        // Fetch paginated results
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const response = await fetchPage(page, PAGE_SIZE)
+
+          if (page === 0) {
+            total = response.total
+          }
+
+          items.push(...response.items)
+
+          const completed = Math.min(items.length, total)
+          const message = `Fetching exploited ENISA vulnerabilities (${completed} of ${total})`
+          setImportPhase('fetchingEnisa', {
+            message,
+            completed,
+            total
+          })
+          markTaskProgress('enisa', completed, total, message)
+
+          if (items.length >= total || response.items.length === 0) {
+            break
+          }
+
+          page += 1
+        }
+
+        return { total, items }
+      },
+      { ttlMs, forceRefresh, allowStale }
+    )
+
+    const entryById = new Map<string, KevBaseEntry>()
+
+    for (const item of dataset.data.items) {
+      const baseEntry = toBaseEntry(item)
+      if (!baseEntry || entryById.has(baseEntry.id)) {
+        continue
+      }
+      entryById.set(baseEntry.id, baseEntry)
+    }
+
+    const baseEntries = Array.from(entryById.values())
+
+    setImportPhase('enriching', {
+      message: 'Enriching ENISA entries with classification data'
+    })
+
+    const entries = baseEntries.map(enrichEntry)
+
+    setImportPhase('savingEnisa', {
+      message: 'Saving ENISA entries to the local cache',
+      completed: 0,
+      total: entries.length
+    })
+    markTaskProgress('enisa', 0, entries.length, 'Saving ENISA entries to the local cache')
+
+    db.transaction(tx => {
+      tx
+        .delete(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
         .run()
 
-      const categoryRecords: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index]
 
-      const pushCategories = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
-        for (const value of values) {
-          categoryRecords.push({
-            entryId: entry.id,
-            categoryType: type,
-            value,
-            name: value
+        tx
+          .insert(tables.vulnerabilityEntries)
+          .values({
+            id: entry.id,
+            cveId: entry.cveId,
+            source: 'enisa',
+            vendor: entry.vendor,
+            product: entry.product,
+            vulnerabilityName: entry.vulnerabilityName,
+            description: entry.description,
+            requiredAction: entry.requiredAction,
+            dateAdded: entry.dateAdded,
+            dueDate: entry.dueDate,
+            ransomwareUse: entry.ransomwareUse,
+            notes: toJson(entry.notes),
+            cwes: toJson(entry.cwes),
+            cvssScore: entry.cvssScore,
+            cvssVector: entry.cvssVector,
+            cvssVersion: entry.cvssVersion,
+            cvssSeverity: entry.cvssSeverity,
+            epssScore: entry.epssScore,
+            assigner: entry.assigner,
+            datePublished: entry.datePublished,
+            dateUpdated: entry.dateUpdated,
+            exploitedSince: entry.exploitedSince,
+            sourceUrl: entry.sourceUrl,
+            referenceLinks: toJson(entry.references),
+            aliases: toJson(entry.aliases),
+            metasploitModulePath: entry.metasploitModulePath,
+            internetExposed: entry.internetExposed ? 1 : 0
           })
+          .run()
+
+        if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
+          const message = `Saving ENISA entries to the local cache (${index + 1} of ${entries.length})`
+          setImportPhase('savingEnisa', {
+            message,
+            completed: index + 1,
+            total: entries.length
+          })
+          markTaskProgress('enisa', index + 1, entries.length, message)
         }
       }
+    })
 
-      pushCategories(entry.domainCategories, 'domain')
-      pushCategories(entry.exploitLayers, 'exploit')
-      pushCategories(entry.vulnerabilityCategories, 'vulnerability')
+    const importedAt = new Date().toISOString()
+    setMetadata('enisa.lastImportAt', importedAt)
+    setMetadata('enisa.totalCount', String(entries.length))
 
-      if (categoryRecords.length) {
-        tx.insert(tables.vulnerabilityEntryCategories).values(categoryRecords).run()
-      }
+    const latestUpdatedAt = entries
+      .map(entry => entry.dateUpdated ?? entry.exploitedSince ?? entry.datePublished)
+      .filter((value): value is string => typeof value === 'string')
+      .sort()
+      .at(-1) ?? null
 
-      if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
-        setImportPhase('savingEnisa', {
-          message: `Saving ENISA entries to the local cache (${index + 1} of ${entries.length})`,
-          completed: index + 1,
-          total: entries.length
-        })
-      }
+    if (latestUpdatedAt) {
+      setMetadata('enisa.lastUpdatedAt', latestUpdatedAt)
     }
-  })
 
-  const importedAt = new Date().toISOString()
-  setMetadata('enisa.lastImportAt', importedAt)
-  setMetadata('enisa.totalCount', String(entries.length))
+    markTaskComplete('enisa', `${entries.length.toLocaleString()} ENISA entries cached`)
 
-  const latestUpdatedAt = entries
-    .map(entry => entry.dateUpdated ?? entry.exploitedSince ?? entry.datePublished)
-    .filter((value): value is string => typeof value === 'string')
-    .sort()
-    .at(-1) ?? null
-
-  if (latestUpdatedAt) {
-    setMetadata('enisa.lastUpdatedAt', latestUpdatedAt)
-  }
-
-  return {
-    imported: entries.length,
-    lastUpdated: latestUpdatedAt
+    return {
+      imported: entries.length,
+      lastUpdated: latestUpdatedAt
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'ENISA import failed'
+    markTaskError('enisa', message)
+    throw error instanceof Error ? error : new Error(message)
   }
 }
