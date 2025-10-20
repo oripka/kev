@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { format, formatDistanceToNowStrict, parseISO, subDays } from "date-fns";
 import { catalogSourceBadgeMap as sourceBadgeMap } from "~/constants/catalogSources";
-import type { KevEntrySummary } from "~/types";
+import type { CatalogSource, KevEntry, KevEntrySummary } from "~/types";
 import { useKevData } from "~/composables/useKevData";
 
 const rangeEnd = new Date();
@@ -27,6 +27,7 @@ const {
   pending,
   error,
   refresh,
+  getWellKnownCveName,
 } = useKevData(queryParams);
 
 const entryCount = computed(() => entries.value.length);
@@ -138,11 +139,15 @@ const cvssSeverityColors: Record<Exclude<KevEntrySummary["cvssSeverity"], null>,
   Critical: "error",
 };
 
-const formatCvssScore = (score: number | null) =>
-  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : "—";
+const formatCvssScoreValue = (score: number | null) =>
+  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;
 
-const formatEpssScore = (score: number | null) =>
-  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : "—";
+const formatCvssScoreLabel = (score: number | null) => formatCvssScoreValue(score) ?? "—";
+
+const formatEpssScoreValue = (score: number | null) =>
+  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;
+
+const formatEpssScoreLabel = (score: number | null) => formatEpssScoreValue(score) ?? "—";
 
 const formatDateLabel = (value: string | null) => {
   if (!value) {
@@ -165,6 +170,157 @@ const formatRelativeDate = (value: string | null) => {
   }
   return formatDistanceToNowStrict(parsed, { addSuffix: true });
 };
+
+const formatOptionalTimestamp = (value: string | null) => {
+  if (!value) {
+    return "Not available";
+  }
+
+  const parsed = parseISO(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return format(parsed, "yyyy-MM-dd HH:mm");
+};
+
+const buildCvssLabel = (
+  severity: KevEntrySummary["cvssSeverity"],
+  score: number | null
+) => {
+  const parts: string[] = [];
+
+  if (severity) {
+    parts.push(severity);
+  }
+
+  const formatted = formatCvssScoreValue(score);
+  if (formatted) {
+    parts.push(formatted);
+  }
+
+  if (!parts.length) {
+    parts.push("Unknown");
+  }
+
+  return parts.join(" ");
+};
+
+type DetailQuickFilterPayload = {
+  filters?: Partial<{
+    domain: string;
+    exploit: string;
+    vulnerability: string;
+    vendor: string;
+    product: string;
+  }>;
+  source?: CatalogSource;
+  year?: number;
+};
+
+const showDetails = ref(false);
+const detailEntry = ref<KevEntry | null>(null);
+const detailLoading = ref(false);
+const detailError = ref<string | null>(null);
+const detailCache = new Map<string, KevEntry>();
+
+const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
+  ...entry,
+  requiredAction: null,
+  dueDate: null,
+  notes: [],
+  cwes: [],
+  cvssVector: null,
+  cvssVersion: null,
+  assigner: null,
+  datePublished: entry.datePublished ?? null,
+  dateUpdated: null,
+  exploitedSince: null,
+  sourceUrl: null,
+  references: [],
+  aliases: [],
+});
+
+const openDetails = async (entry: KevEntrySummary) => {
+  detailError.value = null;
+
+  const cached = detailCache.get(entry.id);
+  if (cached) {
+    detailEntry.value = cached;
+    showDetails.value = true;
+    return;
+  }
+
+  detailEntry.value = createDetailPlaceholder(entry);
+  showDetails.value = true;
+  detailLoading.value = true;
+
+  try {
+    const response = await $fetch<KevEntry>(`/api/kev/${entry.id}`);
+    detailCache.set(entry.id, response);
+    detailEntry.value = response;
+  } catch (exception) {
+    detailError.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to load vulnerability details.";
+  } finally {
+    detailLoading.value = false;
+  }
+};
+
+const closeDetails = () => {
+  showDetails.value = false;
+};
+
+const router = useRouter();
+
+const handleDetailQuickFilter = (payload: DetailQuickFilterPayload) => {
+  const query: Record<string, string> = {};
+
+  const { filters: filterPayload, source, year } = payload;
+
+  if (filterPayload) {
+    if (filterPayload.domain) {
+      query.domain = filterPayload.domain;
+    }
+    if (filterPayload.exploit) {
+      query.exploit = filterPayload.exploit;
+    }
+    if (filterPayload.vulnerability) {
+      query.vulnerability = filterPayload.vulnerability;
+    }
+    if (filterPayload.vendor) {
+      query.vendor = filterPayload.vendor;
+    }
+    if (filterPayload.product) {
+      query.product = filterPayload.product;
+    }
+  }
+
+  if (source) {
+    query.source = source;
+  }
+
+  if (typeof year === "number" && Number.isFinite(year)) {
+    query.year = String(year);
+  }
+
+  closeDetails();
+
+  void router.push({
+    path: "/",
+    query,
+  });
+};
+
+watch(showDetails, (value) => {
+  if (!value) {
+    detailEntry.value = null;
+    detailLoading.value = false;
+    detailError.value = null;
+  }
+});
 </script>
 
 <template>
@@ -364,7 +520,17 @@ const formatRelativeDate = (value: string | null) => {
             </div>
 
             <div v-else class="grid gap-4 md:grid-cols-2">
-              <UCard v-for="entry in entries" :key="entry.id" class="flex h-full flex-col gap-4">
+              <UCard
+                v-for="entry in entries"
+                :key="entry.id"
+                role="button"
+                tabindex="0"
+                :aria-label="`View details for ${entry.vulnerabilityName || entry.cveId}`"
+                class="group flex h-full cursor-pointer flex-col gap-4 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                @click="openDetails(entry)"
+                @keydown.enter.prevent.stop="openDetails(entry)"
+                @keydown.space.prevent.stop="openDetails(entry)"
+              >
                 <div class="space-y-2">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <p class="text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
@@ -403,13 +569,13 @@ const formatRelativeDate = (value: string | null) => {
                       variant="soft"
                       class="text-xs font-semibold"
                     >
-                      {{ entry.cvssSeverity }} · {{ formatCvssScore(entry.cvssScore) }}
+                      {{ entry.cvssSeverity }} · {{ formatCvssScoreLabel(entry.cvssScore) }}
                     </UBadge>
                     <UBadge v-else color="neutral" variant="soft" class="text-xs font-semibold">
                       CVSS unavailable
                     </UBadge>
                     <UBadge color="neutral" variant="soft" class="text-xs font-semibold">
-                      EPSS {{ formatEpssScore(entry.epssScore) }}
+                      EPSS {{ formatEpssScoreLabel(entry.epssScore) }}
                     </UBadge>
                     <UBadge
                       v-if="entry.internetExposed"
@@ -445,6 +611,20 @@ const formatRelativeDate = (value: string | null) => {
           </div>
         </section>
       </div>
+      <KevDetailModal
+        v-model:open="showDetails"
+        :entry="detailEntry"
+        :loading="detailLoading"
+        :error="detailError"
+        :source-badge-map="sourceBadgeMap"
+        :cvss-severity-colors="cvssSeverityColors"
+        :build-cvss-label="buildCvssLabel"
+        :format-epss-score="formatEpssScoreValue"
+        :format-optional-timestamp="formatOptionalTimestamp"
+        :get-well-known-cve-name="getWellKnownCveName"
+        @close="closeDetails"
+        @quick-filter="handleDetailQuickFilter"
+      />
     </UPageBody>
   </UPage>
 </template>
