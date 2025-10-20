@@ -43,6 +43,7 @@ export const catalogEntries = sqliteTable(
     referenceLinks: text('reference_links').notNull(),
     aliases: text('aliases').notNull(),
     metasploitModulePath: text('metasploit_module_path'),
+    metasploitModulePublishedAt: text('metasploit_module_published_at'),
     isWellKnown: integer('is_well_known').notNull().default(0),
     domainCategories: text('domain_categories').notNull(),
     exploitLayers: text('exploit_layers').notNull(),
@@ -110,6 +111,7 @@ export const vulnerabilityEntries = sqliteTable('vulnerability_entries', {
   referenceLinks: text('reference_links'),
   aliases: text('aliases'),
   metasploitModulePath: text('metasploit_module_path'),
+  metasploitModulePublishedAt: text('metasploit_module_published_at'),
   internetExposed: integer('internet_exposed').notNull().default(0),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })

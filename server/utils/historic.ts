@@ -86,6 +86,7 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
     references: [],
     aliases: [cveId.toUpperCase()],
     metasploitModulePath: null,
+    metasploitModulePublishedAt: null,
     internetExposed: false
   }
 }
@@ -197,6 +198,7 @@ export const importHistoricCatalog = async (
             referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
             metasploitModulePath: entry.metasploitModulePath,
+            metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
             internetExposed: entry.internetExposed ? 1 : 0
           })
           .run()

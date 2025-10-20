@@ -77,6 +77,7 @@ export type KevEntry = {
   references: string[]
   aliases: string[]
   metasploitModulePath: string | null
+  metasploitModulePublishedAt: string | null
   domainCategories: KevDomainCategory[]
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]

@@ -220,6 +220,7 @@ export default defineEventHandler(async event => {
             references: [],
             aliases: cveId ? [cveId] : [],
             metasploitModulePath: null,
+            metasploitModulePublishedAt: null,
             internetExposed: false
           }
         })
@@ -387,6 +388,7 @@ export default defineEventHandler(async event => {
               referenceLinks: toJson(entry.references),
               aliases: toJson(entry.aliases),
               metasploitModulePath: entry.metasploitModulePath,
+              metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
               internetExposed: entry.internetExposed ? 1 : 0
             })
             .run()

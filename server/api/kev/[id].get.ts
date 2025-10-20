@@ -50,6 +50,8 @@ export default defineEventHandler(async event => {
         ce.source_url,
         ce.reference_links,
         ce.aliases,
+        ce.metasploit_module_path,
+        ce.metasploit_module_published_at,
         ce.is_well_known,
         ce.domain_categories,
         ce.exploit_layers,

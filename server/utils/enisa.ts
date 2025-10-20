@@ -191,6 +191,7 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
     references,
     aliases,
     metasploitModulePath: null,
+    metasploitModulePublishedAt: null,
     internetExposed: false
   }
 
@@ -347,6 +348,7 @@ export const importEnisaCatalog = async (
             referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
             metasploitModulePath: entry.metasploitModulePath,
+            metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
             internetExposed: entry.internetExposed ? 1 : 0
           })
           .run()

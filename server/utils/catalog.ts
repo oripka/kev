@@ -39,6 +39,7 @@ type VulnerabilityEntryRow = {
   reference_links: string | null
   aliases: string | null
   metasploit_module_path: string | null
+  metasploit_module_published_at: string | null
   internet_exposed: number | null
   updated_at: string | null
 }
@@ -97,6 +98,7 @@ export type CatalogEntryRow = {
   reference_links: string
   aliases: string
   metasploit_module_path: string | null
+  metasploit_module_published_at: string | null
   is_well_known: number
   domain_categories: string
   exploit_layers: string
@@ -309,6 +311,7 @@ const toStandardEntry = (
     references: parseJsonArray(row.reference_links),
     aliases: aliasList.length ? aliasList : [cveId],
     metasploitModulePath: row.metasploit_module_path ?? null,
+    metasploitModulePublishedAt: row.metasploit_module_published_at ?? null,
     domainCategories: categories.domain as KevEntry['domainCategories'],
     exploitLayers: categories.exploit as KevEntry['exploitLayers'],
     vulnerabilityCategories: categories.vulnerability as KevEntry['vulnerabilityCategories'],
@@ -376,6 +379,7 @@ const toEnisaEntry = (
     references,
     aliases: aliases.length ? aliases : [cveId],
     metasploitModulePath: row.metasploit_module_path ?? null,
+    metasploitModulePublishedAt: null,
     domainCategories: categories.domain as KevEntry['domainCategories'],
     exploitLayers: categories.exploit as KevEntry['exploitLayers'],
     vulnerabilityCategories: categories.vulnerability as KevEntry['vulnerabilityCategories'],
@@ -429,6 +433,10 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   const aliases = mergeUniqueStrings(existing.aliases, incoming.aliases).map(alias => alias.toUpperCase())
 
   const metasploitModulePath = existing.metasploitModulePath ?? incoming.metasploitModulePath ?? null
+  const metasploitModulePublishedAt = pickEarliestString(
+    existing.metasploitModulePublishedAt,
+    incoming.metasploitModulePublishedAt
+  )
 
   const domainCategories = mergeUniqueClassification(
     existing.domainCategories,
@@ -473,6 +481,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     references,
     aliases,
     metasploitModulePath,
+    metasploitModulePublishedAt,
     domainCategories,
     exploitLayers,
     vulnerabilityCategories,
@@ -608,6 +617,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
         reference_links,
         aliases,
         metasploit_module_path,
+        metasploit_module_published_at,
         internet_exposed,
         updated_at
       FROM ${tables.vulnerabilityEntries}
@@ -718,6 +728,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           referenceLinks: toJson(entry.references),
           aliases: toJson(entry.aliases),
           metasploitModulePath: entry.metasploitModulePath,
+          metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
           isWellKnown,
           domainCategories: toJson(entry.domainCategories),
           exploitLayers: toJson(entry.exploitLayers),
@@ -829,7 +840,9 @@ export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
     domainCategories,
     exploitLayers,
     vulnerabilityCategories,
-    internetExposed: row.internet_exposed === 1
+    internetExposed: row.internet_exposed === 1,
+    metasploitModulePath: row.metasploit_module_path,
+    metasploitModulePublishedAt: row.metasploit_module_published_at
   }
 }
 

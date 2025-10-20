@@ -91,6 +91,108 @@ const syncRepository = async (
   return { commit: commitResult.stdout || null }
 }
 
+const collectModulePublishedDates = async (
+  modulePaths: string[],
+  onProgress?: (completed: number, total: number) => void
+): Promise<Map<string, string | null>> => {
+  const uniquePaths = Array.from(new Set(modulePaths))
+  const total = uniquePaths.length
+  const pending = new Set(uniquePaths)
+  const results = new Map<string, string | null>()
+  let completed = 0
+
+  const reportProgress = () => {
+    onProgress?.(completed, total)
+  }
+
+  const attemptResolve = async (paths: string[]) => {
+    const queue = paths.filter(path => pending.has(path))
+    if (!queue.length) {
+      return
+    }
+
+    let index = 0
+    const concurrency = Math.min(6, queue.length)
+
+    const workers = Array.from({ length: concurrency }, () =>
+      (async () => {
+        while (index < queue.length) {
+          const currentIndex = index
+          index += 1
+          const path = queue[currentIndex]
+          if (!path || !pending.has(path)) {
+            continue
+          }
+
+          const result = await runGit(
+            ['log', '--diff-filter=A', '--follow', '--format=%aI', '-n', '1', '--', path],
+            REPO_DIR
+          ).catch(() => null)
+
+          const output = result?.stdout?.trim()
+          if (!output) {
+            continue
+          }
+
+          const lines = output
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+
+          const publishedAt = lines[lines.length - 1] ?? null
+          if (!publishedAt) {
+            continue
+          }
+
+          if (!pending.has(path)) {
+            continue
+          }
+
+          pending.delete(path)
+          results.set(path, publishedAt)
+          completed += 1
+          reportProgress()
+        }
+      })()
+    )
+
+    await Promise.all(workers)
+  }
+
+  await attemptResolve(uniquePaths)
+
+  if (!pending.size) {
+    return results
+  }
+
+  let currentDepth = 1
+  const depthTargets = [64, 256, 512, 1024, 2048, 4096, 8192, 16384]
+
+  for (const targetDepth of depthTargets) {
+    if (!pending.size) {
+      break
+    }
+
+    const deepenBy = targetDepth - currentDepth
+    if (deepenBy > 0) {
+      await runGit(['fetch', '--filter=blob:none', '--deepen', String(deepenBy)], REPO_DIR).catch(() => null)
+      currentDepth = targetDepth
+    }
+
+    await attemptResolve(Array.from(pending))
+  }
+
+  if (pending.size) {
+    for (const path of pending) {
+      results.set(path, null)
+      completed += 1
+      reportProgress()
+    }
+  }
+
+  return results
+}
+
 const unescapeRubyString = (value: string): string => {
   return value
     .replace(/\\n/g, '\n')
@@ -845,7 +947,11 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
   return { vendor: null, product: null }
 }
 
-const createBaseEntries = (moduleResult: ModuleParseResult, commit: string | null): KevBaseEntry[] => {
+const createBaseEntries = (
+  moduleResult: ModuleParseResult,
+  commit: string | null,
+  modulePublishedAt: string | null
+): KevBaseEntry[] => {
   const { metadata, cveIds, references, aliases } = moduleResult
   const moduleId = metadata.path.replace(/\.rb$/i, '')
   const modulePath = moduleId.replace(/^modules\//, '')
@@ -888,6 +994,7 @@ const createBaseEntries = (moduleResult: ModuleParseResult, commit: string | nul
       references,
       aliases: aliasList,
       metasploitModulePath: modulePath,
+      metasploitModulePublishedAt: modulePublishedAt,
       internetExposed: false
     }
   })
@@ -1014,6 +1121,33 @@ export const importMetasploitCatalog = async (
 
     const rubyFiles = await walkRubyFiles(MODULES_DIR)
 
+    const moduleRelativePaths = rubyFiles.map(file => relative(REPO_DIR, file))
+
+    if (moduleRelativePaths.length) {
+      setImportPhase('fetchingMetasploit', {
+        message: 'Resolving Metasploit module publish dates',
+        completed: 0,
+        total: moduleRelativePaths.length
+      })
+      markTaskProgress(
+        'metasploit',
+        0,
+        moduleRelativePaths.length,
+        'Resolving Metasploit module publish dates'
+      )
+    }
+
+    const publishedDateMap = await collectModulePublishedDates(moduleRelativePaths, (completed, total) => {
+      if (!total) {
+        return
+      }
+      if (completed === total || completed % 50 === 0) {
+        const message = `Resolving Metasploit module publish dates (${completed} of ${total})`
+        setImportPhase('fetchingMetasploit', { message, completed, total })
+        markTaskProgress('metasploit', completed, total, message)
+      }
+    })
+
     setImportPhase('fetchingMetasploit', {
       message: 'Parsing Metasploit modules',
       completed: 0,
@@ -1033,7 +1167,8 @@ export const importMetasploitCatalog = async (
           continue
         }
         processedModules.add(parsed.metadata.path)
-        const entries = createBaseEntries(parsed, commit)
+        const modulePublishedAt = publishedDateMap.get(parsed.metadata.path) ?? null
+        const entries = createBaseEntries(parsed, commit, modulePublishedAt)
         for (const entry of entries) {
           if (seenIds.has(entry.id)) {
             continue
@@ -1114,6 +1249,7 @@ export const importMetasploitCatalog = async (
             referenceLinks: JSON.stringify(entry.references),
             aliases: JSON.stringify(entry.aliases),
             metasploitModulePath: entry.metasploitModulePath,
+            metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
             internetExposed: entry.internetExposed ? 1 : 0
           })
           .run()
