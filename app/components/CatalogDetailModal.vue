@@ -363,38 +363,9 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
   const items: TimelineItem[] = [];
 
-  const buildEventDescription = (event: KevEntryTimelineEvent): { title: string; description: string | null; icon: string } => {
-  type TimelineGroup = {
-    key: string;
-    formattedDate: string;
-    parsed: Date | null;
-    events: KevEntryTimelineEvent[];
-  };
-
-  const groups: TimelineGroup[] = [];
-
-  for (const event of events) {
-    const parsed = parseEventTimestamp(event.timestamp);
-    const formattedDate = formatTimelineDate(event.timestamp) ?? event.timestamp;
-    const key = getDateKey(parsed, event.timestamp);
-
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup && lastGroup.key === key) {
-      lastGroup.events.push(event);
-      continue;
-    }
-
-    groups.push({
-      key,
-      formattedDate,
-      parsed,
-      events: [event],
-    });
-  }
-
-  const items: TimelineItem[] = [];
-
-  const buildEventDescription = (event: KevEntryTimelineEvent): { title: string; description: string | null; icon: string } => {
+  const buildEventDescription = (
+    event: KevEntryTimelineEvent,
+  ): { title: string; description: string | null; icon: string } => {
     const meta = timelineMeta[event.type] ?? timelineMeta.default;
     const title = event.title ?? meta.title(event, entry);
     const baseDescription = meta.description?.(event, entry) ?? null;
@@ -409,7 +380,6 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
     return {
       title,
-      description,
       description,
       icon: event.icon ?? meta.icon,
     };
@@ -706,8 +676,6 @@ const timelineStats = computed(() => {
                         variant="soft"
                         class="text-xs font-semibold uppercase tracking-wide"
                       >
-                        {{ timelineEventCount }}
-                        {{ timelineEventCount === 1 ? "event" : "events" }}
                         {{ timelineEventCount }}
                         {{ timelineEventCount === 1 ? "event" : "events" }}
                       </UBadge>
