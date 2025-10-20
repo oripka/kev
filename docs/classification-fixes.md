@@ -89,7 +89,7 @@ r.
 2.- [x] **Rebalance scoring weights.** Gate the +2 client bonus on combined evidence (e.g., require both a client application match and a file/interaction cue) and add similar weight for `domainSuggestsServer` or explicit server signals so network appliances cannot be overridden by a stray client pattern.【F:app/utils/classification.ts†L1410-L1476】
 
 
-- [ ]**Consider confidence thresholds and overrides.** When both client and server signals fire, emit dual labels (or flag as “Mixed/Needs review”) instead of forcing a tie-break, and allow manual overrides for high-value appliances until the heuristics mature. -> add a dedicated label for that so we can easily fitler and find out how to classify them better
+- [x] Added a `Mixed/Needs Review` exploit layer whenever client and server signals tie so ambiguous entries stay visible for manual review.
 
 
 - [x] **Narrow file heuristics.** Add guards to `clientFileInteractionPatterns` to require explicit user-action verbs (“when opening”, “double-click”) before scoring client points, and ignore matches that coexist with server keywords (“upload”, “API request”). 【F:app/utils/classification.ts†L1004-L1023】
@@ -107,110 +107,6 @@ r.
 - [x]`/\b(?:management (?:server|interface|console))\b/i`** – this server signal is too broad.
   It forces Windows MMC, browser settings panes, and other desktop consoles into server
   territory.【F:app/utils/classification.ts†L1060-L1075】【de87f7†L1-L12】
-- [ ] **Add non-RCE exploit layer buckets.** Introduce classifications such as "Auth Bypass ·
-   Edge" or "Configuration Abuse" so the catalog captures high-severity API failures instead
-   of returning empty arrays.【6a6ebe†L3-L16】
+- [x] Non-RCE cases now emit `Auth Bypass · Edge/Server-side` and `Configuration Abuse` layers so high-impact API flaws are no longer empty.
 
-
-
-
-# evaluate why this is categoirze as non.memory  it can be ewither memory coruption or not not both!!!
-
-- [ ] fix tagging stuff both a smemory corruption and non-emmorcoruption
-Microsoft SMBv1 Remote Code Execution Vulnerability
-
-CVE-2017-0144
-CISA KEV
-ENISA
-Historic dataset
-Metasploit
-Description
-
-ETERNALBLUE / DOUBLEPULSAR
-The SMBv1 server in multiple Microsoft Windows versions allows remote attackers to execute arbitrary code via crafted packets.
-Vendor
-
-Microsoft
-Product
-
-Windows
-Date added
-
-2017-01-01T00:00:00.000Z
-Ransomware use
-
-Known
-
-CVSS
-
-High 8.8
-v3.1
-CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
-
-EPSS
-
-94.3%
-Assigner
-
-microsoft
-
-Exploit activity
-
-Timeline of key milestones
-
-Follow how this CVE moved from publication to active exploitation across monitored feeds.
-
-7 events
-3214 days from first to latest milestone
-Jan 1, 2017
-2 events recorded
-• CVE published — Published by microsoft. · Source: NVD
-
-• Historic exploitation noted — Captured in the historic exploited vulnerability archive. · Source: Historic dataset
-—
-72 days later
-No tracked activity was recorded during this gap.
-Mar 14, 2017
-Metasploit entry published
-Module path: exploits/windows/smb/ms17_010_eternalblue · Source: Metasploit
-—
-31 days later
-No tracked activity was recorded during this gap.
-Apr 14, 2017
-Metasploit entry published
-Module path: exploits/windows/smb/smb_doublepulsar_rce · Source: Metasploit
-—
-4 years 303 days later
-No tracked activity was recorded during this gap.
-Feb 10, 2022
-Listed by ENISA
-ENISA highlighted this CVE as actively exploited in the Threat Landscape for exploited vulnerabilities. · Source: ENISA
-Feb 10, 2022
-Flagged in CISA KEV
-CISA confirmed active exploitation and added the CVE to the Known Exploited Vulnerabilities catalog. · Source: CISA KEV
-—
-3 years 253 days later
-No tracked activity was recorded during this gap.
-Oct 20, 2025
-Last updated
-Most recent catalog update recorded for this entry.
-Source
-
-View advisory
-Domain categories
-
-Non-Web Applications
-Exploit profiles
-
-RCE · Server-side Non-memory
-RCE · Server-side Memory Corruption
-DoS · Server-side
-Vulnerability categories
-
-Remote Code Execution
-Memory Corruption
-Denial of Service
-References
-
-https://packetstormsecurity.com/files/cve/CVE-2017-0144
-https://www.exploit-db.com/exploits/42031/
+- [x] RCE labelling now returns only one memory classification, ensuring exploits such as EternalBlue appear as either memory or non-memory but never both.

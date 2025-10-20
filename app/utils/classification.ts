@@ -1235,6 +1235,22 @@ const denialOfServicePatterns: RegExp[] = [
   /\b(?:heap(?:[-\s]?spray)|allocation(?:[-\s]?bomb))\b/i,
 ];
 
+const authenticationBypassPatterns: RegExp[] = [
+  /\bauthentication bypass\b/i,
+  /\bbypass(?:es)? authentication\b/i,
+  /\bwithout authentication\b/i,
+  /\bunauthenticated access\b/i,
+  /\bauthorization bypass\b/i,
+];
+
+const configurationAbusePatterns: RegExp[] = [
+  /\bmisconfigur(?:ation|ed)\b/i,
+  /\bimproper configuration\b/i,
+  /\b(?:improper|insecure) (?:authorization|access control)\b/i,
+  /\b(?:exposed|unprotected) (?:admin|management|configuration) (?:interface|portal|console|api|endpoint)\b/i,
+  /\bdefault (?:credentials|passwords?)\b/i,
+];
+
 // Enhanced client-side signal detection (low false-positive)
 const clientSignalPatterns: RegExp[] = [
   // client-side / client side / clientside (allow hyphen, space, or none)
@@ -1733,10 +1749,18 @@ export const classifyExploitLayers = (
     pattern.test(text)
   );
   const hasDosSignal = matchesAny(text, denialOfServicePatterns);
+  const hasAuthBypassSignal = matchesAny(text, authenticationBypassPatterns);
+  const hasConfigurationAbuseSignal = matchesAny(
+    text,
+    configurationAbusePatterns
+  );
   let hasClientSignal = matchesAny(text, clientSignalPatterns);
   const curatedHint = resolveCuratedHint(entry.vendor, entry.product);
   const curatedServerBias = curatedHint?.serverBias ?? false;
   const curatedClientBias = curatedHint?.clientBias ?? false;
+  const domainHasEdgeExposure = domainCategories.some((category) =>
+    internetEdgeDomainHints.includes(category)
+  );
 
   if (curatedClientBias) {
     hasClientSignal = true;
@@ -1886,6 +1910,26 @@ export const classifyExploitLayers = (
     cvssStrongServer ||
     curatedServerBias;
 
+  const clientPrimaryEvidence =
+    hasClientApplicationSignal ||
+    hasClientFileSignal ||
+    hasClientUserInteractionSignal ||
+    hasClientLocalExecutionSignal ||
+    hasClientSignal ||
+    domainSuggestsClient ||
+    curatedClientBias;
+
+  const serverPrimaryEvidence =
+    hasServerSignal ||
+    hasStrongServerProtocol ||
+    hasKernelServerSignal ||
+    domainSuggestsServer ||
+    networkOperatingSystemSignal ||
+    mobileManagementSignal ||
+    mobileDeviceManagementContext ||
+    curatedServerBias ||
+    cvssStrongServer;
+
   const clientArtifactSupport =
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
@@ -1976,6 +2020,10 @@ export const classifyExploitLayers = (
     serverScore = clientScore + 1;
   }
 
+  const scoreDelta = Math.abs(clientScore - serverScore);
+  let hasMixedContext =
+    scoreDelta <= 1 && clientPrimaryEvidence && serverPrimaryEvidence;
+
   const determineSide = (): "Client-side" | "Server-side" => {
     if (clientScore > serverScore) {
       return "Client-side";
@@ -2008,6 +2056,7 @@ export const classifyExploitLayers = (
     }
 
     if (serverDominant && clientDominant) {
+      hasMixedContext = true;
       if (hasStrongServerProtocol || hasKernelServerSignal) {
         return "Server-side";
       }
@@ -2028,27 +2077,67 @@ export const classifyExploitLayers = (
     }
 
     if (hasStrongServerProtocol || hasKernelServerSignal || hasServerSignal) {
+      if (clientPrimaryEvidence) {
+        hasMixedContext = true;
+      }
       return "Server-side";
     }
 
     if (strongClientIndicators || domainSuggestsClient || hasClientSignal) {
+      if (serverPrimaryEvidence) {
+        hasMixedContext = true;
+      }
       return "Client-side";
     }
 
     return hasRemoteContext ? "Server-side" : "Client-side";
   };
 
+  const side = determineSide();
+
   if (!qualifiesForRce) {
-    if (hasDosSignal) {
-      const dosSide = determineSide();
+    const shouldLabelAuthBypass =
+      hasAuthBypassSignal &&
+      (domainSuggestsServer ||
+        domainHasEdgeExposure ||
+        hasServerSignal ||
+        hasStrongServerProtocol ||
+        hasRemoteContext ||
+        curatedServerBias ||
+        cvssStrongServer);
+
+    if (shouldLabelAuthBypass) {
       layers.add(
-        dosSide === "Client-side" ? "DoS · Client-side" : "DoS · Server-side"
+        domainHasEdgeExposure
+          ? "Auth Bypass · Edge"
+          : "Auth Bypass · Server-side"
       );
     }
+
+    const shouldLabelConfigurationAbuse =
+      hasConfigurationAbuseSignal &&
+      (domainSuggestsServer ||
+        hasServerSignal ||
+        hasStrongServerProtocol ||
+        curatedServerBias ||
+        hasRemoteContext);
+
+    if (shouldLabelConfigurationAbuse) {
+      layers.add("Configuration Abuse");
+    }
+
+    if (hasDosSignal) {
+      layers.add(
+        side === "Client-side" ? "DoS · Client-side" : "DoS · Server-side"
+      );
+    }
+
+    if (hasMixedContext) {
+      layers.add("Mixed/Needs Review");
+    }
+
     return Array.from(layers);
   }
-
-  const side = determineSide();
 
   const labelMap: Record<
     "Client-side" | "Server-side",
@@ -2064,11 +2153,20 @@ export const classifyExploitLayers = (
     },
   };
 
-  const label = hasMemoryCorruption
-    ? labelMap[side].memory
-    : labelMap[side].nonMemory;
+  const memoryLabel = labelMap[side].memory;
+  const nonMemoryLabel = labelMap[side].nonMemory;
 
-  layers.add(label);
+  if (hasMemoryCorruption) {
+    layers.delete(nonMemoryLabel);
+    layers.add(memoryLabel);
+  } else {
+    layers.delete(memoryLabel);
+    layers.add(nonMemoryLabel);
+  }
+
+  if (hasMixedContext) {
+    layers.add("Mixed/Needs Review");
+  }
 
   if (hasDosSignal) {
     layers.add(

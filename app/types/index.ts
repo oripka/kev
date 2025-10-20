@@ -53,6 +53,10 @@ export type KevExploitLayer =
   | 'RCE · Server-side Non-memory'
   | 'DoS · Client-side'
   | 'DoS · Server-side'
+  | 'Mixed/Needs Review'
+  | 'Auth Bypass · Edge'
+  | 'Auth Bypass · Server-side'
+  | 'Configuration Abuse'
   | 'Privilege Escalation'
 
 export type KevVulnerabilityCategory =
