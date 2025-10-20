@@ -23,7 +23,7 @@ import {
 import type {
   CatalogSource,
   KevCountDatum,
-  KevEntry,
+  KevEntryDetail,
   KevEntrySummary,
   TrackedProductQuickFilterTarget,
 } from "~/types";
@@ -550,12 +550,12 @@ const buildCvssLabel = (
 };
 
 const showDetails = ref(false);
-const detailEntry = ref<KevEntry | null>(null);
+const detailEntry = ref<KevEntryDetail | null>(null);
 const detailLoading = ref(false);
 const detailError = ref<string | null>(null);
-const detailCache = new Map<string, KevEntry>();
+const detailCache = new Map<string, KevEntryDetail>();
 
-const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
+const createDetailPlaceholder = (entry: KevEntrySummary): KevEntryDetail => ({
   ...entry,
   requiredAction: null,
   dueDate: null,
@@ -570,6 +570,8 @@ const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
   sourceUrl: null,
   references: [],
   aliases: [],
+  metasploitModulePath: null,
+  timeline: [],
 });
 
 const openDetails = async (entry: KevEntrySummary) => {
@@ -587,7 +589,7 @@ const openDetails = async (entry: KevEntrySummary) => {
   detailLoading.value = true;
 
   try {
-    const response = await $fetch<KevEntry>(`/api/kev/${entry.id}`);
+    const response = await $fetch<KevEntryDetail>(`/api/kev/${entry.id}`);
     detailCache.set(entry.id, response);
     detailEntry.value = response;
   } catch (exception) {

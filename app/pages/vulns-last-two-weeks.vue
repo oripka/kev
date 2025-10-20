@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { format, formatDistanceToNowStrict, parseISO, subDays } from "date-fns";
 import { catalogSourceBadgeMap as sourceBadgeMap } from "~/constants/catalogSources";
-import type { CatalogSource, KevEntry, KevEntrySummary } from "~/types";
+import type { CatalogSource, KevEntryDetail, KevEntrySummary } from "~/types";
 import { useKevData } from "~/composables/useKevData";
 
 const rangeEnd = new Date();
@@ -219,12 +219,12 @@ type DetailQuickFilterPayload = {
 };
 
 const showDetails = ref(false);
-const detailEntry = ref<KevEntry | null>(null);
+const detailEntry = ref<KevEntryDetail | null>(null);
 const detailLoading = ref(false);
 const detailError = ref<string | null>(null);
-const detailCache = new Map<string, KevEntry>();
+const detailCache = new Map<string, KevEntryDetail>();
 
-const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
+const createDetailPlaceholder = (entry: KevEntrySummary): KevEntryDetail => ({
   ...entry,
   requiredAction: null,
   dueDate: null,
@@ -239,6 +239,8 @@ const createDetailPlaceholder = (entry: KevEntrySummary): KevEntry => ({
   sourceUrl: null,
   references: [],
   aliases: [],
+  metasploitModulePath: null,
+  timeline: [],
 });
 
 const openDetails = async (entry: KevEntrySummary) => {
@@ -256,7 +258,7 @@ const openDetails = async (entry: KevEntrySummary) => {
   detailLoading.value = true;
 
   try {
-    const response = await $fetch<KevEntry>(`/api/kev/${entry.id}`);
+    const response = await $fetch<KevEntryDetail>(`/api/kev/${entry.id}`);
     detailCache.set(entry.id, response);
     detailEntry.value = response;
   } catch (exception) {

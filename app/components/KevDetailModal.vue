@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { parseISO } from "date-fns";
-import type { CatalogSource, KevEntry, KevEntrySummary } from "~/types";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import type { TimelineItem } from "@nuxt/ui";
+import { catalogSourceLabels } from "~/constants/catalogSources";
+import type {
+  CatalogSource,
+  KevEntryDetail,
+  KevEntrySummary,
+  KevEntryTimelineEvent,
+  KevTimelineEventType,
+} from "~/types";
 
 type SourceBadgeMap = Record<
   KevEntrySummary["sources"][number],
@@ -12,7 +20,7 @@ type CvssSeverity = Exclude<KevEntrySummary["cvssSeverity"], null>;
 
 const props = defineProps<{
   open: boolean;
-  entry: KevEntry | null;
+  entry: KevEntryDetail | null;
   loading: boolean;
   error: string | null;
   sourceBadgeMap: SourceBadgeMap;
@@ -96,6 +104,204 @@ const handleYearQuickFilter = (value: string | null) => {
   }
 
   emitQuickFilter({ year: parsed.getFullYear() });
+};
+
+type TimelineMeta = {
+  icon: string;
+  indicator: string;
+  title: (event: KevEntryTimelineEvent, entry: KevEntryDetail) => string;
+  description?: (event: KevEntryTimelineEvent, entry: KevEntryDetail) => string | null;
+};
+
+const getSourceLabel = (source: KevEntryTimelineEvent["source"]): string | null => {
+  if (!source) {
+    return null;
+  }
+
+  if (source === "nvd") {
+    return "NVD";
+  }
+
+  return catalogSourceLabels[source as CatalogSource] ?? source.toUpperCase();
+};
+
+const timelineMeta: Record<KevTimelineEventType | "default", TimelineMeta> = {
+  cve_published: {
+    icon: "i-lucide-scroll-text",
+    indicator: "bg-sky-500 text-white",
+    title: () => "CVE published",
+    description: (_event, entry) =>
+      entry.assigner?.trim()
+        ? `Published by ${entry.assigner}.`
+        : "Initial publication recorded in the NVD feed.",
+  },
+  kev_listed: {
+    icon: "i-lucide-shield-check",
+    indicator: "bg-rose-500 text-white",
+    title: () => `Flagged in ${catalogSourceLabels.kev}`,
+    description: () =>
+      "CISA confirmed active exploitation and added the CVE to the Known Exploited Vulnerabilities catalog.",
+  },
+  enisa_listed: {
+    icon: "i-lucide-shield-half",
+    indicator: "bg-amber-500 text-white",
+    title: () => `Listed by ${catalogSourceLabels.enisa}`,
+    description: () =>
+      "ENISA highlighted this CVE as actively exploited in the Threat Landscape for exploited vulnerabilities.",
+  },
+  metasploit_module: {
+    icon: "i-lucide-swords",
+    indicator: "bg-emerald-500 text-white",
+    title: () => "Metasploit module published",
+    description: event => {
+      const modulePath =
+        typeof event.metadata?.modulePath === "string" && event.metadata.modulePath.trim().length
+          ? event.metadata.modulePath
+          : null;
+      return modulePath ? `Module path: ${modulePath}` : "Exploit module available in Metasploit.";
+    },
+  },
+  historic_reference: {
+    icon: "i-lucide-archive",
+    indicator: "bg-indigo-500 text-white",
+    title: () => "Historic exploitation noted",
+    description: () => "Captured in the historic exploited vulnerability archive.",
+  },
+  exploitation_observed: {
+    icon: "i-lucide-flame",
+    indicator: "bg-orange-500 text-white",
+    title: () => "Exploitation observed",
+    description: () => "Earliest available signal of in-the-wild exploitation.",
+  },
+  custom: {
+    icon: "i-lucide-clock-8",
+    indicator: "bg-neutral-500 text-white",
+    title: () => "Timeline event",
+    description: event => (typeof event.description === "string" ? event.description : null),
+  },
+  default: {
+    icon: "i-lucide-clock-8",
+    indicator: "bg-neutral-500 text-white",
+    title: () => "Timeline event",
+  },
+};
+
+const parseEventTimestamp = (value: string): Date | null => {
+  const trimmed = value?.trim?.();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const sortedTimelineEvents = computed<KevEntryTimelineEvent[]>(() => {
+  if (!props.entry?.timeline?.length) {
+    return [];
+  }
+
+  const events = [...props.entry.timeline];
+  events.sort((first, second) => {
+    const firstDate = parseEventTimestamp(first.timestamp);
+    const secondDate = parseEventTimestamp(second.timestamp);
+
+    if (firstDate && secondDate) {
+      return firstDate.getTime() - secondDate.getTime();
+    }
+
+    if (firstDate) {
+      return -1;
+    }
+
+    if (secondDate) {
+      return 1;
+    }
+
+    return first.timestamp.localeCompare(second.timestamp);
+  });
+
+  return events;
+});
+
+const timelineItems = computed<TimelineItem[]>(() => {
+  const entry = props.entry;
+  if (!entry) {
+    return [];
+  }
+
+  const events = sortedTimelineEvents.value;
+
+  return events.map((event, index) => {
+    const meta = timelineMeta[event.type] ?? timelineMeta.default;
+    const title = event.title ?? meta.title(event, entry);
+    const baseDescription = meta.description?.(event, entry) ?? null;
+    const datasetLabel = getSourceLabel(event.source);
+
+    let description = event.description ?? baseDescription ?? null;
+    if (datasetLabel) {
+      description = description
+        ? `${description} · Source: ${datasetLabel}`
+        : `Source: ${datasetLabel}`;
+    }
+
+    const formattedDate = props.formatOptionalTimestamp(event.timestamp);
+
+    return {
+      value: index,
+      date: formattedDate,
+      title,
+      ...(description ? { description } : {}),
+      icon: event.icon ?? meta.icon,
+      ui: {
+        indicator: `${meta.indicator} ring-4 ring-white/80 dark:ring-neutral-950/80 shadow-lg`,
+      },
+    } satisfies TimelineItem;
+  });
+});
+
+const activeTimelineIndex = computed<number | undefined>(() => {
+  const items = timelineItems.value;
+  return items.length ? items.length - 1 : undefined;
+});
+
+const timelineStats = computed(() => {
+  const events = sortedTimelineEvents.value;
+  if (!events.length) {
+    return null as const;
+  }
+
+  const first = parseEventTimestamp(events[0].timestamp);
+  const last = parseEventTimestamp(events[events.length - 1].timestamp);
+
+  let durationLabel: string | null = null;
+  if (first && last) {
+    const span = Math.abs(differenceInCalendarDays(last, first));
+    if (Number.isFinite(span)) {
+      durationLabel =
+        span === 0
+          ? "Progressed within a single day"
+          : `${span} day${span === 1 ? "" : "s"} from first to latest milestone`;
+    }
+  }
+
+  return {
+    count: events.length,
+    durationLabel,
+  };
+});
+
+const timelineUi = {
+  root: "space-y-6",
+  item: "relative",
+  container: "items-stretch",
+  indicator: "ring-offset-2 ring-offset-white dark:ring-offset-neutral-950 transition",
+  separator:
+    "bg-gradient-to-b from-primary-500/10 via-neutral-200 to-transparent dark:from-primary-500/10 dark:via-neutral-800 dark:to-transparent",
+  wrapper: "pb-6 space-y-1",
+  date: "text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-400",
+  title: "text-sm font-semibold text-neutral-900 dark:text-neutral-100",
+  description: "text-sm leading-relaxed text-neutral-600 dark:text-neutral-300",
 };
 </script>
 
@@ -265,6 +471,63 @@ const handleYearQuickFilter = (value: string | null) => {
                   <p class="text-base text-neutral-900 dark:text-neutral-100">
                     {{ props.formatOptionalTimestamp(props.entry.dateUpdated) }}
                   </p>
+                </div>
+              </div>
+
+              <div
+                class="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white/80 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
+              >
+                <div
+                  class="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary-500/10 via-transparent to-sky-500/10 dark:from-primary-500/20 dark:via-transparent dark:to-sky-500/15"
+                />
+                <div class="relative space-y-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="space-y-1">
+                      <p
+                        class="text-xs font-semibold uppercase tracking-[0.3em] text-primary-600 dark:text-primary-300"
+                      >
+                        Exploit activity
+                      </p>
+                      <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                        Timeline of key milestones
+                      </p>
+                      <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                        Follow how this CVE moved from publication to active exploitation across monitored feeds.
+                      </p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1 text-right">
+                      <UBadge
+                        color="primary"
+                        variant="soft"
+                        class="text-xs font-semibold uppercase tracking-wide"
+                      >
+                        {{ timelineItems.length }}
+                        {{ timelineItems.length === 1 ? "event" : "events" }}
+                      </UBadge>
+                      <span
+                        v-if="timelineStats?.durationLabel"
+                        class="text-xs text-neutral-500 dark:text-neutral-400"
+                      >
+                        {{ timelineStats.durationLabel }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div v-if="timelineItems.length">
+                    <UTimeline
+                      :items="timelineItems"
+                      :default-value="activeTimelineIndex"
+                      :ui="timelineUi"
+                      class="relative"
+                    />
+                  </div>
+                  <div
+                    v-else
+                    class="rounded-xl border border-dashed border-neutral-200 bg-white/70 p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400"
+                  >
+                    We haven't captured enough milestone data for this vulnerability yet. As additional feeds confirm
+                    exploitation, the timeline will light up automatically.
+                  </div>
                 </div>
               </div>
 

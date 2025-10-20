@@ -9,6 +9,27 @@ export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 
 export type CatalogSource = 'kev' | 'enisa' | 'historic' | 'metasploit'
 
+export type KevTimelineEventType =
+  | 'cve_published'
+  | 'kev_listed'
+  | 'enisa_listed'
+  | 'metasploit_module'
+  | 'historic_reference'
+  | 'exploitation_observed'
+  | 'custom'
+
+export type KevEntryTimelineEvent = {
+  id: string
+  timestamp: string
+  type: KevTimelineEventType
+  source?: 'nvd' | CatalogSource
+  title?: string
+  description?: string
+  metadata?: Record<string, string | number | boolean | null>
+  url?: string | null
+  icon?: string | null
+}
+
 export type KevDomainCategory =
   | 'Web Applications'
   | 'Web Servers'
@@ -82,6 +103,10 @@ export type KevEntry = {
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
   internetExposed: boolean
+}
+
+export type KevEntryDetail = KevEntry & {
+  timeline: KevEntryTimelineEvent[]
 }
 
 export type KevEntrySummary = Pick<
