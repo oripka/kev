@@ -2,44 +2,50 @@ import type {
   KevDomainCategory,
   KevEntry,
   KevExploitLayer,
-  KevVulnerabilityCategory
-} from '~/types'
+  KevVulnerabilityCategory,
+} from "~/types";
 
 export type KevBaseEntry = Omit<
   KevEntry,
-  'domainCategories' | 'exploitLayers' | 'vulnerabilityCategories'
->
+  "domainCategories" | "exploitLayers" | "vulnerabilityCategories"
+>;
 
 const domainRules: Array<{
-  category: KevDomainCategory
-  patterns: RegExp[]
+  category: KevDomainCategory;
+  patterns: RegExp[];
 }> = [
   {
-    category: 'Mail Servers',
-    patterns: [/(exchange|outlook|postfix|qmail|sendmail|smtp|mailman|zimbra|lotus)/i]
-  },
-  {
-    category: 'Security Appliances',
-    patterns: [/(fortinet|palo alto|checkpoint|sonicwall|watchguard|firepower|intrusion prevention|ips|ids|securepoint)/i]
-  },
-  {
-    category: 'Networking & VPN',
-    patterns: [/(router|switch|vpn|network|gateway|sd-wan|wireless|wifi|firewall|load balancer|edge|proxy)/i]
-  },
-  {
-    category: 'Browsers',
+    category: "Mail Servers",
     patterns: [
-      /(browser|chrome|firefox|edge|safari|webkit|chromium|brave|opera|internet explorer|msie|trident)/i
-    ]
+      /(exchange|outlook|postfix|qmail|sendmail|smtp|mailman|zimbra|lotus)/i,
+    ],
   },
   {
-    category: 'Web Applications',
+    category: "Security Appliances",
     patterns: [
-      /(wordpress|drupal|joomla|magento|confluence|jira|sharepoint|portal|cms|web application|owa|webmail|jenkins|phpmailer|whatsup gold|commvault|command center|manageengine|grafana|kibana|splunk|tableau|apache (?:struts|ofbiz)|weblogic|wildfly|liferay|alfresco|sap (?:netweaver|portal)|cacti|zabbix|nagios)/i
-    ]
+      /(fortinet|palo alto|checkpoint|sonicwall|watchguard|firepower|intrusion prevention|ips|ids|securepoint)/i,
+    ],
   },
   {
-    category: 'Web Servers',
+    category: "Networking & VPN",
+    patterns: [
+      /(router|switch|vpn|network|gateway|sd-wan|wireless|wifi|firewall|load balancer|edge|proxy)/i,
+    ],
+  },
+  {
+    category: "Browsers",
+    patterns: [
+      /(browser|chrome|firefox|edge|safari|webkit|chromium|brave|opera|internet explorer|msie|trident)/i,
+    ],
+  },
+  {
+    category: "Web Applications",
+    patterns: [
+      /(wordpress|drupal|joomla|magento|confluence|jira|sharepoint|portal|cms|web application|owa|webmail|jenkins|phpmailer|whatsup gold|commvault|command center|manageengine|grafana|kibana|splunk|tableau|apache (?:struts|ofbiz)|weblogic|wildfly|liferay|alfresco|sap (?:netweaver|portal)|cacti|zabbix|nagios)/i,
+    ],
+  },
+  {
+    category: "Web Servers",
     patterns: [
       /(apache (?:http server|httpd))/i,
       /(nginx)/i,
@@ -47,364 +53,481 @@ const domainRules: Array<{
       /(apache tomcat|tomcat|catalina)/i,
       /(jetty)/i,
       /(lighttpd)/i,
-      /(caddy|openresty)/i
-    ]
+      /(caddy|openresty)/i,
+    ],
   },
   {
-    category: 'Operating Systems',
-    patterns: [/(windows|linux|macos|ios|ipad|android|unix|solaris|aix|hp-ux|red hat|ubuntu)/i]
+    category: "Operating Systems",
+    patterns: [
+      /(windows|linux|macos|ios|ipad|android|unix|solaris|aix|hp-ux|red hat|ubuntu)/i,
+    ],
   },
   {
-    category: 'Industrial Control Systems',
-    patterns: [/(ics|scada|plc|siemens|rockwell|schneider electric|abb|industrial)/i]
+    category: "Industrial Control Systems",
+    patterns: [
+      /(ics|scada|plc|siemens|rockwell|schneider electric|abb|industrial)/i,
+    ],
   },
   {
-    category: 'Virtualization & Containers',
-    patterns: [/(vmware|esxi|vsphere|vcenter|hyper-v|virtualization|xen|kubernetes|docker|container)/i]
+    category: "Virtualization & Containers",
+    patterns: [
+      /(vmware|esxi|vsphere|vcenter|hyper-v|virtualization|xen|kubernetes|docker|container)/i,
+    ],
   },
   {
-    category: 'Cloud & SaaS',
-    patterns: [/(cloud|azure|aws|salesforce|service-now|servicenow|google workspace|office 365|okta|auth0)/i]
+    category: "Cloud & SaaS",
+    patterns: [
+      /(cloud|azure|aws|salesforce|service-now|servicenow|google workspace|office 365|okta|auth0)/i,
+    ],
   },
   {
-    category: 'Database & Storage',
-    patterns: [/(database|sql server|mysql|postgres|oracle|mongodb|db2|couchbase|sap hana|storage|nas|netapp|iscsi)/i]
-  }
-]
+    category: "Database & Storage",
+    patterns: [
+      /(database|sql server|mysql|postgres|oracle|mongodb|db2|couchbase|sap hana|storage|nas|netapp|iscsi)/i,
+    ],
+  },
+];
 
 const internetEdgeDomainHints: KevDomainCategory[] = [
-  'Networking & VPN',
-  'Web Applications',
-  'Web Servers',
-  'Mail Servers',
-  'Cloud & SaaS',
-  'Security Appliances'
-]
+  "Networking & VPN",
+  "Web Applications",
+  "Web Servers",
+  "Mail Servers",
+  "Cloud & SaaS",
+  "Security Appliances",
+];
 
 const matchesAny = (value: string, patterns: RegExp[]) =>
-  patterns.some(pattern => pattern.test(value))
+  patterns.some((pattern) => pattern.test(value));
 
 type CvssVectorTraits = {
-  attackVector?: 'P' | 'L' | 'A' | 'N'
-  privilegesRequired?: 'N' | 'L' | 'H'
-  userInteraction?: 'N' | 'R'
-}
+  attackVector?: "P" | "L" | "A" | "N";
+  privilegesRequired?: "N" | "L" | "H";
+  userInteraction?: "N" | "R";
+};
 
 const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
   if (!vector) {
-    return null
+    return null;
   }
 
-  const metrics: Record<string, string> = {}
-  const tokens = vector.trim().split('/')
+  const metrics: Record<string, string> = {};
+  const tokens = vector.trim().split("/");
 
   for (const token of tokens) {
-    const [metric, value] = token.split(':')
+    const [metric, value] = token.split(":");
     if (!value) {
-      continue
+      continue;
     }
 
-    const upperMetric = metric.toUpperCase()
-    if (upperMetric === 'AV' || upperMetric === 'PR' || upperMetric === 'UI') {
-      metrics[upperMetric] = value.toUpperCase()
+    const upperMetric = metric.toUpperCase();
+    if (upperMetric === "AV" || upperMetric === "PR" || upperMetric === "UI") {
+      metrics[upperMetric] = value.toUpperCase();
     }
   }
 
   if (!metrics.AV && !metrics.PR && !metrics.UI) {
-    return null
+    return null;
   }
 
   return {
-    attackVector: metrics.AV as CvssVectorTraits['attackVector'] | undefined,
-    privilegesRequired: metrics.PR as CvssVectorTraits['privilegesRequired'] | undefined,
-    userInteraction: metrics.UI as CvssVectorTraits['userInteraction'] | undefined
-  }
-}
+    attackVector: metrics.AV as CvssVectorTraits["attackVector"] | undefined,
+    privilegesRequired: metrics.PR as
+      | CvssVectorTraits["privilegesRequired"]
+      | undefined,
+    userInteraction: metrics.UI as
+      | CvssVectorTraits["userInteraction"]
+      | undefined,
+  };
+};
+
+// --- Primary edge / perimeter products (VPNs, gateways, ADCs, secure access) ---
 const edgeStrongProductPatterns: RegExp[] = [
-  /(citrix (?:adc|netscaler|gateway|workspace))/i,
-  /(netscaler)/i,
-  /(pulse (?:secure|connect secure))/i,
-  /(ivanti (?:connect secure|policy secure|secure access))/i,
-  /(globalprotect)/i,
-  /(pan-?os)/i,
-  /(forti(?:gate|os|web|proxy|wan))/i,
-  /(big[- ]?ip|f5\s*(?:big[- ]?ip|traffic manager))/i,
-  /(zscaler)/i,
-  /(barracuda (?:cloudgen|ssl vpn|remote access))/i,
-  /(sonicwall)/i,
-  /(check point)/i,
-  /(cisco (?:asa|anyconnect|secure (?:desktop|firewall)|vpn))/i,
-  /(secure mobile access)/i,
-  /(remote desktop (?:gateway|web access)|rd\s?(?:gateway|web))/i,
-  /(microsoft exchange|exchange server|exchange online)/i,
-  /(outlook web access|owa)/i
-]
+  // Citrix / Netscaler family
+  /\b(?:citrix (?:adc|netscaler|gateway|workspace|access gateway)|netscaler)\b/i,
 
+  // Ivanti / Pulse Secure / Connect Secure / Policy Secure
+  /\b(?:pulse (?:secure|connect secure)|ivanti (?:connect secure|policy secure|secure access))\b/i,
+
+  // Palo Alto Networks
+  /\bglobalprotect\b/i,
+  /\bpan[-\s]?os\b/i,
+
+  // Fortinet products
+  /\bforti(?:gate|os|web|proxy|wan|manager|analyzer)\b/i,
+
+  // F5 Networks / BIG-IP / TMOS
+  /\b(?:big[-\s]?ip|f5\s*(?:big[-\s]?ip|traffic manager|advanced waf|asm|ltm|gtm|tmos))\b/i,
+
+  // Zscaler / Barracuda / SonicWall / Check Point
+  /\bzscaler\b/i,
+  /\bbarracuda (?:cloudgen|ssl[-\s]?vpn|remote access|firewall)\b/i,
+  /\bsonicwall(?: ssl[-\s]?vpn| mobile connect)?\b/i,
+  /\bcheck\s?point(?: firewall| gateway| vpn)?\b/i,
+
+  // Cisco family (ASA, AnyConnect, Secure Firewall)
+  /\bcisco (?:asa|anyconnect|secure (?:desktop|firewall|vpn)|adaptive security appliance)\b/i,
+  /\bsecure mobile access\b/i,
+
+  // Microsoft remote access and email edge services
+  /\bremote desktop (?:gateway|web access|connection broker)\b/i,
+  /\brd\s?(?:gateway|web|connection)\b/i,
+  /\b(?:microsoft )?exchange (?:server|online|service)?\b/i,
+  /\boutlook web access\b|\bowa\b/i,
+
+  // Other edge products
+  /\b(?:beyondtrust|privileged remote access|remote support)\b/i,
+  /\b(?:cloudgenix|prisma access|panorama)\b/i,
+  /\b(?:watchguard|sangfor|sonicwall|sophos xg|forticlient)\b/i
+];
+
+// --- Secondary / supporting web-facing or collaboration products often exposed on edge ---
 const edgeSupportingProductPatterns: RegExp[] = [
-  /(sharepoint)/i,
-  /(jira)/i,
-  /(confluence)/i,
-  /(bitbucket)/i,
-  /(gitlab)/i,
-  /(workspace one)/i,
-  /(vpn (?:portal|gateway))/i
-]
+  // Collaboration and dev tools
+  /\b(?:sharepoint|jira|confluence|bitbucket|gitlab|github enterprise|atlassian)\b/i,
 
+  // Workspace / endpoint management
+  /\bworkspace one\b/i,
+  /\bvmware horizon\b/i,
+  /\bcitrix workspace\b/i,
+
+  // Generic VPN portal references
+  /\bvpn (?:portal|gateway|interface|web (?:portal|login|ui))\b/i,
+
+  // Remote collaboration / content systems
+  /\b(?:nextcloud|owncloud|mattermost|rocket\.chat|msteams|teams web)\b/i,
+
+  // Web management and configuration interfaces
+  /\bweb management (?:portal|interface|console)\b/i
+];
+
+// --- Patterns indicating network edge / externally reachable services ---
 const edgeContextPatterns: RegExp[] = [
-  /(ssl[- ]?vpn)/i,
-  /(clientless vpn)/i,
-  /(vpn (?:portal|gateway|service|interface|server))/i,
-  /(remote (?:access|portal|service|authentication|desktop))/i,
-  /(internet[- ]?facing|public[- ]?facing|externally accessible|exposed to the internet)/i,
-  /(edge (?:device|gateway|service))/i,
-  /(webvpn)/i,
-  /(citrix (?:gateway|netscaler|adc))/i,
-  /(rd\s?web|rdweb|remote desktop (?:web|gateway))/i,
-  /(outlook web access|owa)/i,
-  /(exchange web services|ews)/i
-]
+  // VPN / remote access
+  /\bssl[-\s]?vpn\b/i,
+  /\bclientless\s+vpn\b/i,
+  /\bvpn (?:portal|gateway|service|interface|server)\b/i,
+  /\bremote (?:access|portal|service|authentication|desktop|gateway|connection)\b/i,
+  /\b(?:rd\s?web|rdweb|remote desktop (?:web|gateway|service|protocol))\b/i,
 
+  // Internet-exposed / edge terms
+  /\b(?:internet[-\s]?facing|public[-\s]?facing|externally accessible|exposed (?:to|on) the internet|public endpoint|external interface)\b/i,
+  /\bedge (?:device|gateway|service|controller)\b/i,
+
+  // Citrix / remote gateway / ADC
+  /\b(?:citrix (?:gateway|netscaler|adc|access gateway)|netscaler|adc)\b/i,
+
+  // WebVPN and remote web interfaces
+  /\bwebvpn\b/i,
+  /\bvpn web (?:portal|interface|login)\b/i,
+
+  // Microsoft remote access and mail
+  /\b(outlook web access|owa|exchange web services|ews)\b/i,
+  /\bexchange (?:server|online|service)\b/i,
+
+  // Other popular remote access / edge products
+  /\b(pulse connect secure|globalprotect|fortigate ssl[-\s]?vpn|sonicwall ssl[-\s]?vpn|cisco asa|zscaler|anyconnect)\b/i,
+  /\b(remote support|privileged remote access|beyondtrust)\b/i
+];
+
+// --- Patterns for web-based edge portals / login interfaces ---
 const edgePortalPatterns: RegExp[] = [
-  /(web (?:portal|login|interface|console|client))/i,
-  /(portal (?:access|login|interface))/i,
-  /(remote portal)/i,
-  /(vpn web (?:portal|interface))/i
-]
+  /\bweb (?:portal|login|interface|console|client|ui)\b/i,
+  /\bportal (?:access|login|interface|dashboard)\b/i,
+  /\bremote portal\b/i,
+  /\bvpn web (?:portal|interface|login)\b/i,
+  /\b(edge|internet)[-\s]?portal\b/i,
+  /\b(access (?:portal|gateway))\b/i
+];
 
+// --- Patterns related to mail / Exchange / OWA edge services ---
 const edgeMailPatterns: RegExp[] = [
-  /(microsoft exchange|exchange server|exchange online)/i,
-  /(outlook web access|owa)/i,
-  /(exchange web services|ews)/i
-]
+  /\bmicrosoft exchange\b/i,
+  /\bexchange (?:server|online|web services|service)\b/i,
+  /\b(outlook web access|owa)\b/i,
+  /\bexchange web services\b|\bews\b/i,
+  /\b(mail web portal|mail (?:interface|gateway|service))\b/i
+];
 
 const webProductPatterns: RegExp[] = [
-  /(jenkins)/i,
-  /(phpmailer)/i,
-  /(apache (?:struts|ofbiz|roller|felix))/i,
-  /(weblogic|websphere|glassfish|wildfly|jboss)/i,
-  /(wordpress|drupal|joomla|magento|opencart|prestashop|woocommerce)/i,
-  /(confluence|jira|bitbucket|crowd|bamboo)/i,
-  /(sharepoint|liferay|alfresco|sitecore|strapi)/i,
-  /(coldfusion)/i,
-  /(e-?business suite|ebs)/i,
-  /(bi publisher)/i,
-  /(netweaver)/i,
-  /(manageengine|servicedesk|adselfservice|opmanager|desktop central)/i,
-  /(endpoint manager)/i,
-  /(grafana|kibana|splunk|tableau|superset)/i,
-  /(sap (?:portal|netweaver|commerce|hybris))/i,
-  /(progress.*whatsup gold|whatsup gold)/i,
-  /(commvault.*command center|command center)/i,
-  /(zimbra|roundcube|webmail|owa|outlook web)/i,
-  /(phpmyadmin|cacti|zabbix|nagios|pfsense)/i,
-  /(gitlab|gitbucket|gitea|bitbucket)/i,
-  /(ip camera|nvr|dvr|webcam)/i,
-  /(qlik\s*sense)/i,
-  /(goanywhere)/i,
-  /(crushftp)/i,
-  /(pulse connect secure)/i,
-  /(cityworks)/i,
-  /(jasperreports)/i,
-  /(langflow)/i,
-  /(simplehelp)/i,
-  /(projectsend)/i,
-  /(veracore)/i,
-  /(adminer)/i,
-  /(identity services engine|cisco ise)/i,
-  /(apex one)/i,
-  /(sysaid)/i,
-  /(fortiweb)/i,
-  /(telemessages?)/i,
-  /(sonicwall)/i,
-  /(md[a]?emon)/i,
-  /(geovision)/i,
-  /(rails)/i,
-  /(jquery)/i,
-  /(cobalt strike)/i,
-  /(flash player)/i,
-  /(vcenter)/i,
-  /(imagemagick)/i,
-  /(connect secure|policy secure|neurons)/i,
-  /(n[- ]?central)/i,
-  /(aviatrix)/i,
-  /(beyondtrust)/i,
-  /(privileged remote access|remote support)/i,
-  /(cloud services appliance|csa)/i,
-  /(velo?cloud)/i,
-  /(sd[- ]?wan (?:edge|orchestrator|controller))/i,
-  /(spring (?:boot|framework|cloud|data|security|mvc|core|commons))/i,
-  /(adobe experience manager|aem forms|aem)/i,
-  /(draytek|vigor[0-9]+)/i,
-  /(sonicos)/i,
-  /(fortios)/i,
-  /(exchange (?:server)?)/i,
-  /(proxylogon)/i,
-  /(sophos)/i,
-  /(tp-?link|tplink)/i,
-  /(archer)/i,
-  /(d-?link)/i,
-  /(cisco (?:asa|adaptive security appliance))/i,
-  /\badaptive security appliance\b/i,
-  /\bwebvpn\b/i
-]
+  // --- CI/CD, DevOps, developer tools ---
+  /\bjenkins\b/i,
+  /\bphpmailer\b/i,
+  /\b(?:gitlab|gitbucket|gitea|bitbucket|github enterprise)\b/i,
+  /\b(?:confluence|jira|crowd|bamboo)\b/i,
+  /\b(?:langflow|projectsend|simplehelp)\b/i,
 
+  // --- Apache / Java web stacks ---
+  /\bapache (?:struts|ofbiz|roller|felix|cordova|airflow)\b/i,
+  /\b(?:weblogic|websphere|glassfish|wildfly|jboss|tomcat|catalina)\b/i,
+  /\bspring (?:boot|framework|cloud|data|security|mvc|core|commons)\b/i,
+
+  // --- Web CMS / e-commerce platforms ---
+  /\b(?:wordpress|drupal|joomla|magento|opencart|prestashop|woocommerce|typo3|umbraco|dotcms)\b/i,
+  /\b(?:liferay|alfresco|sitecore|strapi|sharepoint)\b/i,
+  /\b(?:adobe experience manager|aem forms|aem)\b/i,
+
+  // --- Reporting / BI / analytics ---
+  /\b(?:grafana|kibana|splunk|tableau|superset|qlik\s*sense|jasperreports|bi publisher)\b/i,
+
+  // --- Enterprise apps / middleware / ERP / CRM ---
+  /\b(?:sap (?:portal|netweaver|commerce|hybris)|netweaver|e[-\s]?business suite|ebs)\b/i,
+  /\b(?:oracle fusion|oracle weblogic|progress wh?atsup gold|whatsup gold)\b/i,
+  /\b(?:commvault.*command center|command center)\b/i,
+  /\b(?:manageengine|servicedesk|adselfservice|opmanager|desktop central|endpoint manager)\b/i,
+  /\b(?:sysaid|cityworks|veracore)\b/i,
+
+  // --- Security / remote access / VPN / gateways ---
+  /\b(?:pulse connect secure|connect secure|policy secure)\b/i,
+  /\b(?:fortinet|fortiweb|fortios|fortigate)\b/i,
+  /\b(?:sonicwall|sonicos)\b/i,
+  /\b(?:beyondtrust|privileged remote access|remote support)\b/i,
+  /\b(?:cisco ise|identity services engine|cisco asa|adaptive security appliance)\b/i,
+  /\b(?:vpn (?:appliance|portal)|webvpn|cloud services appliance|csa)\b/i,
+  /\b(?:velo?cloud|sd[-\s]?wan (?:edge|orchestrator|controller)|aviatrix|n[-\s]?central)\b/i,
+
+  // --- Monitoring / IT infrastructure ---
+  /\b(?:phpmyadmin|cacti|zabbix|nagios|pfsense|opennms|prometheus|graylog)\b/i,
+  /\b(?:progress.*whatsup gold|whatsup gold)\b/i,
+
+  // --- Web / mail services ---
+  /\b(?:zimbra|roundcube|webmail|owa|outlook web|exchange (?:server)?|proxylogon|mdaemon)\b/i,
+  /\b(?:coldfusion|rails|jquery|imagemagick|flash player|adminer)\b/i,
+
+  // --- Devices / appliances / firmware-exposed products ---
+  /\b(?:ip camera|nvr|dvr|webcam|nas|geovision|draytek|vigor[0-9]+|tp[-\s]?link|tplink|archer|d[-\s]?link|sophos)\b/i,
+
+  // --- Misc enterprise products ---
+  /\b(?:apex one|telemessages?|n[-\s]?central|goanywhere|crushftp)\b/i
+];
+
+// --- Web server / application container patterns ---
 const webServerPatterns: RegExp[] = [
-  /(apache (?:http server|httpd))/i,
-  /(nginx)/i,
-  /(internet information services|microsoft iis|iis)/i,
-  /(apache tomcat|tomcat|catalina)/i,
-  /(jetty)/i,
-  /(lighttpd)/i,
-  /(caddy|openresty)/i
-]
+  // Apache family
+  /\bapache(?: http server| httpd)?\b/i,
+  /\bhttpd\b/i,
 
+  // Nginx, Caddy, OpenResty
+  /\bnginx\b/i,
+  /\bcaddy\b/i,
+  /\bopenresty\b/i,
+
+  // Microsoft IIS / Internet Information Services
+  /\b(?:internet information services|microsoft iis|\biis\b)\b/i,
+
+  // Java / servlet containers
+  /\bapache tomcat\b|\btomcat\b|\bcatalina\b/i,
+  /\bjetty\b/i,
+  /\bglassfish\b/i,
+  /\bwildfly\b/i,
+  /\bjboss\b/i,
+  /\bresin server\b/i,
+  /\bweblogic\b/i,
+  /\bwebsphere\b/i,
+
+  // Lightweight or embedded servers
+  /\blighttpd\b/i,
+  /\bcherokee\b/i,
+  /\bmongoose server\b/i,
+  /\bboa server\b/i,
+  /\bminihttpd\b/i
+];
+
+// --- Devices / appliances / embedded web interfaces ---
 const webDevicePatterns: RegExp[] = [
-  /(ip camera|nvr|dvr|webcam|nas)/i,
-  /(router|gateway|access point|wireless controller|firewall|ap)/i,
-  /(security appliance|vpn appliance)/i
-]
+  // Cameras, recorders, NAS, webcams
+  /\b(ip camera|nvr|dvr|webcam|nas|network[-\s]?storage|surveillance camera)\b/i,
 
+  // Routers, gateways, Wi-Fi controllers, firewalls, VPNs
+  /\b(router|gateway|access point|wireless controller|firewall|ap|repeater|range extender)\b/i,
+
+  // Appliances and embedded devices
+  /\b(security appliance|vpn appliance|load[-\s]?balancer|proxy appliance|edge device)\b/i,
+  /\b(printer|mfp|copier|print server)\b/i,
+  /\b(iot device|smart[-\s]?(plug|camera|lock|switch|tv))\b/i,
+  /\b(network[-\s]?attached device|industrial control|plc|scada)\b/i
+];
+
+// --- Negative (browser / client app) patterns ---
+// Used to filter out mentions that should NOT trigger "web server" detection.
 const webNegativePatterns: RegExp[] = [
-  /(internet explorer)/i,
-  /(google chrome)/i,
-  /(mozilla firefox)/i,
-  /(microsoft edge)/i,
-  /(safari)/i,
-  /(brave)/i,
-  /(opera)/i,
-  /(vivaldi)/i,
+  /\binternet explorer\b/i,
+  /\bgoogle chrome\b/i,
+  /\bmozilla firefox\b/i,
+  /\bmicrosoft edge\b/i,
+  /\bapple safari\b/i,
+  /\bbrave\b/i,
+  /\bopera(?: mini| gx)?\b/i,
+  /\bvivaldi\b/i,
+  /\bduckduckgo browser\b/i,
+  /\bedge(?: chromium)?\b/i,
+  /\bmobile safari\b/i,
+  /\bandroid browser\b/i,
+  /\biphone browser\b/i,
   /\bbrowser\b/i
-]
-
+];
+// --- Web indicators of attack types or exploit primitives ---
 const webIndicatorPatterns: RegExp[] = [
-  /(cross[- ]?site scripting|xss)/i,
-  /(xml external entity|xxe)/i,
-  /(server[- ]?side request forgery|ssrf)/i,
-  /(sql injection|sqli)/i,
-  /(directory traversal|path traversal)/i,
-  /(?:\.\.\/){1,}/i,
-  /(remote file inclusion|rfi)/i,
-  /(open redirect|url redirect)/i,
-  /(arbitrary (?:file|code) upload|file upload|file download)/i,
-  /(command injection|os command)/i,
-  /(template injection|twig|freemarker)/i,
-  /(cross[- ]?site request forgery|csrf)/i,
-  /\.(?:php|jsp|asp|aspx|cgi|pl|js)\b/i,
-  /(\/[a-z0-9._-]+){1,}\/[a-z0-9._-]+\.(?:php|jsp|asp|aspx|cgi|pl|js)/i,
-  /\bwebvpn\b/i
-]
+  // Injection and scripting
+  /\bcross[-\s]?site scripting\b|\bxss\b/i,
+  /\bxml external entity\b|\bxxe\b/i,
+  /\bserver[-\s]?side request forgery\b|\bssrf\b/i,
+  /\bsql injection\b|\bsqli\b/i,
+  /\b(command|os)[-\s]?injection\b/i,
+  /\btemplate[-\s]?injection\b|\b(twig|freemarker|jinja2|handlebars|velocity)\b/i,
 
+  // File traversal / inclusion / upload
+  /\b(directory|path)[-\s]?traversal\b/i,
+  /(?:\.\.\/){1,}/i,
+  /\b(remote|local) file inclusion\b|\brfi\b|\blfi\b/i,
+  /\b(arbitrary (?:file|code) upload|file (?:upload|download|overwrite|replace))\b/i,
+
+  // Redirects / deserialization / misc
+  /\b(open|url)[-\s]?redirect\b/i,
+  /\bdeserialization\b|\bserialized object\b/i,
+  /\bprototype pollution\b/i,
+  /\bcross[-\s]?site request forgery\b|\bcsrf\b/i,
+
+  // Script / dynamic web extension indicators
+  /\.(?:php\d*|jsp|asp|aspx|cgi|pl|js|py|rb|lua|cfm)\b/i,
+  /\/[a-z0-9._-]+\/[a-z0-9._-]+\.(?:php|jsp|asp|aspx|cgi|pl|js|py|rb|cfm)\b/i,
+
+  // VPN / web portals / embedded web services
+  /\bwebvpn\b/i,
+  /\bclientless vpn\b/i
+];
+
+// --- Web application / service context (strong indicators) ---
 const webStrongContextPatterns: RegExp[] = [
-  /(web (?:interface|console|ui|portal|application|service|dashboard|admin|client))/i,
-  /(management (?:interface|portal|console|ui|plane|dashboard|panel))/i,
-  /(admin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel))/i,
-  /(administrative (?:interface|portal|console|ui|dashboard|panel))/i,
-  /(super-?admin)/i,
-  /(control panel|control plane|control center)/i,
-  /(login (?:portal|page|interface|screen|panel))/i,
-  /(server url)/i,
-  /(parental control page)/i,
-  /(browser[- ]?based|web[- ]?based)/i,
-  /(web content)/i,
+  // web interfaces, consoles, dashboards
+  /\bweb (?:interface|console|ui|portal|application|service|dashboard|admin|client)\b/i,
+  /\bmanagement (?:interface|portal|console|ui|plane|dashboard|panel)\b/i,
+  /\badmin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel)\b/i,
+  /\badministrative (?:interface|portal|console|ui|dashboard|panel)\b/i,
+  /\bsuper[-\s]?admin\b/i,
+  /\b(control (?:panel|plane|center))\b/i,
+  /\blogin (?:portal|page|interface|screen|panel)\b/i,
+  /\bserver url\b/i,
+  /\b(parental control page|browser[-\s]?based|web[-\s]?based|web content)\b/i,
+
+  // HTTP / HTTPS / request/response context
   /(?:via|over)\s+https?/i,
   /https?:\/\//i,
-  /\bhttp\b[^.]*\b(request|response|endpoint|header|parameter|query)\b/i,
-  /https?\s*(?:request|requests|response|responses)/i,
-  /(crafted[^.]{0,40}https?)/i,
-  /(cgi[-/]bin)/i,
-  /(\/userRpm\/)/i,
-  /(http post (?:request|handler))/i,
+  /\bhttp\b[^.]{0,40}\b(request|response|endpoint|header|parameter|query)\b/i,
+  /\bhttps?\s*(?:request|requests|response|responses)\b/i,
+  /\bcrafted[^.]{0,40}https?\b/i,
+
+  // server components
+  /\bcgi[-/]bin\b/i,
+  /\b\/userRpm\/\b/i,
+  /\bhttp post (?:request|handler)\b/i,
+  /\bhttpd\b|\bweb server\b|\bvpn web server\b/i,
+
+  // APIs and protocols
+  /\b\/[a-z0-9_-]*api\b/i,
+  /\b(rest|graphql|soap|json[-\s]?rpc)\s+api\b/i,
+  /\bapi (?:request|response|endpoint|call|gateway)\b/i,
+  /\b(?:get|post|put|delete|patch)\s+requests?\b/i,
+
+  // Misc portal / VPN terms
   /\bwebvpn\b/i,
-  /(vpn (?:web )?portal)/i,
-  /(\/[a-z0-9_-]*api\b)/i,
-  /(rest api|graphql|soap api|json-rpc)/i,
-  /(csrf|cross[- ]?site request forgery)/i,
-  /(deserialization|serialized object)/i,
-  /(crafted (?:http )?requests?)/i,
-  /(cgi|servlet)/i,
-  /(httpd)/i,
-  /(web server)/i,
-  /(vpn web server)/i,
-  /(api (?:request|response|endpoint|call))/i,
-  /(?:rest|graphql|soap|json)\s+api/i,
-  /\b(?:get|post|put|delete|patch)\s+requests?\b/i
-]
+  /\b(vpn (?:web )?portal)\b/i
+];
 
+// --- Web interface context often found in embedded / device products ---
 const webDeviceContextPatterns: RegExp[] = [
-  /(web interface|web management|web console|browser)/i,
+  /\b(web (?:interface|management|console)|browser)\b/i,
   /https?:\/\//i,
-  /(crafted requests?)/i,
+  /\bcrafted requests?\b/i,
   /\bhttp\b/i,
-  /(cgi)/i
-]
+  /\bcgi\b/i,
+  /\bweb[-\s]?ui\b/i,
+  /\brouter web interface\b/i,
+  /\bdevice (?:web|browser) portal\b/i
+];
 
+// --- Admin / management panel context ---
 const webManagementPatterns: RegExp[] = [
-  /(management (?:interface|portal|console|ui|plane|dashboard|panel))/i,
-  /(admin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel))/i,
-  /(administrative (?:interface|portal|console|ui|dashboard|panel))/i,
-  /(admin(?:istrator)? account)/i,
-  /(super-?admin)/i,
-  /(control panel|control plane|control center)/i,
-  /(login (?:portal|page|interface|screen|panel))/i,
-  /(server url)/i,
-  /\bwebvpn\b/i
-]
+  /\bmanagement (?:interface|portal|console|ui|plane|dashboard|panel)\b/i,
+  /\badmin(?:istrator)? (?:interface|portal|console|ui|dashboard|panel)\b/i,
+  /\badministrative (?:interface|portal|console|ui|dashboard|panel)\b/i,
+  /\badmin(?:istrator)? account\b/i,
+  /\bsuper[-\s]?admin\b/i,
+  /\b(control panel|control plane|control center)\b/i,
+  /\blogin (?:portal|page|interface|screen|panel)\b/i,
+  /\bserver url\b/i,
+  /\bwebvpn\b/i,
+  /\bweb management interface\b/i,
+  /\bconfiguration (?:page|portal|ui)\b/i
+];
 
 const webApiPatterns: RegExp[] = [
-  /(rest(?:ful)? api)/i,
-  /(graphql api)/i,
-  /(soap api)/i,
-  /(json api)/i,
-  /(web api)/i,
-  /(api endpoint)/i,
-  /(api interface)/i,
-  /(api (?:request|response|call|gateway|server))/i,
-  /\/api\b/i
-]
+  // REST / Web / GraphQL / SOAP / JSON / gRPC
+  /\brest(?:[-\s]?ful)?(?:[-\s]?api)?\b/i,
+  /\bgraphql(?:[-\s]?api)?\b/i,
+  /\bsoap(?:[-\s]?api)?\b/i,
+  /\bjson(?:[-\s]?api)?\b/i,
+  /\bweb[-\s]?api\b/i,
+  /\bapi[-\s]?endpoint\b/i,
+  /\bapi[-\s]?interface\b/i,
+  /\bapi (?:request|response|call|gateway|server|client)\b/i,
+  /(?:^|[^a-z0-9])\/api(?:\/[a-z0-9._~-]+)?\b/i,
+  /\bgrpc\b/i,
+  /\bopenapi\b/i,
+  /\bswagger\b/i
+];
 
 const nonWebProductPatterns: RegExp[] = [
-  /(kernel|driver|firmware|microcode|bootloader|hypervisor)/i,
-  /(common log file system|clfs)/i,
-  /(sandbox escape)/i,
-  /(microsoft management console|\bmmc\b)/i
-]
+  // OS, low-level, or non-web subsystems
+  /\b(kernel|driver|firmware|microcode|bootloader|hypervisor|bios|uefi)\b/i,
+  /\b(common log file system|clfs)\b/i,
+  /\bsandbox[-\s]?escape\b/i,
+  /\b(microsoft management console|\bmmc\b)\b/i,
+  /\b(directx|gdi|win32k|windows kernel|ntoskrnl|system driver)\b/i,
+  /\b(printer driver|graphics driver|network driver)\b/i
+];
 
 const nonWebContextPatterns: RegExp[] = [
-  /(physical access)/i,
-  /(local privilege escalation|locally)/i,
-  /(stack[- ]?based buffer overflow|heap[- ]?based buffer overflow|buffer overflow|out[- ]?of[- ]?bounds|use[- ]?after[- ]?free|memory corruption)/i,
-  /(command line interface|\bcli\b)/i
-]
+  /\bphysical access\b/i,
+  /\b(local privilege escalation|locally|local user|local attacker)\b/i,
+  /\b(stack[-\s]?based buffer overflow|heap[-\s]?based buffer overflow|buffer overflow|out[-\s]?of[-\s]?bounds|use[-\s]?after[-\s]?free|memory corruption)\b/i,
+  /\b(command[-\s]?line interface|\bcli\b|shell access|console)\b/i,
+  /\b(file system|filesystem|disk|volume)\b/i
+];
 
 const privilegePatterns: RegExp[] = [
-  /(privilege escalation|elevation of privilege|gain[s]? (?:administrative|root|privileges?)|eop)/i
-]
+  /\b(privilege escalation|elevation of privilege|gain(?:s|ed)? (?:administrative|root|system|kernel|user|superuser) privileges?|eop|lpe)\b/i
+];
 
 const remoteExecutionPatterns: RegExp[] = [
-  /(remote code execution)/i,
-  /(execute code remotely)/i,
-  /(remote execution)/i,
-  /\bRCE\b/i
-]
+  /\b(remote code execution|rce)\b/i,
+  /\b(execute code remotely|remote execution|arbitrary remote code)\b/i,
+  /\b(remote exploit|remote payload)\b/i
+];
 
 const codeExecutionPatterns: RegExp[] = [
-  /(execute arbitrary code)/i,
-  /(arbitrary code execution)/i,
-  /(run arbitrary code)/i,
-  /(code[- ]?execution)/i
-]
+  /\b(execute arbitrary code|arbitrary code execution|run arbitrary code|code[-\s]?execution|execute injected code)\b/i,
+  /\b(arbitrary command execution|command injection)\b/i
+];
 
 const remoteContextPatterns: RegExp[] = [
-  /(remote (?:attacker|user|actor|threat))/i,
-  /(remote,? (?:unauthenticated|authenticated) attacker)/i,
+  // remote actor context
+  /\bremote (?:attacker|user|actor|threat|client|system|host)\b/i,
+  /\bremote,?\s*(?:unauthenticated|authenticated)\s+attacker\b/i,
   /\bremotely\b/i,
-  /(over the network|across the network|network[- ]based attacker|network access)/i,
-  /(via (?:the )?network)/i,
-  /(via (?:http|https|smb|rpc|rdp|ftp|smtp|imap|pop3|dns|tcp|udp|ldap|snmp|modbus|dce\/?rpc))/i,
-  /(through (?:http|https|smb|rpc|rdp|ftp|smtp|imap|pop3|dns|tcp|udp|ldap|snmp|modbus|dce\/?rpc))/i,
-  /(crafted (?:request|packet|payload|network request|network traffic|network message))/i
-]
 
+  // network or protocol context
+  /\b(over|across|via|through)\s+(?:the\s+)?network\b/i,
+  /\b(network[-\s]?(?:based|accessible|reachable)|network access)\b/i,
+
+  // specific protocols / transports
+  /\b(?:http|https|smb|rpc|rdp|ftp|smtp|imap|pop3|dns|tcp|udp|ldap|snmp|modbus|dce\/?rpc|nfs|ssh|telnet|mqtt|coap)\b/i,
+
+  // crafted request / packet / payload / traffic indicators
+  /\bcrafted (?:request|packet|payload|network (?:request|traffic|message|packet))\b/i,
+  /\bmalformed (?:packet|request|response|payload)\b/i,
+  /\bnetwork (?:message|frame|datagram|stream)\b/i
+];
 
 // Enhanced and safer regexes to detect memory corruption vulnerabilities
 const memoryCorruptionPatterns: RegExp[] = [
@@ -433,9 +556,8 @@ const memoryCorruptionPatterns: RegExp[] = [
   /\b(?:integer (?:overflow|underflow)|signedness (?:error|issue))\b/i,
 
   // Format string vulns that cause memory corruption
-  /\bformat[-\s]?string(?: vulnerability| bug)?\b/i
+  /\bformat[-\s]?string(?: vulnerability| bug)?\b/i,
 ];
-
 
 const denialOfServicePatterns: RegExp[] = [
   // explicit denial-of-service phrases (keeps "dos" only when part of "dos attack" or as DDoS/DoS forms)
@@ -463,189 +585,293 @@ const denialOfServicePatterns: RegExp[] = [
   /\b(?:thread(?:[-\s]?leak)|handle(?:[-\s]?leak)|descriptor(?:[-\s]?leak)|socket(?:[-\s]?leak)|allocation(?:[-\s]?storm)|memory(?:[-\s]?blast|[-\s]?storm))\b/i,
 
   // other DoS-related primitives (heap spray is often used for exploitation but can show resource abuse)
-  /\b(?:heap(?:[-\s]?spray)|allocation(?:[-\s]?bomb))\b/i
+  /\b(?:heap(?:[-\s]?spray)|allocation(?:[-\s]?bomb))\b/i,
 ];
 
+// Enhanced client-side signal detection (low false-positive)
 const clientSignalPatterns: RegExp[] = [
-  /(client[- ]?side)/i,
-  /(browser|chrome|firefox|edge|safari|webkit|internet explorer|msie|trident)/i,
-  /(desktop|workstation|endpoint|reader|viewer|player)/i,
-  /(local user|user interaction)/i
-]
+  // client-side / client side / clientside (allow hyphen, space, or none)
+  /\bclient(?:[-\s]?side|side)\b/i,
+  /\bclientside\b/i, // explicit no-hyphen form if text is normalized
 
+  // Browsers and rendering engines (include common engine tokens)
+  /\b(?:browser|web browser|chrome|google chrome|chromium|firefox|mozilla firefox|edge|msedge|safari|webkit|blink|internet explorer|ie|msie|trident|opera|opera mini|uc browser|brave)\b/i,
+  /\b(?:android webview|webview|web view)\b/i,
+  /\b(?:render(?:er|ing) engine|render engine|layout engine)\b/i,
+
+  // Client application hosts / runtimes / containers (desktop, mobile, electron, office viewers)
+  /\b(?:desktop|workstation|endpoint|client(?: application| app)?|viewer|reader|player|media player)\b/i,
+  /\b(?:mobile|android|ios|ipad|iphone|tablet)\b/i,
+  /\b(?:electron|nwjs|cordova|capacitor|react[-\s]?native)\b/i,
+
+  // Local user / user interaction / prompt / click required variants
+  /\b(?:local user|local account|local privilege)\b/i,
+  /\b(?:user[-\s]?interaction|required user interaction|user prompt|click(?: required|ing)?|confirmation required|consent required)\b/i,
+
+  // Interaction vectors often mentioned with client impact
+  /\b(?:social engineering|malicious attachment|drive[-\s]?by|drive[-\s]?by download|click[-\s]?jacking|phishing)\b/i,
+
+  // Short tokens guarded by boundaries to avoid mid-word matches
+  /(?:^|[^a-z0-9])(motw|mark of the web|zone\.identifier)(?:[^a-z0-9]|$)/i,
+];
+
+// Enhanced client application / artifact detection (low false-positive)
 const clientApplicationPatterns: RegExp[] = [
-  /(microsoft (?:office|word|excel|powerpoint|outlook|project|visio))/i,
-  /(office (?:document|file))/i,
-  /(mshtml|msdt|mshta|jscript|vbscript|activex|ole)/i,
-  /(smart[- ]?screen|mark of the web|motw)/i,
-  /(adobe (?:reader|acrobat))/i,
-  /(winrar|7-zip|7zip|archive manager)/i,
-  /(media (?:center|player)|windows media)/i,
-  /(truetype|opentype|font (?:library|parsing|engine))/i
-]
+  // Microsoft Office suite (Word/Excel/PowerPoint/Outlook/Visio/Project + Office 365 variants)
+  /\b(?:microsoft[-\s]?office|office(?: 365)?|ms[-]?office)\b/i,
+  /\b(?:microsoft[-\s]?(?:word|excel|powerpoint|outlook|project|visio|onenote|access))\b/i,
+  // Office file extensions and container formats (doc, docx, xls, xlsx, ppt, pptx, rtf)
+  /(?:^|[^a-z0-9])(?:\.(?:docx?|xlsx?|pptx?|rtf|msg))(?:[^a-z0-9]|$)/i,
+  /\b(?:office (?:document|file|attachment))\b/i,
+
+  // HTML/JS/ActiveX/legacy engine tokens (mshtml, mshta, jscript, vbscript, activex, ole)
+  /(?:^|[^a-z0-9])(?:mshtml|mshta|msdt)(?:[^a-z0-9]|$)/i,
+  /(?:^|[^a-z0-9])(?:jscript|vbscript|activex|ole|ole32|oleaut32)(?:[^a-z0-9]|$)/i,
+
+  // SmartScreen / Mark of the Web (MOTW) / zone identifiers
+  /\b(?:smart[-\s]?screen)\b/i,
+  /(?:^|[^a-z0-9])(?:mark of the web|motw|zone\.identifier)(?:[^a-z0-9]|$)/i,
+
+  // Adobe products and common PDF hints
+  /\b(?:adobe(?: Reader| Acrobat| Reader DC| Acrobat DC)?|acrobat(?: DC)?)\b/i,
+  /(?:^|[^a-z0-9])(?:pdf|\.pdf)(?:[^a-z0-9]|$)/i,
+
+  // Archive / compression tools
+  /\b(?:winrar|rar(?: archive)?|7[-\s]?zip|7zip|unrar|archive manager|zip(?: archive)?)\b/i,
+
+  // Media players / Windows Media Center hints
+  /\b(?:windows media(?: player| center)?|media player|wmplayer)\b/i,
+  /\b(?:mp3|mp4|mkv|media(?: file| container))\b/i,
+
+  // Fonts / font engines (truetype, opentype)
+  /\b(?:truetype|opentype|ttf|otf|font(?: parsing| engine| library)?)\b/i,
+
+  // Browser / UI host tokens often used as client vectors
+  /\b(?:internet explorer|iexplore|edge|msedge|browser helper object|bho)\b/i,
+
+  // Generic document container / compound formats (OLE compound, compound file binary format)
+  /(?:^|[^a-z0-9])(ole(?: compound)?|compound file|cfb|c(om)?)?(?:[^a-z0-9]|$)/i,
+];
 
 const clientFileInteractionPatterns: RegExp[] = [
-  /(specially crafted|malicious)[\s\S]{0,80}(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation)/i,
-  /(open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|process(?:ing)?|pars(?:e|ing))[\s\S]{0,80}(?:document|file|attachment|email|message|image|font|media|archive|content)/i,
-  /(delivered (?:via|through) email)/i,
-  /(when (?:viewing|opening|loading))[\s\S]{0,80}\.(?:docx|doc|rtf|xls|xlsx|ppt|pptx|pdf|eml|msg|zip|rar|iso)/i
-]
+  // "specially crafted" or "malicious" within a short window before file-like tokens
+  /\b(?:specially[-\s]?crafted|malicious|crafted)[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
+
+  // verbs that indicate opening/processing/parsing a file or content (limited context window)
+  /\b(?:open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|process(?:ing)?|parse|parsing|render(?:ing)?)'?\b[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|content|payload)\b/i,
+
+  // delivered via/through/by email
+  /(?:^|[^a-z0-9])(?:delivered (?:via|through|by) (?:email|attachment|msg|eml))(?:[^a-z0-9]|$)/i,
+
+  // "when viewing/opening/loading" followed by many common launcher/document extensions
+  /\bwhen (?:viewing|opening|loading)[\s\S]{0,80}?\.(?:docx?|rtf|xlsx?|xls|pptx?|ppt|pdf|eml|msg|zip|rar|iso|lnk|rdp|chm|url|website|msc|hta|scf|ps1|vbs|js|jar)(?:\b|$)/i,
+
+  // explicit "click to run / double-click / open the .lnk" type phrasing (short context window)
+  /\b(?:click(?: to)? (?:open|run|execute|to run)|double[-\s]?click|right[-\s]?click)[\s\S]{0,40}?\.(?:lnk|rdp|chm|url|exe|ps1|vbs|hta|scf)(?:\b|$)/i,
+
+  // attachment names or received as an attachment indicator
+  /\b(?:attached (?:file|attachment)|attachment:|attachment name|received as an attachment)\b/i,
+];
 
 const clientUserInteractionPatterns: RegExp[] = [
-  /(email attachment)/i,
-  /(phishing (?:email|message))/i,
-  /(social engineering)/i,
-  /(requires user interaction|user must (?:open|click|interact))/i
-]
+  // explicit attachment references (guarded)
+  /\b(?:email attachment|attached file|malicious attachment)\b/i,
+
+  // phishing / social engineering phrases
+  /\bphishing(?: (?:email|message|campaign))?\b/i,
+  /\bsocial[-\s]?engineering\b/i,
+
+  // required user actions (open/click/interact/confirm)
+  /\b(?:requires? (?:user )?interaction|user must (?:open|click|interact|confirm)|click (?:to|here)|user[-\s]?prompt|confirmation required)\b/i,
+
+  // "drive-by", "click-to-exploit" style phrases
+  /\b(?:drive[-\s]?by|drive[-\s]?by download|click[-\s]?to[-\s]?open|click[-\s]?jacking)\b/i,
+];
 
 const clientLocalExecutionPatterns: RegExp[] = [
-  /(local attacker|locally authenticated|local user)/i,
-  /(execute code in (?:kernel|user) mode)/i
-]
+  // local attacker / locally authenticated / local user
+  /\b(?:local(?:ly)? (?:attacker|user|account)|locally authenticated|local account|local access)\b/i,
+
+  // local privilege escalation or local execution phrases
+  /\b(?:local[-\s]?privilege(?:[-\s]?escalation| escalation)|LPE|privilege escalation(?: via)?)\b/i,
+  /\b(?:execute(?:s|d)? arbitrary code locally|execute (?:arbitrary|remote)? code in (?:user|kernel) mode|run arbitrary code locally)\b/i,
+
+  // local file inclusion / local service abuse
+  /\b(?:local file inclusion|lfi|file inclusion)\b/i,
+];
 
 const serverSignalPatterns: RegExp[] = [
-  /(server|service|daemon|appliance|controller)/i,
-  /(web[- ]?based management|management server|management interface)/i,
-  /(remote service|http service|network service)/i,
-  /(gateway|vpn|firewall|router|switch)/i
-]
+  // generic server/service tokens with word boundaries
+  /\b(?:server|service|daemon|appliance|controller)\b/i,
 
-const clientDomainHints: ReadonlySet<KevDomainCategory> = new Set(['Browsers'])
+  // management / admin interfaces
+  /\b(?:web[-\s]?based management|management (?:server|interface|console)|admin(?:istration)? (?:interface|console|portal))\b/i,
+
+  // network / remote service signals
+  /\b(?:remote service|http service|https service|network service|tcp service|listens on port|listening on port)\b/i,
+
+  // gateway, vpn, firewall, router, switch
+  /\b(?:gateway|vpn|firewall|router|switch|load[-\s]?balancer)\b/i,
+
+  // API / REST / SOAP / RPC / management endpoints
+  /\b(?:api endpoint|rest(?: API)?|soap|rpc|management endpoint|control plane)\b/i,
+];
+const clientDomainHints: ReadonlySet<KevDomainCategory> = new Set(["Browsers"]);
 
 const serverDomainHints: ReadonlySet<KevDomainCategory> = new Set([
-  'Web Applications',
-  'Web Servers',
-  'Mail Servers',
-  'Networking & VPN',
-  'Industrial Control Systems',
-  'Cloud & SaaS',
-  'Virtualization & Containers',
-  'Database & Storage',
-  'Security Appliances'
-])
+  "Web Applications",
+  "Web Servers",
+  "Mail Servers",
+  "Networking & VPN",
+  "Industrial Control Systems",
+  "Cloud & SaaS",
+  "Virtualization & Containers",
+  "Database & Storage",
+  "Security Appliances",
+]);
 
 const rcePatterns: RegExp[] = [
   ...remoteExecutionPatterns,
-  ...codeExecutionPatterns
-]
+  ...codeExecutionPatterns,
+];
 
 const vulnerabilityRules: Array<{
-  category: KevVulnerabilityCategory
-  patterns: RegExp[]
+  category: KevVulnerabilityCategory;
+  patterns: RegExp[];
 }> = [
   {
-    category: 'Command Injection',
-    patterns: [/(command injection|os command|system\(|shell command)/i]
+    category: "Command Injection",
+    patterns: [/(command injection|os command|system\(|shell command)/i],
   },
   {
-    category: 'SQL Injection',
-    patterns: [/(sql injection|blind sql|sqli)/i]
+    category: "SQL Injection",
+    patterns: [/(sql injection|blind sql|sqli)/i],
   },
   {
-    category: 'Cross-Site Scripting',
-    patterns: [/(cross-site scripting|xss)/i]
+    category: "Cross-Site Scripting",
+    patterns: [/(cross-site scripting|xss)/i],
   },
   {
-    category: 'Server-Side Request Forgery',
-    patterns: [/(server-side request forgery|ssrf)/i]
+    category: "Server-Side Request Forgery",
+    patterns: [/(server-side request forgery|ssrf)/i],
   },
   {
-    category: 'Directory Traversal',
-    patterns: [/(directory traversal|path traversal|dot-dot)/i]
+    category: "Directory Traversal",
+    patterns: [/(directory traversal|path traversal|dot-dot)/i],
   },
   {
-    category: 'Memory Corruption',
-    patterns: memoryCorruptionPatterns
+    category: "Memory Corruption",
+    patterns: memoryCorruptionPatterns,
   },
   {
-    category: 'Remote Code Execution',
-    patterns: rcePatterns
+    category: "Remote Code Execution",
+    patterns: rcePatterns,
   },
   {
-    category: 'Authentication Bypass',
-    patterns: [/(authentication bypass|bypass authentication|unauthenticated access|without authentication|authorization bypass)/i]
+    category: "Authentication Bypass",
+    patterns: [
+      /(authentication bypass|bypass authentication|unauthenticated access|without authentication|authorization bypass)/i,
+    ],
   },
   {
-    category: 'Information Disclosure',
-    patterns: [/(information disclosure|data leak|information leak|exposure|sensitive information)/i]
+    category: "Information Disclosure",
+    patterns: [
+      /(information disclosure|data leak|information leak|exposure|sensitive information)/i,
+    ],
   },
   {
-    category: 'Denial of Service',
-    patterns: [/(denial of service|dos attack|service disruption|resource exhaustion|crash)/i]
+    category: "Denial of Service",
+    patterns: [
+      /(denial of service|dos attack|service disruption|resource exhaustion|crash)/i,
+    ],
   },
   {
-    category: 'Logic Flaw',
-    patterns: [/(logic flaw|business logic|improper validation|improper access control)/i]
-  }
-]
+    category: "Logic Flaw",
+    patterns: [
+      /(logic flaw|business logic|improper validation|improper access control)/i,
+    ],
+  },
+];
 
-const normalise = (value: string) => value.toLowerCase()
+const normalise = (value: string) => value.toLowerCase();
 
 const matchCategory = <T extends string>(
   text: string,
   rules: Array<{ category: T; patterns: RegExp[] }>,
   fallback: T
 ): T[] => {
-  const found = new Set<T>()
+  const found = new Set<T>();
 
   for (const rule of rules) {
-    if (rule.patterns.some(pattern => pattern.test(text))) {
-      found.add(rule.category)
+    if (rule.patterns.some((pattern) => pattern.test(text))) {
+      found.add(rule.category);
     }
   }
 
   if (!found.size) {
-    found.add(fallback)
+    found.add(fallback);
   }
 
-  return Array.from(found)
-}
+  return Array.from(found);
+};
 
 export const classifyDomainCategories = (
   entry: Pick<
     KevBaseEntry,
-    'vendor' | 'product' | 'vulnerabilityName' | 'description' | 'cvssVector'
+    "vendor" | "product" | "vulnerabilityName" | "description" | "cvssVector"
   >
 ): { categories: KevDomainCategory[]; internetExposed: boolean } => {
-  const source = normalise(`${entry.vendor} ${entry.product}`)
-  const context = normalise(`${entry.vulnerabilityName ?? ''} ${entry.description ?? ''}`)
-  const text = `${source} ${context}`
-  const categories = new Set(matchCategory(text, domainRules, 'Other'))
+  const source = normalise(`${entry.vendor} ${entry.product}`);
+  const context = normalise(
+    `${entry.vulnerabilityName ?? ""} ${entry.description ?? ""}`
+  );
+  const text = `${source} ${context}`;
+  const categories = new Set(matchCategory(text, domainRules, "Other"));
 
-  const isBrowser = categories.has('Browsers') || matchesAny(source, webNegativePatterns)
-  const isWebServer = categories.has('Web Servers') || matchesAny(source, webServerPatterns)
-  const isWebProduct = matchesAny(source, webProductPatterns)
-  const isWebDevice = matchesAny(source, webDevicePatterns)
-  const hasWebIndicators = matchesAny(context, webIndicatorPatterns)
-  const hasStrongWebSignal = matchesAny(context, webStrongContextPatterns)
-  const deviceHasWebSignal = isWebDevice && matchesAny(context, webDeviceContextPatterns)
-  const hasManagementSignal = matchesAny(context, webManagementPatterns)
-  const hasApiSignal = matchesAny(context, webApiPatterns)
+  const isBrowser =
+    categories.has("Browsers") || matchesAny(source, webNegativePatterns);
+  const isWebServer =
+    categories.has("Web Servers") || matchesAny(source, webServerPatterns);
+  const isWebProduct = matchesAny(source, webProductPatterns);
+  const isWebDevice = matchesAny(source, webDevicePatterns);
+  const hasWebIndicators = matchesAny(context, webIndicatorPatterns);
+  const hasStrongWebSignal = matchesAny(context, webStrongContextPatterns);
+  const deviceHasWebSignal =
+    isWebDevice && matchesAny(context, webDeviceContextPatterns);
+  const hasManagementSignal = matchesAny(context, webManagementPatterns);
+  const hasApiSignal = matchesAny(context, webApiPatterns);
   const hasNonWebProductSignal =
-    matchesAny(source, nonWebProductPatterns) || matchesAny(context, nonWebProductPatterns)
-  const hasNonWebContextSignal = matchesAny(context, nonWebContextPatterns)
-  const isMailServer = categories.has('Mail Servers')
-  const isNetworkDevice = categories.has('Networking & VPN')
-  const edgeStrongProduct = matchesAny(source, edgeStrongProductPatterns)
-  const edgeSupportingProduct = matchesAny(source, edgeSupportingProductPatterns)
+    matchesAny(source, nonWebProductPatterns) ||
+    matchesAny(context, nonWebProductPatterns);
+  const hasNonWebContextSignal = matchesAny(context, nonWebContextPatterns);
+  const isMailServer = categories.has("Mail Servers");
+  const isNetworkDevice = categories.has("Networking & VPN");
+  const edgeStrongProduct = matchesAny(source, edgeStrongProductPatterns);
+  const edgeSupportingProduct = matchesAny(
+    source,
+    edgeSupportingProductPatterns
+  );
   const edgeContextSignal =
     matchesAny(context, edgeContextPatterns) ||
     hasStrongWebSignal ||
     hasManagementSignal ||
     hasApiSignal ||
-    deviceHasWebSignal
-  const edgePortalSignal = matchesAny(context, edgePortalPatterns)
-  const edgeMailSignal = matchesAny(context, edgeMailPatterns)
-  const remoteContextSignal = matchesAny(context, remoteContextPatterns)
+    deviceHasWebSignal;
+  const edgePortalSignal = matchesAny(context, edgePortalPatterns);
+  const edgeMailSignal = matchesAny(context, edgeMailPatterns);
+  const remoteContextSignal = matchesAny(context, remoteContextPatterns);
   const remoteExecutionSignal =
-    matchesAny(context, remoteExecutionPatterns) || matchesAny(context, codeExecutionPatterns)
-  const cvssTraits = parseCvssVector(entry.cvssVector)
-  const networkAttackVector = cvssTraits?.attackVector === 'N'
-  const lowPrivileges = !cvssTraits?.privilegesRequired || cvssTraits.privilegesRequired === 'N'
-  const noUserInteraction = !cvssTraits?.userInteraction || cvssTraits.userInteraction === 'N'
+    matchesAny(context, remoteExecutionPatterns) ||
+    matchesAny(context, codeExecutionPatterns);
+  const cvssTraits = parseCvssVector(entry.cvssVector);
+  const networkAttackVector = cvssTraits?.attackVector === "N";
+  const lowPrivileges =
+    !cvssTraits?.privilegesRequired || cvssTraits.privilegesRequired === "N";
+  const noUserInteraction =
+    !cvssTraits?.userInteraction || cvssTraits.userInteraction === "N";
 
   const hasStandaloneWebIndicator =
-    hasWebIndicators && !hasNonWebProductSignal && !hasNonWebContextSignal
+    hasWebIndicators && !hasNonWebProductSignal && !hasNonWebContextSignal;
   const hasCombinedWebIndicator =
     hasStandaloneWebIndicator ||
     (hasWebIndicators &&
@@ -655,7 +881,7 @@ export const classifyDomainCategories = (
         isWebProduct ||
         isWebDevice ||
         isMailServer ||
-        isNetworkDevice))
+        isNetworkDevice));
 
   const baseWebSignals =
     isWebProduct ||
@@ -669,10 +895,10 @@ export const classifyDomainCategories = (
         isMailServer ||
         isNetworkDevice ||
         hasManagementSignal ||
-        hasApiSignal))
+        hasApiSignal));
 
   const shouldTagWeb =
-    ((!isBrowser && !isWebServer) && baseWebSignals) || hasCombinedWebIndicator
+    (!isBrowser && !isWebServer && baseWebSignals) || hasCombinedWebIndicator;
 
   const shouldPreferNonWeb =
     hasNonWebProductSignal ||
@@ -682,113 +908,141 @@ export const classifyDomainCategories = (
       !hasApiSignal &&
       !isWebProduct &&
       !deviceHasWebSignal &&
-      !hasCombinedWebIndicator)
+      !hasCombinedWebIndicator);
 
-  const productLooksLikeServer = matchesAny(source, webServerPatterns)
+  const productLooksLikeServer = matchesAny(source, webServerPatterns);
 
   if (
-    categories.has('Web Applications') &&
-    categories.has('Web Servers') &&
+    categories.has("Web Applications") &&
+    categories.has("Web Servers") &&
     !productLooksLikeServer
   ) {
-    categories.delete('Web Servers')
+    categories.delete("Web Servers");
   }
 
   if (shouldPreferNonWeb) {
-    categories.delete('Web Applications')
-    categories.add('Non-Web Applications')
+    categories.delete("Web Applications");
+    categories.add("Non-Web Applications");
   } else if (shouldTagWeb) {
-    categories.add('Web Applications')
+    categories.add("Web Applications");
   }
 
-  if (categories.has('Web Applications')) {
-    categories.delete('Non-Web Applications')
-  } else if (categories.has('Web Servers') && !shouldPreferNonWeb) {
-    categories.delete('Non-Web Applications')
+  if (categories.has("Web Applications")) {
+    categories.delete("Non-Web Applications");
+  } else if (categories.has("Web Servers") && !shouldPreferNonWeb) {
+    categories.delete("Non-Web Applications");
   } else if (!shouldPreferNonWeb) {
-    categories.add('Non-Web Applications')
+    categories.add("Non-Web Applications");
   }
 
-  if (categories.size > 1 && categories.has('Other')) {
-    categories.delete('Other')
+  if (categories.size > 1 && categories.has("Other")) {
+    categories.delete("Other");
   }
 
-  const domainEdgeSignal = internetEdgeDomainHints.some(category => categories.has(category))
+  const domainEdgeSignal = internetEdgeDomainHints.some((category) =>
+    categories.has(category)
+  );
   const productConfidence =
-    (edgeStrongProduct ? 2 : 0) + (edgeSupportingProduct ? 1 : 0) + (domainEdgeSignal ? 1 : 0)
+    (edgeStrongProduct ? 2 : 0) +
+    (edgeSupportingProduct ? 1 : 0) +
+    (domainEdgeSignal ? 1 : 0);
   const contextConfidence =
-    (edgeContextSignal ? 1.5 : 0) + (edgePortalSignal ? 1 : 0) + (edgeMailSignal ? 1 : 0)
+    (edgeContextSignal ? 1.5 : 0) +
+    (edgePortalSignal ? 1 : 0) +
+    (edgeMailSignal ? 1 : 0);
   const remoteConfidence =
     (networkAttackVector ? 1 : 0) +
     (remoteContextSignal ? 1 : 0) +
     (remoteExecutionSignal ? 0.5 : 0) +
     (lowPrivileges ? 0.5 : 0) +
-    (noUserInteraction ? 0.5 : 0)
+    (noUserInteraction ? 0.5 : 0);
 
   const hasExposureContext =
-    edgeContextSignal || edgePortalSignal || edgeMailSignal || remoteContextSignal || networkAttackVector
-  const strongProductBackers = edgeStrongProduct || (edgeSupportingProduct && hasExposureContext) || domainEdgeSignal
+    edgeContextSignal ||
+    edgePortalSignal ||
+    edgeMailSignal ||
+    remoteContextSignal ||
+    networkAttackVector;
+  const strongProductBackers =
+    edgeStrongProduct ||
+    (edgeSupportingProduct && hasExposureContext) ||
+    domainEdgeSignal;
 
   const internetExposed =
-    strongProductBackers && hasExposureContext && productConfidence + contextConfidence + remoteConfidence >= 3.5
+    strongProductBackers &&
+    hasExposureContext &&
+    productConfidence + contextConfidence + remoteConfidence >= 3.5;
 
   if (internetExposed) {
-    categories.add('Internet Edge')
+    categories.add("Internet Edge");
   }
 
-  return { categories: Array.from(categories), internetExposed }
-}
+  return { categories: Array.from(categories), internetExposed };
+};
 
 export const classifyExploitLayers = (
   entry: {
-    vulnerabilityName: string
-    description: string
-    cvssVector?: string | null
+    vulnerabilityName: string;
+    description: string;
+    cvssVector?: string | null;
   },
   domainCategories: KevDomainCategory[]
 ): KevExploitLayer[] => {
-  const text = normalise(`${entry.vulnerabilityName} ${entry.description}`)
-  const layers = new Set<KevExploitLayer>()
+  const text = normalise(`${entry.vulnerabilityName} ${entry.description}`);
+  const layers = new Set<KevExploitLayer>();
 
-  const cvssTraits = parseCvssVector(entry.cvssVector)
+  const cvssTraits = parseCvssVector(entry.cvssVector);
   const cvssSuggestsLocal =
-    cvssTraits?.attackVector === 'L' || cvssTraits?.attackVector === 'P'
+    cvssTraits?.attackVector === "L" || cvssTraits?.attackVector === "P";
   const cvssSuggestsRemote =
-    cvssTraits?.attackVector === 'N' || cvssTraits?.attackVector === 'A'
-  const cvssRequiresUserInteraction = cvssTraits?.userInteraction === 'R'
-  const cvssPreAuth = cvssTraits?.privilegesRequired === 'N'
+    cvssTraits?.attackVector === "N" || cvssTraits?.attackVector === "A";
+  const cvssRequiresUserInteraction = cvssTraits?.userInteraction === "R";
+  const cvssPreAuth = cvssTraits?.privilegesRequired === "N";
 
-  const hasPrivilegeSignal = privilegePatterns.some(pattern => pattern.test(text))
+  const hasPrivilegeSignal = privilegePatterns.some((pattern) =>
+    pattern.test(text)
+  );
 
   if (hasPrivilegeSignal) {
-    layers.add('Privilege Escalation')
+    layers.add("Privilege Escalation");
   }
 
-  const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns)
-  const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns)
+  const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns);
+  const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns);
   const hasRemoteContext =
-    hasExplicitRemoteRce || matchesAny(text, remoteContextPatterns) || Boolean(cvssSuggestsRemote)
+    hasExplicitRemoteRce ||
+    matchesAny(text, remoteContextPatterns) ||
+    Boolean(cvssSuggestsRemote);
 
   const qualifiesForRce =
-    hasExplicitRemoteRce || (hasCodeExecutionSignal && hasRemoteContext)
+    hasExplicitRemoteRce || (hasCodeExecutionSignal && hasRemoteContext);
 
-  const hasMemoryCorruption = memoryCorruptionPatterns.some(pattern => pattern.test(text))
-  const hasDosSignal = matchesAny(text, denialOfServicePatterns)
-  const hasClientSignal = matchesAny(text, clientSignalPatterns)
-  const hasClientApplicationSignal = matchesAny(text, clientApplicationPatterns)
-  const hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns)
+  const hasMemoryCorruption = memoryCorruptionPatterns.some((pattern) =>
+    pattern.test(text)
+  );
+  const hasDosSignal = matchesAny(text, denialOfServicePatterns);
+  const hasClientSignal = matchesAny(text, clientSignalPatterns);
+  const hasClientApplicationSignal = matchesAny(
+    text,
+    clientApplicationPatterns
+  );
+  const hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns);
   const hasClientUserInteractionSignal =
-    matchesAny(text, clientUserInteractionPatterns) || Boolean(cvssRequiresUserInteraction)
+    matchesAny(text, clientUserInteractionPatterns) ||
+    Boolean(cvssRequiresUserInteraction);
   const hasClientLocalExecutionSignal =
-    matchesAny(text, clientLocalExecutionPatterns) || Boolean(cvssSuggestsLocal)
-  const hasServerSignal = serverSignalPatterns.some(pattern => pattern.test(text))
+    matchesAny(text, clientLocalExecutionPatterns) ||
+    Boolean(cvssSuggestsLocal);
+  const hasServerSignal = serverSignalPatterns.some((pattern) =>
+    pattern.test(text)
+  );
 
-  const domainSuggestsClient = domainCategories.some(category =>
+  const domainSuggestsClient = domainCategories.some((category) =>
     clientDomainHints.has(category)
-  )
-  const domainSuggestsServer = domainCategories.some(category =>
+  );
+  const domainSuggestsServer = domainCategories.some((category) =>
     serverDomainHints.has(category)
-  )
+  );
 
   const clientScore =
     (hasClientSignal ? 2 : 0) +
@@ -798,52 +1052,52 @@ export const classifyExploitLayers = (
     (hasClientLocalExecutionSignal ? 1 : 0) +
     (cvssSuggestsLocal ? 1 : 0) +
     (cvssRequiresUserInteraction ? 1 : 0) +
-    (domainSuggestsClient ? 1 : 0)
+    (domainSuggestsClient ? 1 : 0);
   const serverScore =
     (hasServerSignal ? 2 : 0) +
     (cvssSuggestsRemote ? 1 : 0) +
     (cvssPreAuth ? 1 : 0) +
-    (domainSuggestsServer ? 1 : 0)
+    (domainSuggestsServer ? 1 : 0);
 
-  const determineSide = (): 'Client-side' | 'Server-side' => {
+  const determineSide = (): "Client-side" | "Server-side" => {
     if (clientScore > serverScore) {
-      return 'Client-side'
+      return "Client-side";
     }
 
     if (serverScore > clientScore) {
-      return 'Server-side'
+      return "Server-side";
     }
 
     if (hasClientFileSignal || hasClientApplicationSignal) {
-      return 'Client-side'
+      return "Client-side";
     }
 
     if (domainSuggestsServer && !domainSuggestsClient) {
-      return 'Server-side'
+      return "Server-side";
     }
 
     if (domainSuggestsClient && !domainSuggestsServer) {
-      return 'Client-side'
+      return "Client-side";
     }
 
     if (cvssSuggestsRemote && !cvssSuggestsLocal) {
-      return 'Server-side'
+      return "Server-side";
     }
 
     if (cvssSuggestsLocal && !cvssSuggestsRemote) {
-      return 'Client-side'
+      return "Client-side";
     }
 
     if (cvssRequiresUserInteraction && !hasServerSignal) {
-      return 'Client-side'
+      return "Client-side";
     }
 
     if (hasServerSignal && !hasClientSignal) {
-      return 'Server-side'
+      return "Server-side";
     }
 
     if (hasClientSignal && !hasServerSignal) {
-      return 'Client-side'
+      return "Client-side";
     }
 
     if (
@@ -854,69 +1108,74 @@ export const classifyExploitLayers = (
       !hasClientUserInteractionSignal &&
       !hasClientLocalExecutionSignal
     ) {
-      return 'Server-side'
+      return "Server-side";
     }
 
-    return 'Client-side'
-  }
+    return "Client-side";
+  };
 
   if (!qualifiesForRce) {
     if (hasDosSignal) {
-      const dosSide = determineSide()
-      layers.add(dosSide === 'Client-side' ? 'DoS · Client-side' : 'DoS · Server-side')
+      const dosSide = determineSide();
+      layers.add(
+        dosSide === "Client-side" ? "DoS · Client-side" : "DoS · Server-side"
+      );
     }
-    return Array.from(layers)
+    return Array.from(layers);
   }
 
-  const side = determineSide()
+  const side = determineSide();
 
   const labelMap: Record<
-    'Client-side' | 'Server-side',
+    "Client-side" | "Server-side",
     { memory: KevExploitLayer; nonMemory: KevExploitLayer }
   > = {
-    'Client-side': {
-      memory: 'RCE · Client-side Memory Corruption',
-      nonMemory: 'RCE · Client-side Non-memory'
+    "Client-side": {
+      memory: "RCE · Client-side Memory Corruption",
+      nonMemory: "RCE · Client-side Non-memory",
     },
-    'Server-side': {
-      memory: 'RCE · Server-side Memory Corruption',
-      nonMemory: 'RCE · Server-side Non-memory'
-    }
-  }
+    "Server-side": {
+      memory: "RCE · Server-side Memory Corruption",
+      nonMemory: "RCE · Server-side Non-memory",
+    },
+  };
 
   const label = hasMemoryCorruption
     ? labelMap[side].memory
-    : labelMap[side].nonMemory
+    : labelMap[side].nonMemory;
 
-  layers.add(label)
+  layers.add(label);
 
   if (hasDosSignal) {
-    layers.add(side === 'Client-side' ? 'DoS · Client-side' : 'DoS · Server-side')
+    layers.add(
+      side === "Client-side" ? "DoS · Client-side" : "DoS · Server-side"
+    );
   }
 
-  return Array.from(layers)
-}
+  return Array.from(layers);
+};
 
 export const classifyVulnerabilityCategories = (entry: {
-  vulnerabilityName: string
-  description: string
+  vulnerabilityName: string;
+  description: string;
 }): KevVulnerabilityCategory[] => {
-  const text = normalise(`${entry.vulnerabilityName} ${entry.description}`)
-  const categories = matchCategory(text, vulnerabilityRules, 'Other')
+  const text = normalise(`${entry.vulnerabilityName} ${entry.description}`);
+  const categories = matchCategory(text, vulnerabilityRules, "Other");
 
-  return categories
-}
+  return categories;
+};
 
 export const enrichEntry = (entry: KevBaseEntry): KevEntry => {
-  const { categories: domainCategories, internetExposed } = classifyDomainCategories(entry)
-  const exploitLayers = classifyExploitLayers(entry, domainCategories)
-  const vulnerabilityCategories = classifyVulnerabilityCategories(entry)
+  const { categories: domainCategories, internetExposed } =
+    classifyDomainCategories(entry);
+  const exploitLayers = classifyExploitLayers(entry, domainCategories);
+  const vulnerabilityCategories = classifyVulnerabilityCategories(entry);
 
   return {
     ...entry,
     domainCategories,
     exploitLayers,
     vulnerabilityCategories,
-    internetExposed
-  }
-}
+    internetExposed,
+  };
+};

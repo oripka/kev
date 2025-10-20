@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { TrackedProduct } from "~/types";
+import type { TrackedProduct, TrackedProductQuickFilterTarget } from "~/types";
 import type {
   TrackedProductInsight,
   TrackedProductSummary
@@ -17,6 +17,7 @@ const props = defineProps<{
   saveError: string | null;
   productInsights: TrackedProductInsight[];
   summary: TrackedProductSummary | null;
+  recentWindowDays: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +25,8 @@ const emit = defineEmits<{
   (event: "update:show-owned-only", value: boolean): void;
   (event: "remove", productKey: string): void;
   (event: "clear"): void;
+  (event: "quick-filter", payload: TrackedProductQuickFilterTarget): void;
+  (event: "quick-filter-summary"): void;
 }>();
 
 const open = computed({
@@ -69,8 +72,11 @@ const handleClear = () => {
           :product-insights="props.productInsights"
           :summary="props.summary"
           :show-report-cta="false"
+          :recent-window-days="props.recentWindowDays"
           @remove="handleRemove"
           @clear="handleClear"
+          @quick-filter="emit('quick-filter', $event)"
+          @quick-filter-summary="emit('quick-filter-summary')"
         />
       </div>
     </template>

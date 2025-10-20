@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TrackedProduct } from '~/types'
+import type { TrackedProduct, TrackedProductQuickFilterTarget } from '~/types'
 import type {
   TrackedProductInsight,
   TrackedProductSummary,
@@ -17,6 +17,7 @@ const props = defineProps<{
   productInsights?: TrackedProductInsight[]
   summary?: TrackedProductSummary | null
   showReportCta?: boolean
+  recentWindowDays?: number | null
 }>()
 
 const showOwnedOnly = defineModel<boolean>({ default: false })
@@ -26,6 +27,8 @@ const emits = defineEmits<{
   clear: []
   manage: []
   'show-report': []
+  'quick-filter': [TrackedProductQuickFilterTarget]
+  'quick-filter-summary': []
 }>()
 
 const manageHref = computed(() => props.manageHref ?? '/settings/software')
@@ -119,6 +122,18 @@ const computeSparkHeight = (value: number, max: number) => {
 
 const handleReportClick = () => {
   emits('show-report')
+}
+
+const handleInsightQuickFilter = (insight: TrackedProductInsight) => {
+  emits('quick-filter', {
+    product: insight.product,
+    latestAddedAt: insight.latestAddedAt ?? null,
+    recentWindowDays: props.recentWindowDays ?? null
+  })
+}
+
+const handleSummaryQuickFilter = () => {
+  emits('quick-filter-summary')
 }
 </script>
 
@@ -236,13 +251,35 @@ const handleReportClick = () => {
               </span>
             </div>
           </div>
+
+          <div
+            class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs font-semibold text-primary-700 dark:text-primary-300"
+          >
+            <span>Focus catalog on tracked CVEs</span>
+            <UButton
+              color="primary"
+              variant="link"
+              size="xs"
+              icon="i-lucide-arrow-up-right"
+              class="px-0"
+              @click="handleSummaryQuickFilter"
+            >
+              View matches
+            </UButton>
+          </div>
         </div>
 
         <div v-if="hasInsights" class="grid gap-3 md:grid-cols-2">
           <div
             v-for="insight in sortedInsights"
             :key="insight.product.productKey"
-            class="space-y-3 rounded-xl border border-neutral-200 bg-white/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/50"
+            role="button"
+            tabindex="0"
+            :aria-label="`Filter catalog by ${insight.product.vendorName} ${insight.product.productName}`"
+            class="group cursor-pointer space-y-3 rounded-xl border border-neutral-200 bg-white/70 p-4 text-left transition hover:border-primary-300/80 hover:bg-primary-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400 dark:border-neutral-800 dark:bg-neutral-900/50 dark:hover:border-primary-400/40 dark:hover:bg-primary-500/10"
+            @click="handleInsightQuickFilter(insight)"
+            @keydown.enter.prevent.stop="handleInsightQuickFilter(insight)"
+            @keydown.space.prevent.stop="handleInsightQuickFilter(insight)"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 space-y-1">
@@ -261,7 +298,8 @@ const handleReportClick = () => {
                   color="neutral"
                   variant="ghost"
                   size="xs"
-                  @click="emits('remove', insight.product.productKey)"
+                  class="relative z-10"
+                  @click.stop="emits('remove', insight.product.productKey)"
                 >
                   Remove
                 </UButton>
@@ -319,6 +357,15 @@ const handleReportClick = () => {
                 <span>{{ insight.trend[0]?.label ?? '—' }}</span>
                 <span>{{ insight.trend[insight.trend.length - 1]?.label ?? '—' }}</span>
               </div>
+            </div>
+
+            <div
+              class="flex items-center justify-between pt-1 text-[11px] font-semibold text-primary-600 transition group-hover:text-primary-700 dark:text-primary-400 dark:group-hover:text-primary-300"
+            >
+              <span class="inline-flex items-center gap-1">
+                View matching CVEs
+                <span class="i-lucide-arrow-up-right h-3 w-3" aria-hidden="true" />
+              </span>
             </div>
           </div>
         </div>

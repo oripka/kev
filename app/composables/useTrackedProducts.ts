@@ -615,6 +615,7 @@ export const useTrackedProducts = () => {
     trackedEntries,
     trackedProductInsights,
     trackedProductSummary,
+    recentWindowDays: computed(() => recentWindowDays.value),
     recentWindowLabel: computed(() => `${recentWindowDays.value} days`)
   }
 }

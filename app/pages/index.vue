@@ -20,7 +20,13 @@ import {
   catalogSourceBadgeMap as sourceBadgeMap,
   catalogSourceLabels,
 } from "~/constants/catalogSources";
-import type { CatalogSource, KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
+import type {
+  CatalogSource,
+  KevCountDatum,
+  KevEntry,
+  KevEntrySummary,
+  TrackedProductQuickFilterTarget,
+} from "~/types";
 import type {
   ActiveFilter,
   FilterKey,
@@ -192,6 +198,7 @@ const {
   connectKevData: connectTrackedProductsKevData,
   trackedProductInsights,
   trackedProductSummary,
+  recentWindowDays: trackedRecentWindowDays,
 } = useTrackedProducts();
 
 const trackedProductKeys = computed(() =>
@@ -201,6 +208,27 @@ const trackedProductKeys = computed(() =>
 const trackedProductCount = computed(() => trackedProductKeys.value.length);
 
 const hasTrackedProducts = computed(() => trackedProductCount.value > 0);
+
+const latestTrackedInsightDate = computed<Date | null>(() => {
+  let latest: Date | null = null;
+
+  for (const insight of trackedProductInsights.value) {
+    if (!insight.latestAddedAt) {
+      continue;
+    }
+
+    const parsed = parseISO(insight.latestAddedAt);
+    if (Number.isNaN(parsed.getTime())) {
+      continue;
+    }
+
+    if (!latest || parsed.getTime() > latest.getTime()) {
+      latest = parsed;
+    }
+  }
+
+  return latest;
+});
 
 const showOwnedOnlyEffective = computed(
   () => trackedProductsReady.value && showOwnedOnly.value
@@ -533,6 +561,53 @@ const closeDetails = () => {
 const handleDetailQuickFilter = (update: QuickFilterUpdate) => {
   applyQuickFilters(update);
   closeDetails();
+};
+
+const handleTrackedInsightQuickFilter = (
+  target: TrackedProductQuickFilterTarget,
+) => {
+  if (!target?.product) {
+    return;
+  }
+
+  const anchor = target.latestAddedAt ? parseISO(target.latestAddedAt) : null;
+  const yearRange = computeTrackedYearRange(
+    anchor,
+    target.recentWindowDays ?? null,
+  );
+
+  applyQuickFilters({
+    filters: {
+      vendor: target.product.vendorKey,
+      product: target.product.productKey,
+    },
+    ...(yearRange ? { yearRange } : {}),
+    showOwnedOnly: true,
+  });
+
+  showMySoftwareSlideover.value = false;
+};
+
+const handleTrackedSummaryQuickFilter = () => {
+  if (!hasTrackedProducts.value) {
+    return;
+  }
+
+  const yearRange = computeTrackedYearRange(
+    latestTrackedInsightDate.value,
+    trackedRecentWindowDays.value ?? null,
+  );
+
+  applyQuickFilters({
+    filters: {
+      vendor: null,
+      product: null,
+    },
+    ...(yearRange ? { yearRange } : {}),
+    showOwnedOnly: true,
+  });
+
+  showMySoftwareSlideover.value = false;
 };
 
 const handleAddToTracked = (entry: KevEntrySummary) => {
@@ -2049,6 +2124,41 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
   }
 };
 
+const computeTrackedYearRange = (
+  anchor: Date | null,
+  windowDays: number | null,
+): [number, number] | null => {
+  const fallback = anchor && !Number.isNaN(anchor.getTime()) ? anchor : new Date();
+  if (Number.isNaN(fallback.getTime())) {
+    return null;
+  }
+
+  let start = fallback;
+  if (typeof windowDays === "number" && Number.isFinite(windowDays) && windowDays > 0) {
+    start = new Date(fallback.getTime() - windowDays * 24 * 60 * 60 * 1000);
+  }
+
+  let startYear = start.getFullYear();
+  let endYear = fallback.getFullYear();
+
+  if (Number.isNaN(startYear)) {
+    startYear = endYear;
+  }
+
+  if (Number.isNaN(endYear)) {
+    return null;
+  }
+
+  if (startYear > endYear) {
+    startYear = endYear;
+  }
+
+  startYear = Math.max(sliderMinYear, Math.min(sliderMaxYear, startYear));
+  endYear = Math.max(startYear, Math.min(sliderMaxYear, endYear));
+
+  return [startYear, endYear];
+};
+
 const handleApplyFilterPreset = (preset: QuickFilterPreset) => {
   applyQuickFilters(preset.update);
   openAccordionSections("presets");
@@ -3103,7 +3213,13 @@ const tableMeta = {
             </p>
 
             <div
-              class="rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300"
+              role="button"
+              tabindex="0"
+              :aria-label="`View tracked CVEs from the last ${trackedProductSummary.recentWindowLabel}`"
+              class="group rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 text-sm text-neutral-600 transition hover:border-primary-300/70 hover:bg-primary-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300 dark:hover:border-primary-400/40 dark:hover:bg-primary-500/10"
+              @click="handleTrackedSummaryQuickFilter"
+              @keydown.enter.prevent.stop="handleTrackedSummaryQuickFilter"
+              @keydown.space.prevent.stop="handleTrackedSummaryQuickFilter"
             >
               <div class="flex items-center justify-between gap-3">
                 <div>
@@ -3121,9 +3237,9 @@ const tableMeta = {
                   {{ trackedProductSummary.totalCount.toLocaleString() }} total CVEs
                 </UBadge>
               </div>
-              <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
-                Open the panel to manage tracked items and view severity
-                breakdowns.
+              <p class="mt-3 text-xs text-neutral-500 transition group-hover:text-primary-700 dark:text-neutral-400 dark:group-hover:text-primary-300">
+                Click to focus the catalog on your tracked software, or open the
+                panel to manage the list and explore severity details.
               </p>
             </div>
 
@@ -3277,8 +3393,11 @@ const tableMeta = {
         :save-error="trackedProductError"
         :product-insights="trackedProductInsights"
         :summary="trackedProductSummary"
+        :recent-window-days="trackedRecentWindowDays"
         @remove="removeTrackedProduct"
         @clear="clearTrackedProducts"
+        @quick-filter="handleTrackedInsightQuickFilter"
+        @quick-filter-summary="handleTrackedSummaryQuickFilter"
       />
     </div>
   </div>

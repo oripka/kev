@@ -122,6 +122,12 @@ export type TrackedProduct = {
   vendorName: string
 }
 
+export type TrackedProductQuickFilterTarget = {
+  product: TrackedProduct
+  latestAddedAt: string | null
+  recentWindowDays: number | null
+}
+
 export type KevResponse = {
   updatedAt: string
   entries: KevEntrySummary[]
