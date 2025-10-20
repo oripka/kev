@@ -5,6 +5,7 @@
 .nuxt
 .nitro
 dist
+data/
 
 # Data cache
 data/cache/

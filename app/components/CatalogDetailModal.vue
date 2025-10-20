@@ -325,6 +325,45 @@ const buildGapLabel = (days: number): string => {
   return parts.join(" ");
 };
 
+const getDateKey = (value: Date | null, fallback: string): string => {
+  if (!value) {
+    return fallback;
+  }
+
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildGapLabel = (days: number): string => {
+  if (!Number.isFinite(days) || days <= 0) {
+    return "";
+  }
+
+  const parts: string[] = [];
+  const years = Math.floor(days / 365);
+  if (years > 0) {
+    parts.push(`${years} year${years === 1 ? "" : "s"}`);
+  }
+
+  let remainingDays = days - years * 365;
+
+  if (years === 0 && remainingDays >= 7 && remainingDays % 7 === 0) {
+    const weeks = Math.floor(remainingDays / 7);
+    if (weeks > 0) {
+      parts.push(`${weeks} week${weeks === 1 ? "" : "s"}`);
+      remainingDays = 0;
+    }
+  }
+
+  if (remainingDays > 0) {
+    parts.push(`${remainingDays} day${remainingDays === 1 ? "" : "s"}`);
+  }
+
+  return parts.join(" ");
+};
+
 const timelineItems = computed<TimelineItem[]>(() => {
   const entry = props.entry;
   if (!entry) {
@@ -333,6 +372,37 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
   const events = sortedTimelineEvents.value;
 
+  type TimelineGroup = {
+    key: string;
+    formattedDate: string;
+    parsed: Date | null;
+    events: KevEntryTimelineEvent[];
+  };
+
+  const groups: TimelineGroup[] = [];
+
+  for (const event of events) {
+    const parsed = parseEventTimestamp(event.timestamp);
+    const formattedDate = formatTimelineDate(event.timestamp) ?? event.timestamp;
+    const key = getDateKey(parsed, event.timestamp);
+
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup && lastGroup.key === key) {
+      lastGroup.events.push(event);
+      continue;
+    }
+
+    groups.push({
+      key,
+      formattedDate,
+      parsed,
+      events: [event],
+    });
+  }
+
+  const items: TimelineItem[] = [];
+
+  const buildEventDescription = (event: KevEntryTimelineEvent): { title: string; description: string | null; icon: string } => {
   type TimelineGroup = {
     key: string;
     formattedDate: string;
@@ -378,6 +448,7 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
     return {
       title,
+      description,
       description,
       icon: event.icon ?? meta.icon,
     };
@@ -671,6 +742,8 @@ const timelineStats = computed(() => {
                         variant="soft"
                         class="text-xs font-semibold uppercase tracking-wide"
                       >
+                        {{ timelineEventCount }}
+                        {{ timelineEventCount === 1 ? "event" : "events" }}
                         {{ timelineEventCount }}
                         {{ timelineEventCount === 1 ? "event" : "events" }}
                       </UBadge>
