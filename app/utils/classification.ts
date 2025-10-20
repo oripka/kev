@@ -405,13 +405,66 @@ const remoteContextPatterns: RegExp[] = [
   /(crafted (?:request|packet|payload|network request|network traffic|network message))/i
 ]
 
+
+// Enhanced and safer regexes to detect memory corruption vulnerabilities
 const memoryCorruptionPatterns: RegExp[] = [
-  /(memory corruption|buffer overflow|heap overflow|stack overflow|out-of-bounds|use-after-free|dangling pointer|double free|overflow)/i
-]
+  // General memory corruption
+  /\bmemory (?:corruption|corrupt(?:ed)?)\b/i,
+
+  // Buffer overflows and similar
+  /\b(?:buffer(?:[-\s]?(?:overflow|overrun|underflow|underrun))|stack(?:[-\s]?(?:overflow|overrun))|heap(?:[-\s]?(?:overflow|corruption)))\b/i,
+
+  // Out-of-bounds — ensure bounded by non-word chars to avoid OOB inside words
+  /(?:^|[^a-z0-9])(out[-\s]?of[-\s]?bounds|oob)(?: (?:read|write|access|r\/w|w\/r))?(?=[^a-z0-9]|$)/i,
+
+  // Off-by-one
+  /\boff[-\s]?by[-\s]?one(?: (?:overflow|read|write|error))?\b/i,
+
+  // Use-after-free & pointer issues
+  /\b(use[-\s]?after[-\s]?free|use[-\s]?after[-\s]?scope|double[-\s]?free|dangling (?:pointer|reference)|invalid pointer)\b/i,
+
+  // Heap/stack corruption
+  /\b(?:heap corruption|stack corruption|heap[-\s]?overflow|stack[-\s]?overflow)\b/i,
+
+  // Write primitives and overwrite issues
+  /\b(?:write[-\s]?(?:what[-\s]?where)|arbitrary write|controlled write|partial overwrite|wild write)\b/i,
+
+  // Integer overflow / underflow
+  /\b(?:integer (?:overflow|underflow)|signedness (?:error|issue))\b/i,
+
+  // Format string vulns that cause memory corruption
+  /\bformat[-\s]?string(?: vulnerability| bug)?\b/i
+];
+
 
 const denialOfServicePatterns: RegExp[] = [
-  /(denial of service|dos attack|service disruption|resource exhaustion|crash)/i
-]
+  // explicit denial-of-service phrases (keeps "dos" only when part of "dos attack" or as DDoS/DoS forms)
+  /\b(?:denial[-\s]?of[-\s]?service|denial[-\s]?of[-\s]?service attack|dos attack)\b/i,
+  /\b(?:ddo?s(?:[-\s]?attack)?|d\.?d\.?o\.?s)\b/i, // matches DDoS / DoS / D.D.O.S forms (but not generic 'dos' words when used in context)
+
+  // resource exhaustion / leaks / allocation storms
+  /\b(?:resource(?:[-\s]?exhaustion| exhaustion)|memory(?:[-\s]?exhaustion| exhaustion| leak| pressure)|out[-\s]?of[-\s]?memory|oom(?: killer)?\b)/i,
+  /\b(?:cpu(?:[-\s]?exhaustion| exhaustion| spike| high(?:[-\s]?cpu| load)?)|high(?:[-\s]?cpu|[-\s]?load|[-\s]?utilization))\b/i,
+
+  // crashes, panics, segfaults — kept as whole words to avoid noise
+  /\b(?:crash(?:es|ed)?|panic(?:s)?|segmentation fault|segfault|kernel panic)\b/i,
+
+  // hangs / unresponsive / infinite loops / busy/spin loops
+  /\b(?:hang(?:s|ing)?|unresponsive|freeze|stuck|infinite(?:[-\s]?loop)?|busy(?:[-\s]?loop|loop)|spin(?:[-\s]?lock)?)\b/i,
+
+  // flooding / request abuse / connection exhaustion / socket exhaustion / rate-limit bypass
+  /\b(?:flood(?:ing|ed)?|request(?:[-\s]?flood|[-\s]?storm)?|connection(?:[-\s]?flood|[-\s]?exhaustion|[-\s]?storm)|socket(?:[-\s]?exhaustion)?)\b/i,
+  /\b(?:rate[-\s]?limit(?:ing)? bypass|rate[-\s]?limit(?:ing)?|throttl(?:e|ing) bypass|throttle(?:ing)?)\b/i,
+
+  // fork bombs, descriptor exhaustion, handle exhaustion
+  /\b(?:fork[-\s]?bomb|file[-\s]?descriptor(?:[-\s]?exhaustion)?|fd(?:[-\s]?exhaustion)?|handle(?:[-\s]?exhaustion)?)\b/i,
+
+  // patterns describing DoS cause (infinite accept loop, busy polling, allocate loop, thread leak)
+  /\b(?:thread(?:[-\s]?leak)|handle(?:[-\s]?leak)|descriptor(?:[-\s]?leak)|socket(?:[-\s]?leak)|allocation(?:[-\s]?storm)|memory(?:[-\s]?blast|[-\s]?storm))\b/i,
+
+  // other DoS-related primitives (heap spray is often used for exploitation but can show resource abuse)
+  /\b(?:heap(?:[-\s]?spray)|allocation(?:[-\s]?bomb))\b/i
+];
 
 const clientSignalPatterns: RegExp[] = [
   /(client[- ]?side)/i,
