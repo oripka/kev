@@ -160,5 +160,302 @@
     "vendor": "microsoft",
     "context": "Plug and Play service overflow exploited to gain code execution on Windows 2000-era systems.",
     "notes": "Used by Zotob and other early worms; historically important for Windows 2000 exploitation."
+  },
+  {
+    "cve": "CVE-2017-5753",
+    "title": "Spectre Variant 1 (Bounds Check Bypass)",
+    "year": 2017,
+    "product": "modern cpu speculative execution",
+    "vendor": "multiple vendors",
+    "context": "Speculative execution side channel where mispredicted bounds checks allow reading data across privilege boundaries.",
+    "notes": "Required coordinated mitigations across operating systems, browsers, and microcode to reduce transient execution leakage."
+  },
+  {
+    "cve": "CVE-2017-5715",
+    "title": "Spectre Variant 2 (Branch Target Injection)",
+    "year": 2017,
+    "product": "modern cpu speculative execution",
+    "vendor": "multiple vendors",
+    "context": "Indirect branch prediction poisoning enabling attacker-controlled speculative execution and data disclosure.",
+    "notes": "Drove the deployment of retpolines, firmware updates, and broader discussions around CPU speculation hardening."
+  },
+  {
+    "cve": "CVE-2017-5754",
+    "title": "Meltdown (Rogue Data Cache Load)",
+    "year": 2017,
+    "product": "modern cpu speculative execution",
+    "vendor": "multiple vendors",
+    "context": "Speculative execution flaw letting user-mode code read kernel memory via out-of-order execution side channels.",
+    "notes": "Prompted kernel page table isolation (KPTI) rollouts and demonstrated the impact of hardware microarchitectural bugs."
+  },
+  {
+    "cve": "CVE-2017-11882",
+    "title": "Microsoft Office Equation Editor Stack Buffer Overflow",
+    "year": 2017,
+    "product": "microsoft office equation editor",
+    "vendor": "microsoft",
+    "context": "Legacy EQNEDT32 component contains stack overflow allowing crafted Office documents to execute arbitrary code.",
+    "notes": "Heavily weaponized by crimeware and state actors; remained viable for years due to slow patch adoption."
+  },
+  {
+    "cve": "CVE-2017-0199",
+    "title": "Microsoft Word/WordPad RTF Remote Code Execution",
+    "year": 2017,
+    "product": "microsoft wordpad",
+    "vendor": "microsoft",
+    "context": "Malformed RTF files trigger script execution via the Windows OLE2Link object when opened in Word or WordPad.",
+    "notes": "Became a staple phishing attachment vector, loading malware with minimal user interaction."
+  },
+  {
+    "cve": "CVE-2012-0158",
+    "title": "Windows Common Controls MSCOMCTL.OCX Memory Corruption",
+    "year": 2012,
+    "product": "microsoft common controls",
+    "vendor": "microsoft",
+    "context": "ActiveX control memory corruption exploited through Office documents and other containers embedding MSCOMCTL.OCX.",
+    "notes": "Long-lived client-side exploit used by espionage and financially motivated campaigns alike."
+  },
+  {
+    "cve": "CVE-2017-8570",
+    "title": "Microsoft Office OLE Packager Script Execution",
+    "year": 2017,
+    "product": "microsoft office",
+    "vendor": "microsoft",
+    "context": "Packager-enabled OLE object in documents allows remote template retrieval and arbitrary code execution.",
+    "notes": "Popular downloader vector that bridged Office phishing documents to follow-on payloads."
+  },
+  {
+    "cve": "CVE-2012-1723",
+    "title": "Java SE HotSpot Type Confusion",
+    "year": 2012,
+    "product": "oracle java se",
+    "vendor": "oracle",
+    "context": "Type confusion in HotSpot verifier allows malicious applets to escape the Java sandbox and run arbitrary code.",
+    "notes": "Frequently bundled into exploit kits delivering ransomware and banking malware."
+  },
+  {
+    "cve": "CVE-2021-34473 / CVE-2021-34523 / CVE-2021-31207",
+    "title": "ProxyShell Microsoft Exchange Server RCE Chain",
+    "year": 2021,
+    "product": "microsoft exchange server",
+    "vendor": "microsoft",
+    "context": "Client Access Service vulnerabilities combine to bypass authentication and execute code on internet-facing Exchange servers.",
+    "notes": "Extensively exploited to drop web shells and ransomware across exposed enterprise email infrastructure."
+  },
+  {
+    "cve": "CVE-2019-11510",
+    "title": "Pulse Connect Secure Arbitrary File Read",
+    "year": 2019,
+    "product": "pulse connect secure vpn",
+    "vendor": "pulse secure",
+    "context": "Unauthenticated path traversal allows attackers to exfiltrate credentials and configuration files from VPN appliances.",
+    "notes": "Led directly to network intrusions when threat actors harvested credentials and deployed follow-on malware."
+  },
+  {
+    "cve": "CVE-2021-44228",
+    "title": "Log4Shell Apache Log4j JNDI Remote Code Execution",
+    "year": 2021,
+    "product": "apache log4j",
+    "vendor": "apache",
+    "context": "User-controlled strings logged by vulnerable Log4j triggers JNDI lookups that load attacker-controlled classes.",
+    "notes": "Global emergency affecting countless Java applications; exploitation observed within hours of disclosure."
+  },
+  {
+    "cve": "CVE-2018-8174",
+    "title": "VBScript Engine Use-After-Free",
+    "year": 2018,
+    "product": "microsoft vbscript engine",
+    "vendor": "microsoft",
+    "context": "Use-after-free in VBScript when handling Class_Terminate allowing remote code execution via web pages or Office files.",
+    "notes": "Also known as Double Kill; patched after widespread exploitation through Internet Explorer."
+  },
+  {
+    "cve": "CVE-2013-0074",
+    "title": "Microsoft Silverlight Remote Code Execution",
+    "year": 2013,
+    "product": "microsoft silverlight",
+    "vendor": "microsoft",
+    "context": "Improper memory handling permits crafted Silverlight applications to execute arbitrary code in the user's context.",
+    "notes": "Favored by exploit kits targeting browsers with the Silverlight plugin installed."
+  },
+  {
+    "cve": "CVE-2019-19781",
+    "title": "Citrix ADC / Gateway Directory Traversal to RCE",
+    "year": 2019,
+    "product": "citrix adc and gateway",
+    "vendor": "citrix",
+    "context": "VPN endpoint directory traversal allows writing templates that execute commands on the appliance.",
+    "notes": "Branded Shitrix; mass exploitation granted attackers footholds into corporate networks."
+  },
+  {
+    "cve": "CVE-2018-0802",
+    "title": "Microsoft Office Equation Editor Memory Corruption",
+    "year": 2018,
+    "product": "microsoft office equation editor",
+    "vendor": "microsoft",
+    "context": "Another flaw in the retired Equation Editor component enabling crafted documents to run code with user privileges.",
+    "notes": "Follow-up to CVE-2017-11882, continuing abuse of EQNEDT32 in targeted phishing campaigns."
+  },
+  {
+    "cve": "CVE-2021-26855",
+    "title": "ProxyLogon Exchange Server SSRF",
+    "year": 2021,
+    "product": "microsoft exchange server",
+    "vendor": "microsoft",
+    "context": "Server-side request forgery against Exchange's autodiscover endpoint allowing arbitrary HTTP requests and mailbox access.",
+    "notes": "Kickstarted mass compromises in early 2021 when chained with post-authentication vulnerabilities."
+  },
+  {
+    "cve": "CVE-2019-2725",
+    "title": "Oracle WebLogic Deserialization Remote Code Execution",
+    "year": 2019,
+    "product": "oracle weblogic server",
+    "vendor": "oracle",
+    "context": "XMLDecoder deserialization of crafted XML triggers unauthenticated command execution over HTTP.",
+    "notes": "Rapidly weaponized for cryptocurrency mining and ransomware deployment on exposed middleware."
+  },
+  {
+    "cve": "CVE-2018-13379",
+    "title": "Fortinet FortiOS SSL VPN Path Traversal",
+    "year": 2018,
+    "product": "fortinet fortios",
+    "vendor": "fortinet",
+    "context": "SSL VPN web portal allows unauthenticated file downloads, leaking credentials and session information.",
+    "notes": "Widely harvested credential dumps fueled later intrusions and ransomware operations."
+  },
+  {
+    "cve": "CVE-2021-26084",
+    "title": "Atlassian Confluence OGNL Injection",
+    "year": 2021,
+    "product": "atlassian confluence server",
+    "vendor": "atlassian",
+    "context": "Template injection via WebWork/OGNL enables unauthenticated attackers to run commands on Confluence servers.",
+    "notes": "Aggressively exploited to deploy coin miners and web shells within days of disclosure."
+  },
+  {
+    "cve": "CVE-2014-6324",
+    "title": "MS14-068 Kerberos Privilege Escalation",
+    "year": 2014,
+    "product": "microsoft kerberos",
+    "vendor": "microsoft",
+    "context": "Kerberos KDC validation flaw lets authenticated users forge ticket-granting tickets and escalate to domain admin.",
+    "notes": "Highly prized for post-compromise privilege escalation in Windows domains before patches were broadly applied."
+  },
+  {
+    "cve": "CVE-2008-1447",
+    "title": "Kaminsky DNS Cache Poisoning",
+    "year": 2008,
+    "product": "dns resolvers",
+    "vendor": "multiple vendors",
+    "context": "Predictable transaction IDs and source ports let attackers poison DNS caches with malicious records.",
+    "notes": "Triggered coordinated global patching to introduce source port randomization across DNS software."
+  },
+  {
+    "cve": "CVE-2002-0649",
+    "title": "MS02-039 SQL Server Resolution Service Overflow (Slammer)",
+    "year": 2002,
+    "product": "microsoft sql server",
+    "vendor": "microsoft",
+    "context": "UDP 1434 resolution service buffer overflow enabling wormable remote code execution.",
+    "notes": "Fueled the SQL Slammer worm that congested global networks within minutes in January 2003."
+  },
+  {
+    "cve": "CVE-2015-5119",
+    "title": "Adobe Flash Hacking Team Use-After-Free",
+    "year": 2015,
+    "product": "adobe flash player",
+    "vendor": "adobe",
+    "context": "After Hacking Team leak, a Stagefright-style use-after-free allowed Flash content to execute arbitrary code.",
+    "notes": "Rapidly rolled into exploit kits prompting browsers to accelerate Flash deprecation timelines."
+  },
+  {
+    "cve": "CVE-2019-10149",
+    "title": "Exim Mail Transfer Agent Remote Command Execution",
+    "year": 2019,
+    "product": "exim mta",
+    "vendor": "exim project",
+    "context": "Malicious SNI in TLS negotiation triggers command injection when Exim routes mail.",
+    "notes": "Enabled unauthenticated root access on widely deployed Unix mail servers when left unpatched."
+  },
+  {
+    "cve": "CVE-2021-36942",
+    "title": "Windows LSA Spoofing Vulnerability",
+    "year": 2021,
+    "product": "windows lsa",
+    "vendor": "microsoft",
+    "context": "LSA RPC interface can be coerced into authenticating to attacker-controlled hosts, enabling relay-style domain compromise.",
+    "notes": "Mitigations tied to PetitPotam and AD CS abuse scenarios to harden enterprise identity services."
+  },
+  {
+    "cve": "CVE-2022-30190",
+    "title": "Follina Microsoft Support Diagnostic Tool RCE",
+    "year": 2022,
+    "product": "microsoft msdt",
+    "vendor": "microsoft",
+    "context": "Crafted Office documents invoke MSDT via ms-msdt URLs without macros, allowing command execution under user context.",
+    "notes": "Enabled macro-less phishing chains; Microsoft issued guidance before a full patch was available."
+  },
+  {
+    "cve": "CVE-2021-34527",
+    "title": "PrintNightmare Windows Print Spooler RCE",
+    "year": 2021,
+    "product": "windows print spooler",
+    "vendor": "microsoft",
+    "context": "Print Spooler improperly handles printer drivers, allowing remote code execution and local privilege escalation.",
+    "notes": "Urgent patches and configuration changes were required after exploit code leaked ahead of patch maturity."
+  },
+  {
+    "cve": "CVE-2021-27101",
+    "title": "Accellion FTA SSRF and Command Execution",
+    "year": 2021,
+    "product": "accellion file transfer appliance",
+    "vendor": "accellion",
+    "context": "Server-side request forgery in legacy FTA appliance enables attackers to execute commands via crafted requests.",
+    "notes": "Attackers exfiltrated sensitive data from organizations using the obsolete platform before patches or migrations."
+  },
+  {
+    "cve": "CVE-2023-34362",
+    "title": "MOVEit Transfer SQL Injection",
+    "year": 2023,
+    "product": "progress moveit transfer",
+    "vendor": "progress software",
+    "context": "SQL injection in MOVEit Transfer allows unauthenticated attackers to escalate privileges and execute code.",
+    "notes": "Mass exploitation campaign by Cl0p ransomware group impacted hundreds of organizations."
+  },
+  {
+    "cve": "CVE-2023-4966",
+    "title": "Citrix Bleed NetScaler ADC/Gateway Information Disclosure",
+    "year": 2023,
+    "product": "citrix netscaler adc/gateway",
+    "vendor": "citrix",
+    "context": "Memory handling flaw in HTTP/2 multiplexing leaks session tokens and authentication data to unauthenticated attackers.",
+    "notes": "Attackers harvested tokens to bypass multifactor protections on critical remote access infrastructure."
+  },
+  {
+    "cve": "CVE-2023-2868",
+    "title": "Barracuda ESG Email Attachment Command Injection",
+    "year": 2023,
+    "product": "barracuda email security gateway",
+    "vendor": "barracuda networks",
+    "context": "Malicious TAR attachments trigger command injection in appliance scanning modules.",
+    "notes": "State-aligned actors leveraged the flaw for persistent access, leading to emergency appliance replacement guidance."
+  },
+  {
+    "cve": "CVE-2024-3094",
+    "title": "XZ Utils Backdoor in liblzma",
+    "year": 2024,
+    "product": "xz utils liblzma",
+    "vendor": "xz utils project",
+    "context": "Supply-chain backdoor in test releases of xz/liblzma introduced malicious code affecting SSH authentication.",
+    "notes": "Rapid discovery prevented widespread compromise but highlighted open-source maintainer trust risks."
+  },
+  {
+    "cve": "CVE-1999-0211",
+    "title": "mountd Export List Length Bypass",
+    "year": 1999,
+    "product": "nfs mount daemons",
+    "vendor": "multiple vendors",
+    "context": "Overly long export lists in some mountd implementations allow unauthorized systems to mount NFS shares.",
+    "notes": "Early example of misconfigured network services exposing Unix filesystems to the internet."
   }
 ]
