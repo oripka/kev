@@ -2,9 +2,12 @@
 import { computed } from "vue";
 import type { KevEntrySummary } from "~/types";
 import type {
+  LatestAdditionSortKey,
+  LatestAdditionSortOption,
   LatestAdditionSummary,
   SeverityDistributionDatum,
   SourceBadgeMap,
+  StatTrend,
 } from "~/types/dashboard";
 
 const props = defineProps<{
@@ -13,16 +16,25 @@ const props = defineProps<{
   showRiskDetails: boolean;
   showTrendLines: boolean;
   matchingResultsLabel: string;
+  periodLabel: string;
   highSeverityShareLabel: string;
   highSeveritySummary: string;
+  highSeverityTrend: StatTrend | null;
   averageCvssLabel: string;
   averageCvssSummary: string;
+  averageCvssTrend: StatTrend | null;
   ransomwareShareLabel: string;
   ransomwareSummary: string;
+  ransomwareTrend: StatTrend | null;
   internetExposedShareLabel: string;
   internetExposedSummary: string;
+  internetExposedTrend: StatTrend | null;
   severityDistribution: SeverityDistributionDatum[];
   latestAdditionSummaries: LatestAdditionSummary[];
+  latestAdditionNotes: string[];
+  latestAdditionSortKey: LatestAdditionSortKey;
+  latestAdditionSortOptions: LatestAdditionSortOption[];
+  trackedProductsReady: boolean;
   sourceBadgeMap: SourceBadgeMap;
   catalogUpdatedAt: string;
   entries: KevEntrySummary[];
@@ -32,7 +44,9 @@ const emit = defineEmits<{
   (event: "update:open", value: boolean): void;
   (event: "update:show-risk-details", value: boolean): void;
   (event: "update:show-trend-lines", value: boolean): void;
+  (event: "update:latest-addition-sort-key", value: LatestAdditionSortKey): void;
   (event: "open-details", entry: KevEntrySummary): void;
+  (event: "add-to-tracked", entry: KevEntrySummary): void;
 }>();
 
 const open = computed({
@@ -50,8 +64,17 @@ const showTrendLines = computed({
   set: (value: boolean) => emit("update:show-trend-lines", value),
 });
 
+const latestAdditionSortKey = computed({
+  get: () => props.latestAdditionSortKey,
+  set: (value: LatestAdditionSortKey) => emit("update:latest-addition-sort-key", value),
+});
+
 const handleOpenDetails = (entry: KevEntrySummary) => {
   emit("open-details", entry);
+};
+
+const handleAddToTracked = (entry: KevEntrySummary) => {
+  emit("add-to-tracked", entry);
 };
 </script>
 
@@ -72,19 +95,29 @@ const handleOpenDetails = (entry: KevEntrySummary) => {
 
         <RiskSnapshotCard
           v-model:show-risk-details="showRiskDetails"
+          v-model:latest-addition-sort-key="latestAdditionSortKey"
           :matching-results-label="props.matchingResultsLabel"
+          :period-label="props.periodLabel"
           :high-severity-share-label="props.highSeverityShareLabel"
           :high-severity-summary="props.highSeveritySummary"
+          :high-severity-trend="props.highSeverityTrend"
           :average-cvss-label="props.averageCvssLabel"
           :average-cvss-summary="props.averageCvssSummary"
+          :average-cvss-trend="props.averageCvssTrend"
           :ransomware-share-label="props.ransomwareShareLabel"
           :ransomware-summary="props.ransomwareSummary"
+          :ransomware-trend="props.ransomwareTrend"
           :internet-exposed-share-label="props.internetExposedShareLabel"
           :internet-exposed-summary="props.internetExposedSummary"
+          :internet-exposed-trend="props.internetExposedTrend"
           :severity-distribution="props.severityDistribution"
           :latest-addition-summaries="props.latestAdditionSummaries"
+          :latest-addition-notes="props.latestAdditionNotes"
+          :latest-addition-sort-options="props.latestAdditionSortOptions"
+          :tracked-products-ready="props.trackedProductsReady"
           :source-badge-map="props.sourceBadgeMap"
           @open-details="handleOpenDetails"
+          @add-to-tracked="handleAddToTracked"
         />
 
         <FilteredTrendPanel v-model="showTrendLines" :entries="props.entries" />

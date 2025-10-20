@@ -1,49 +1,46 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { KevEntrySummary } from "~/types";
-
-type SeverityDistributionDatum = {
-  key: string;
-  label: string;
-  color: string;
-  count: number;
-  percent: number;
-  percentLabel: string;
-};
-
-type LatestAdditionSummary = {
-  entry: KevEntrySummary;
-  dateLabel: string;
-  vendorProduct: string;
-  wellKnown: string | null;
-  sources: KevEntrySummary["sources"];
-  internetExposed: boolean;
-};
-
-type SourceBadgeMap = Record<
-  KevEntrySummary["sources"][number],
-  { label: string; color: string }
->;
+import type {
+  LatestAdditionSortKey,
+  LatestAdditionSortOption,
+  LatestAdditionSummary,
+  SeverityDistributionDatum,
+  SeverityKey,
+  SourceBadgeMap,
+  StatTrend,
+} from "~/types/dashboard";
 
 const props = defineProps<{
   matchingResultsLabel: string;
+  periodLabel: string;
   highSeverityShareLabel: string;
   highSeveritySummary: string;
+  highSeverityTrend: StatTrend | null;
   averageCvssLabel: string;
   averageCvssSummary: string;
+  averageCvssTrend: StatTrend | null;
   ransomwareShareLabel: string;
   ransomwareSummary: string;
+  ransomwareTrend: StatTrend | null;
   internetExposedShareLabel: string;
   internetExposedSummary: string;
+  internetExposedTrend: StatTrend | null;
   severityDistribution: SeverityDistributionDatum[];
   latestAdditionSummaries: LatestAdditionSummary[];
+  latestAdditionNotes: string[];
+  latestAdditionSortKey: LatestAdditionSortKey;
+  latestAdditionSortOptions: LatestAdditionSortOption[];
+  trackedProductsReady: boolean;
   sourceBadgeMap: SourceBadgeMap;
   showRiskDetails: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: "update:show-risk-details", value: boolean): void;
+  (event: "update:latest-addition-sort-key", value: LatestAdditionSortKey): void;
   (event: "open-details", entry: KevEntrySummary): void;
+  (event: "add-to-tracked", entry: KevEntrySummary): void;
 }>();
 
 const riskDetails = computed({
@@ -51,8 +48,88 @@ const riskDetails = computed({
   set: (value: boolean) => emit("update:show-risk-details", value),
 });
 
+const latestAdditionSortKey = computed({
+  get: () => props.latestAdditionSortKey,
+  set: (value: LatestAdditionSortKey) => emit("update:latest-addition-sort-key", value),
+});
+
+const severityMetaMap: Record<SeverityKey, { icon: string; class: string; label: string }> = {
+  Critical: {
+    icon: "i-lucide-radiation",
+    class: "text-rose-600 dark:text-rose-400",
+    label: "Critical severity",
+  },
+  High: {
+    icon: "i-lucide-alert-triangle",
+    class: "text-amber-500 dark:text-amber-400",
+    label: "High severity",
+  },
+  Medium: {
+    icon: "i-lucide-hexagon",
+    class: "text-orange-500 dark:text-orange-400",
+    label: "Medium severity",
+  },
+  Low: {
+    icon: "i-lucide-shield",
+    class: "text-sky-500 dark:text-sky-400",
+    label: "Low severity",
+  },
+  None: {
+    icon: "i-lucide-shield-check",
+    class: "text-emerald-500 dark:text-emerald-400",
+    label: "No severity impact",
+  },
+  Unknown: {
+    icon: "i-lucide-help-circle",
+    class: "text-neutral-400 dark:text-neutral-500",
+    label: "Unknown severity",
+  },
+};
+
+const trendMetaMap: Record<NonNullable<StatTrend>["direction"], { icon: string; class: string }> = {
+  up: { icon: "i-lucide-trending-up", class: "text-rose-500 dark:text-rose-400" },
+  down: { icon: "i-lucide-trending-down", class: "text-emerald-500 dark:text-emerald-400" },
+  flat: { icon: "i-lucide-arrow-right", class: "text-neutral-500 dark:text-neutral-400" },
+};
+
+const epssFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+});
+
+const resolveTrendMeta = (trend: StatTrend | null) => {
+  if (!trend) {
+    return null;
+  }
+
+  return {
+    ...trendMetaMap[trend.direction],
+    deltaLabel: trend.deltaLabel,
+  };
+};
+
+const resolveSeverityMeta = (severity: KevEntrySummary["cvssSeverity"]) => {
+  const key = (severity ?? "Unknown") as SeverityKey;
+  return severityMetaMap[key];
+};
+
+const formatEpssScore = (value: number | null | undefined) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+
+  return epssFormatter.format(value * 100);
+};
+
 const openDetails = (entry: KevEntrySummary) => {
   emit("open-details", entry);
+};
+
+const addToTracked = (entry: KevEntrySummary) => {
+  emit("add-to-tracked", entry);
+};
+
+const setSortKey = (value: LatestAdditionSortKey) => {
+  latestAdditionSortKey.value = value;
 };
 </script>
 
@@ -68,9 +145,14 @@ const openDetails = (entry: KevEntrySummary) => {
             Quick metrics for the current selection
           </p>
         </div>
-        <UBadge color="primary" variant="soft" class="text-sm font-semibold">
-          {{ props.matchingResultsLabel }} matching exploits
-        </UBadge>
+        <div class="flex flex-wrap items-center gap-2">
+          <UBadge color="neutral" variant="soft" class="text-sm font-semibold">
+            {{ props.periodLabel }}
+          </UBadge>
+          <UBadge color="primary" variant="soft" class="text-sm font-semibold">
+            {{ props.matchingResultsLabel }} matching exploits
+          </UBadge>
+        </div>
       </div>
     </template>
 
@@ -80,9 +162,23 @@ const openDetails = (entry: KevEntrySummary) => {
           <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             High &amp; critical share
           </p>
-          <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-            {{ props.highSeverityShareLabel }}
-          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+              {{ props.highSeverityShareLabel }}
+            </p>
+            <span
+              v-if="resolveTrendMeta(props.highSeverityTrend)"
+              class="flex items-center gap-1 text-xs font-semibold"
+              :class="resolveTrendMeta(props.highSeverityTrend)?.class"
+            >
+              <UIcon
+                :name="resolveTrendMeta(props.highSeverityTrend)?.icon"
+                class="h-3.5 w-3.5"
+                aria-hidden="true"
+              />
+              <span>{{ resolveTrendMeta(props.highSeverityTrend)?.deltaLabel }}</span>
+            </span>
+          </div>
           <p class="text-xs text-neutral-500 dark:text-neutral-400">
             {{ props.highSeveritySummary }}
           </p>
@@ -91,9 +187,23 @@ const openDetails = (entry: KevEntrySummary) => {
           <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Average CVSS
           </p>
-          <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-            {{ props.averageCvssLabel }}
-          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+              {{ props.averageCvssLabel }}
+            </p>
+            <span
+              v-if="resolveTrendMeta(props.averageCvssTrend)"
+              class="flex items-center gap-1 text-xs font-semibold"
+              :class="resolveTrendMeta(props.averageCvssTrend)?.class"
+            >
+              <UIcon
+                :name="resolveTrendMeta(props.averageCvssTrend)?.icon"
+                class="h-3.5 w-3.5"
+                aria-hidden="true"
+              />
+              <span>{{ resolveTrendMeta(props.averageCvssTrend)?.deltaLabel }}</span>
+            </span>
+          </div>
           <p class="text-xs text-neutral-500 dark:text-neutral-400">
             {{ props.averageCvssSummary }}
           </p>
@@ -102,9 +212,23 @@ const openDetails = (entry: KevEntrySummary) => {
           <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Ransomware-linked CVEs
           </p>
-          <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-            {{ props.ransomwareShareLabel }}
-          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+              {{ props.ransomwareShareLabel }}
+            </p>
+            <span
+              v-if="resolveTrendMeta(props.ransomwareTrend)"
+              class="flex items-center gap-1 text-xs font-semibold"
+              :class="resolveTrendMeta(props.ransomwareTrend)?.class"
+            >
+              <UIcon
+                :name="resolveTrendMeta(props.ransomwareTrend)?.icon"
+                class="h-3.5 w-3.5"
+                aria-hidden="true"
+              />
+              <span>{{ resolveTrendMeta(props.ransomwareTrend)?.deltaLabel }}</span>
+            </span>
+          </div>
           <p class="text-xs text-neutral-500 dark:text-neutral-400">
             {{ props.ransomwareSummary }}
           </p>
@@ -113,9 +237,23 @@ const openDetails = (entry: KevEntrySummary) => {
           <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Internet exposure share
           </p>
-          <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-            {{ props.internetExposedShareLabel }}
-          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <p class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+              {{ props.internetExposedShareLabel }}
+            </p>
+            <span
+              v-if="resolveTrendMeta(props.internetExposedTrend)"
+              class="flex items-center gap-1 text-xs font-semibold"
+              :class="resolveTrendMeta(props.internetExposedTrend)?.class"
+            >
+              <UIcon
+                :name="resolveTrendMeta(props.internetExposedTrend)?.icon"
+                class="h-3.5 w-3.5"
+                aria-hidden="true"
+              />
+              <span>{{ resolveTrendMeta(props.internetExposedTrend)?.deltaLabel }}</span>
+            </span>
+          </div>
           <p class="text-xs text-neutral-500 dark:text-neutral-400">
             {{ props.internetExposedSummary }}
           </p>
@@ -178,18 +316,39 @@ const openDetails = (entry: KevEntrySummary) => {
 
             <div class="space-y-4 lg:col-span-2">
               <div class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                    Latest additions
-                  </p>
-                  <UBadge
-                    v-if="props.latestAdditionSummaries.length"
-                    color="primary"
-                    variant="soft"
-                    class="text-xs font-semibold"
-                  >
-                    {{ props.latestAdditionSummaries.length }} shown
-                  </UBadge>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex items-center gap-2">
+                    <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                      Latest additions
+                    </p>
+                    <UBadge
+                      v-if="props.latestAdditionSummaries.length"
+                      color="primary"
+                      variant="soft"
+                      class="text-xs font-semibold"
+                    >
+                      {{ props.latestAdditionSummaries.length }} shown
+                    </UBadge>
+                  </div>
+                  <div v-if="props.latestAdditionSummaries.length" class="flex items-center gap-2">
+                    <span class="hidden text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 md:block">
+                      Sort by
+                    </span>
+                    <div class="flex items-center gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-900/60">
+                      <UButton
+                        v-for="option in props.latestAdditionSortOptions"
+                        :key="option.value"
+                        :color="latestAdditionSortKey === option.value ? 'primary' : 'neutral'"
+                        :variant="latestAdditionSortKey === option.value ? 'solid' : 'ghost'"
+                        size="xs"
+                        :icon="option.icon"
+                        class="text-xs"
+                        @click="setSortKey(option.value)"
+                      >
+                        {{ option.label }}
+                      </UButton>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="props.latestAdditionSummaries.length" class="space-y-3">
                   <div
@@ -197,11 +356,24 @@ const openDetails = (entry: KevEntrySummary) => {
                     :key="item.entry.cveId"
                     class="space-y-3 rounded-lg border border-neutral-200 bg-white/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/60"
                   >
-                    <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-start justify-between gap-3">
                       <div class="space-y-1">
-                        <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                          {{ item.entry.vulnerabilityName }}
-                        </p>
+                        <div class="flex items-center gap-2">
+                          <span
+                            class="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-900/70"
+                            :aria-label="resolveSeverityMeta(item.entry.cvssSeverity).label"
+                          >
+                            <UIcon
+                              :name="resolveSeverityMeta(item.entry.cvssSeverity).icon"
+                              class="h-3.5 w-3.5"
+                              :class="resolveSeverityMeta(item.entry.cvssSeverity).class"
+                              aria-hidden="true"
+                            />
+                          </span>
+                          <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                            {{ item.entry.vulnerabilityName }}
+                          </p>
+                        </div>
                         <p v-if="item.wellKnown" class="text-xs font-medium text-primary-600 dark:text-primary-400">
                           {{ item.wellKnown }}
                         </p>
@@ -209,9 +381,19 @@ const openDetails = (entry: KevEntrySummary) => {
                           {{ item.vendorProduct }}
                         </p>
                       </div>
-                      <UBadge color="primary" variant="soft" class="text-xs font-semibold">
-                        {{ item.dateLabel }}
-                      </UBadge>
+                      <div class="flex flex-col items-end gap-2 text-right">
+                        <UBadge color="primary" variant="soft" class="text-xs font-semibold">
+                          {{ item.dateLabel }}
+                        </UBadge>
+                        <UBadge
+                          v-if="item.internetExposed"
+                          color="warning"
+                          variant="soft"
+                          class="text-xs font-semibold"
+                        >
+                          Internet-exposed
+                        </UBadge>
+                      </div>
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
@@ -219,12 +401,20 @@ const openDetails = (entry: KevEntrySummary) => {
                         {{ item.entry.cveId }}
                       </UBadge>
                       <UBadge
-                        v-if="item.internetExposed"
-                        color="warning"
+                        v-if="formatEpssScore(item.entry.epssScore)"
+                        color="primary"
                         variant="soft"
                         class="font-semibold"
                       >
-                        Internet-exposed
+                        EPSS {{ formatEpssScore(item.entry.epssScore) }}%
+                      </UBadge>
+                      <UBadge
+                        v-if="typeof item.entry.cvssScore === 'number' && Number.isFinite(item.entry.cvssScore)"
+                        color="neutral"
+                        variant="soft"
+                        class="font-semibold"
+                      >
+                        CVSS {{ item.entry.cvssScore.toFixed(1) }}
                       </UBadge>
                     </div>
 
@@ -240,7 +430,7 @@ const openDetails = (entry: KevEntrySummary) => {
                       </UBadge>
                     </div>
 
-                    <div class="flex justify-end">
+                    <div class="flex flex-wrap justify-end gap-2">
                       <UButton
                         color="neutral"
                         variant="ghost"
@@ -250,12 +440,45 @@ const openDetails = (entry: KevEntrySummary) => {
                       >
                         View details
                       </UButton>
+                      <UButton
+                        :color="item.isTracked ? 'neutral' : 'primary'"
+                        :variant="item.isTracked ? 'soft' : 'solid'"
+                        size="xs"
+                        :icon="item.isTracked ? 'i-lucide-check' : 'i-lucide-plus'"
+                        :disabled="!props.trackedProductsReady || item.isTracked"
+                        @click="addToTracked(item.entry)"
+                      >
+                        {{ item.isTracked ? 'Tracked' : 'Track software' }}
+                      </UButton>
                     </div>
                   </div>
                 </div>
                 <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
                   No entries match the current filters yet.
                 </p>
+
+                <div
+                  v-if="props.latestAdditionNotes.length"
+                  class="space-y-2 rounded-lg border border-dashed border-neutral-200 bg-neutral-100/70 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-300"
+                >
+                  <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                    Priority notes
+                  </p>
+                  <ul class="space-y-2">
+                    <li
+                      v-for="note in props.latestAdditionNotes"
+                      :key="note"
+                      class="flex items-start gap-2"
+                    >
+                      <UIcon
+                        name="i-lucide-info"
+                        class="mt-0.5 h-3.5 w-3.5 text-primary-500 dark:text-primary-400"
+                        aria-hidden="true"
+                      />
+                      <span class="leading-snug">{{ note }}</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>

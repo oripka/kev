@@ -24,10 +24,13 @@ import type {
   ActiveFilter,
   FilterKey,
   FilterState,
+  LatestAdditionSortKey,
+  LatestAdditionSortOption,
   LatestAdditionSummary,
   SeverityDistributionDatum,
   SeverityKey,
   SourceBadgeMap,
+  StatTrend,
   QuickFilterSummaryConfig,
   QuickFilterSummaryMetricKey,
 } from "~/types/dashboard";
@@ -71,6 +74,17 @@ const showTrendLines = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
+
+const latestAdditionWindowDays = 14;
+const latestAdditionWindowMs = latestAdditionWindowDays * 24 * 60 * 60 * 1000;
+const latestAdditionLimit = 5;
+
+const latestAdditionSortKey = ref<LatestAdditionSortKey>("recent");
+const latestAdditionSortOptions: LatestAdditionSortOption[] = [
+  { label: "Recent", value: "recent", icon: "i-lucide-clock" },
+  { label: "EPSS", value: "epss", icon: "i-lucide-activity" },
+  { label: "CVSS", value: "cvss", icon: "i-lucide-gauge" },
+];
 
 type QuickFilterUpdate = {
   filters?: Partial<Record<FilterKey, string | null>>;
@@ -170,6 +184,7 @@ onBeforeUnmount(() => {
 const {
   trackedProducts,
   trackedProductSet,
+  addTrackedProduct,
   removeTrackedProduct,
   clearTrackedProducts,
   showOwnedOnly,
@@ -515,6 +530,15 @@ const handleDetailQuickFilter = (update: QuickFilterUpdate) => {
   closeDetails();
 };
 
+const handleAddToTracked = (entry: KevEntrySummary) => {
+  addTrackedProduct({
+    productKey: entry.productKey,
+    productName: entry.product,
+    vendorKey: entry.vendorKey,
+    vendorName: entry.vendor,
+  });
+};
+
 watch(showDetails, (value) => {
   if (!value) {
     detailEntry.value = null;
@@ -761,12 +785,17 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
 
 const formatShare = (count: number, total: number) => {
   if (!total) {
-    return { count: 0, percentLabel: null as string | null };
+    return {
+      count: 0,
+      percent: null as number | null,
+      percentLabel: null as string | null,
+    };
   }
 
   const percent = (count / total) * 100;
   return {
     count,
+    percent,
     percentLabel: percentFormatter.format(percent),
   };
 };
@@ -777,6 +806,7 @@ const matchingResultsLabel = computed(() =>
 );
 
 type AggregatedMetrics = {
+  totalCount: number;
   ransomwareCount: number;
   cvssSum: number;
   cvssCount: number;
@@ -784,6 +814,21 @@ type AggregatedMetrics = {
   internetExposedCount: number;
   latestEntry: KevEntrySummary | null;
   latestTimestamp: number;
+};
+
+type PeriodMetrics = {
+  totalCount: number;
+  ransomwareCount: number;
+  cvssSum: number;
+  cvssCount: number;
+  severeCount: number;
+  internetExposedCount: number;
+};
+
+type PeriodSnapshot = {
+  current: PeriodMetrics;
+  previous: PeriodMetrics;
+  latestEntries: KevEntrySummary[];
 };
 
 const severityDisplayMeta: Record<
@@ -802,10 +847,12 @@ type DerivedResultSnapshot = {
   aggregated: AggregatedMetrics;
   severityDistribution: SeverityDistributionDatum[];
   latestEntries: KevEntrySummary[];
+  period: PeriodSnapshot;
 };
 
 const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
   const metrics: AggregatedMetrics = {
+    totalCount: 0,
     ransomwareCount: 0,
     cvssSum: 0,
     cvssCount: 0,
@@ -816,10 +863,10 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
   };
 
   const severityCounts = new Map<SeverityKey, number>();
-  const latestEntries: Array<{ entry: KevEntrySummary; timestamp: number }> =
-    [];
+  const timedEntries: Array<{ entry: KevEntrySummary; timestamp: number }> = [];
 
   for (const entry of results.value) {
+    metrics.totalCount += 1;
     const severity = entry.cvssSeverity;
     if (severity === "High" || severity === "Critical") {
       metrics.severeCount += 1;
@@ -846,7 +893,7 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
 
     const timestamp = Date.parse(entry.dateAdded);
     if (!Number.isNaN(timestamp)) {
-      latestEntries.push({ entry, timestamp });
+      timedEntries.push({ entry, timestamp });
       if (timestamp > metrics.latestTimestamp) {
         metrics.latestTimestamp = timestamp;
         metrics.latestEntry = entry;
@@ -854,7 +901,11 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
     }
   }
 
-  latestEntries.sort((first, second) => second.timestamp - first.timestamp);
+  timedEntries.sort((first, second) => second.timestamp - first.timestamp);
+
+  const latestEntries = timedEntries
+    .slice(0, latestAdditionLimit)
+    .map((item) => item.entry);
 
   const total = results.value.length;
   const severityDistribution: SeverityDistributionDatum[] = total
@@ -874,94 +925,259 @@ const derivedResultSnapshot = computed<DerivedResultSnapshot>(() => {
         .sort((first, second) => second.percent - first.percent)
     : [];
 
+  const createPeriodMetrics = (): PeriodMetrics => ({
+    totalCount: 0,
+    ransomwareCount: 0,
+    cvssSum: 0,
+    cvssCount: 0,
+    severeCount: 0,
+    internetExposedCount: 0,
+  });
+
+  const accumulatePeriodMetrics = (
+    target: PeriodMetrics,
+    entry: KevEntrySummary
+  ) => {
+    target.totalCount += 1;
+
+    if ((entry.ransomwareUse?.toLowerCase() ?? "").includes("known")) {
+      target.ransomwareCount += 1;
+    }
+
+    if (entry.internetExposed) {
+      target.internetExposedCount += 1;
+    }
+
+    if (entry.cvssSeverity === "High" || entry.cvssSeverity === "Critical") {
+      target.severeCount += 1;
+    }
+
+    if (
+      typeof entry.cvssScore === "number" &&
+      Number.isFinite(entry.cvssScore)
+    ) {
+      target.cvssSum += entry.cvssScore;
+      target.cvssCount += 1;
+    }
+  };
+
+  const period: PeriodSnapshot = {
+    current: createPeriodMetrics(),
+    previous: createPeriodMetrics(),
+    latestEntries: [],
+  };
+
+  if (timedEntries.length && Number.isFinite(metrics.latestTimestamp)) {
+    const periodEnd = metrics.latestTimestamp;
+    const periodStart = periodEnd - latestAdditionWindowMs;
+    const previousEnd = periodStart - 1;
+    const previousStart = previousEnd - latestAdditionWindowMs;
+
+    const currentEntries: Array<{ entry: KevEntrySummary; timestamp: number }> = [];
+
+    for (const item of timedEntries) {
+      const { entry, timestamp } = item;
+      if (timestamp >= periodStart && timestamp <= periodEnd) {
+        accumulatePeriodMetrics(period.current, entry);
+        currentEntries.push(item);
+      } else if (timestamp >= previousStart && timestamp <= previousEnd) {
+        accumulatePeriodMetrics(period.previous, entry);
+      }
+    }
+
+    period.latestEntries = currentEntries
+      .sort((first, second) => second.timestamp - first.timestamp)
+      .slice(0, latestAdditionLimit)
+      .map((item) => item.entry);
+  }
+
   return {
     aggregated: metrics,
     severityDistribution,
-    latestEntries: latestEntries.slice(0, 3).map((item) => item.entry),
+    latestEntries,
+    period,
   };
 });
 
-const aggregatedResultMetrics = computed(
-  () => derivedResultSnapshot.value.aggregated
+const riskPeriodSnapshot = computed(() => derivedResultSnapshot.value.period);
+const currentPeriodMetrics = computed(
+  () => riskPeriodSnapshot.value.current
 );
+const previousPeriodMetrics = computed(
+  () => riskPeriodSnapshot.value.previous
+);
+
+const periodLabel = computed(() =>
+  latestAdditionWindowDays === 1
+    ? "Last day"
+    : `Last ${latestAdditionWindowDays} days`
+);
+const periodDescriptor = computed(() =>
+  latestAdditionWindowDays === 1
+    ? "last day"
+    : `last ${latestAdditionWindowDays} days`
+);
+
+const percentDeltaFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+  signDisplay: "always",
+});
+const scoreDeltaFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+  signDisplay: "always",
+});
+
+const computePercentTrend = (
+  current: number | null,
+  previous: number | null
+): StatTrend | null => {
+  if (current === null || previous === null) {
+    return null;
+  }
+
+  const delta = current - previous;
+  const direction = Math.abs(delta) < 0.1 ? "flat" : delta > 0 ? "up" : "down";
+  const deltaLabel =
+    direction === "flat" ? "0 pts" : `${percentDeltaFormatter.format(delta)} pts`;
+  return { direction, deltaLabel };
+};
+
+const computeScoreTrend = (
+  current: number | null,
+  previous: number | null
+): StatTrend | null => {
+  if (current === null || previous === null) {
+    return null;
+  }
+
+  const delta = current - previous;
+  const direction = Math.abs(delta) < 0.05 ? "flat" : delta > 0 ? "up" : "down";
+  const deltaLabel =
+    direction === "flat" ? "0.0" : scoreDeltaFormatter.format(delta);
+  return { direction, deltaLabel };
+};
 
 const highSeverityShare = computed(() =>
   formatShare(
-    aggregatedResultMetrics.value.severeCount,
-    matchingResultsCount.value
+    currentPeriodMetrics.value.severeCount,
+    currentPeriodMetrics.value.totalCount
+  )
+);
+const previousHighSeverityShare = computed(() =>
+  formatShare(
+    previousPeriodMetrics.value.severeCount,
+    previousPeriodMetrics.value.totalCount
   )
 );
 const highSeverityShareLabel = computed(() => {
   const label = highSeverityShare.value.percentLabel;
   return label === null ? "—" : `${label}%`;
 });
-const highSeverityCount = computed(
-  () => aggregatedResultMetrics.value.severeCount
+const highSeverityTrend = computed(() =>
+  computePercentTrend(
+    highSeverityShare.value.percent ?? null,
+    previousHighSeverityShare.value.percent ?? null
+  )
 );
 const highSeveritySummary = computed(() => {
-  if (!matchingResultsCount.value) {
-    return "No entries to analyse";
+  const total = currentPeriodMetrics.value.totalCount;
+  const severe = currentPeriodMetrics.value.severeCount;
+
+  if (!total) {
+    return `No CVEs added in the ${periodDescriptor.value}.`;
   }
 
-  if (!highSeverityCount.value) {
-    return "No high-severity CVEs in scope";
+  if (!severe) {
+    return `No high-severity CVEs in the ${periodDescriptor.value}.`;
   }
 
-  return `${highSeverityCount.value.toLocaleString()} CVEs scored High or Critical`;
+  return `${severe.toLocaleString()} of ${total.toLocaleString()} CVEs rated High or Critical in the ${periodDescriptor.value}.`;
 });
 
 const ransomwareShare = computed(() =>
   formatShare(
-    aggregatedResultMetrics.value.ransomwareCount,
-    matchingResultsCount.value
+    currentPeriodMetrics.value.ransomwareCount,
+    currentPeriodMetrics.value.totalCount
+  )
+);
+const previousRansomwareShare = computed(() =>
+  formatShare(
+    previousPeriodMetrics.value.ransomwareCount,
+    previousPeriodMetrics.value.totalCount
   )
 );
 const ransomwareShareLabel = computed(() => {
   const label = ransomwareShare.value.percentLabel;
   return label === null ? "—" : `${label}%`;
 });
-const ransomwareLinkedCount = computed(
-  () => aggregatedResultMetrics.value.ransomwareCount
+const ransomwareTrend = computed(() =>
+  computePercentTrend(
+    ransomwareShare.value.percent ?? null,
+    previousRansomwareShare.value.percent ?? null
+  )
 );
 const ransomwareSummary = computed(() => {
-  if (!matchingResultsCount.value) {
-    return "No entries to analyse";
+  const total = currentPeriodMetrics.value.totalCount;
+  const count = currentPeriodMetrics.value.ransomwareCount;
+
+  if (!total) {
+    return `No CVEs added in the ${periodDescriptor.value}.`;
   }
 
-  if (!ransomwareLinkedCount.value) {
-    return "No ransomware intelligence in this view";
+  if (!count) {
+    return `No ransomware intelligence in the ${periodDescriptor.value}.`;
   }
 
-  return `${ransomwareLinkedCount.value.toLocaleString()} CVEs tied to ransomware activity`;
+  return `${count.toLocaleString()} CVEs tied to ransomware activity in the ${periodDescriptor.value}.`;
 });
 
 const internetExposedShare = computed(() =>
   formatShare(
-    aggregatedResultMetrics.value.internetExposedCount,
-    matchingResultsCount.value
+    currentPeriodMetrics.value.internetExposedCount,
+    currentPeriodMetrics.value.totalCount
+  )
+);
+const previousInternetExposedShare = computed(() =>
+  formatShare(
+    previousPeriodMetrics.value.internetExposedCount,
+    previousPeriodMetrics.value.totalCount
   )
 );
 const internetExposedShareLabel = computed(() => {
   const label = internetExposedShare.value.percentLabel;
   return label === null ? "—" : `${label}%`;
 });
-const internetExposedCount = computed(
-  () => aggregatedResultMetrics.value.internetExposedCount
+const internetExposedTrend = computed(() =>
+  computePercentTrend(
+    internetExposedShare.value.percent ?? null,
+    previousInternetExposedShare.value.percent ?? null
+  )
 );
 const internetExposedSummary = computed(() => {
-  if (!matchingResultsCount.value) {
-    return "No entries to analyse";
+  const total = currentPeriodMetrics.value.totalCount;
+  const count = currentPeriodMetrics.value.internetExposedCount;
+
+  if (!total) {
+    return `No CVEs added in the ${periodDescriptor.value}.`;
   }
 
-  if (!internetExposedCount.value) {
-    return "No confirmed internet-exposed CVEs in this view";
+  if (!count) {
+    return `No confirmed internet-exposed CVEs in the ${periodDescriptor.value}.`;
   }
 
-  return `${internetExposedCount.value.toLocaleString()} CVEs likely exposed to the internet`;
+  return `${count.toLocaleString()} CVEs likely exposed to the internet in the ${periodDescriptor.value}.`;
 });
 
 const averageCvssScore = computed(() => {
-  const { cvssSum, cvssCount } = aggregatedResultMetrics.value;
+  const { cvssSum, cvssCount } = currentPeriodMetrics.value;
+  if (!cvssCount) {
+    return null;
+  }
+
+  return cvssSum / cvssCount;
+});
+const previousAverageCvssScore = computed(() => {
+  const { cvssSum, cvssCount } = previousPeriodMetrics.value;
   if (!cvssCount) {
     return null;
   }
@@ -972,16 +1188,22 @@ const averageCvssLabel = computed(() => {
   const value = averageCvssScore.value;
   return value === null ? "—" : value.toFixed(1);
 });
-const scoredResultsCount = computed(
-  () => aggregatedResultMetrics.value.cvssCount
+const averageCvssTrend = computed(() =>
+  computeScoreTrend(averageCvssScore.value, previousAverageCvssScore.value)
 );
 const averageCvssSummary = computed(() => {
-  const count = scoredResultsCount.value;
-  if (!count) {
-    return "No CVSS scores available";
+  const count = currentPeriodMetrics.value.cvssCount;
+  const total = currentPeriodMetrics.value.totalCount;
+
+  if (!total) {
+    return `No CVEs added in the ${periodDescriptor.value}.`;
   }
 
-  return `${count.toLocaleString()} CVEs with CVSS data`;
+  if (!count) {
+    return `No CVSS scores available in the ${periodDescriptor.value}.`;
+  }
+
+  return `Mean calculated from ${count.toLocaleString()} scored CVEs in the ${periodDescriptor.value}.`;
 });
 
 type QuickStatItem = {
@@ -1077,20 +1299,149 @@ const severityDistribution = computed(
   () => derivedResultSnapshot.value.severityDistribution
 );
 
-const latestResultEntries = computed(
-  () => derivedResultSnapshot.value.latestEntries
+const latestPeriodEntries = computed(
+  () => derivedResultSnapshot.value.period.latestEntries
 );
 
-const latestAdditionSummaries = computed<LatestAdditionSummary[]>(() =>
-  latestResultEntries.value.map((entry) => ({
-    entry,
-    dateLabel: formatOptionalTimestamp(entry.dateAdded),
-    vendorProduct: `${entry.vendor} · ${entry.product}`,
-    wellKnown: getWellKnownCveName(entry.cveId),
-    sources: entry.sources,
-    internetExposed: entry.internetExposed,
-  }))
+const latestResultEntries = computed(() => {
+  const periodEntries = latestPeriodEntries.value;
+  if (periodEntries.length) {
+    return periodEntries;
+  }
+
+  return derivedResultSnapshot.value.latestEntries;
+});
+
+const usingPeriodEntries = computed(
+  () => latestPeriodEntries.value.length > 0
 );
+
+const sortedLatestAdditionEntries = computed(() => {
+  const entries = [...latestResultEntries.value];
+
+  switch (latestAdditionSortKey.value) {
+    case "epss": {
+      return entries
+        .slice()
+        .sort((first, second) => {
+          const firstScore = typeof first.epssScore === "number" ? first.epssScore : -1;
+          const secondScore = typeof second.epssScore === "number" ? second.epssScore : -1;
+          return secondScore - firstScore;
+        })
+        .slice(0, latestAdditionLimit);
+    }
+    case "cvss": {
+      return entries
+        .slice()
+        .sort((first, second) => {
+          const firstScore =
+            typeof first.cvssScore === "number" && Number.isFinite(first.cvssScore)
+              ? first.cvssScore
+              : -1;
+          const secondScore =
+            typeof second.cvssScore === "number" && Number.isFinite(second.cvssScore)
+              ? second.cvssScore
+              : -1;
+          return secondScore - firstScore;
+        })
+        .slice(0, latestAdditionLimit);
+    }
+    case "recent":
+    default: {
+      return entries
+        .slice()
+        .sort((first, second) => {
+          const firstTimestamp = Date.parse(first.dateAdded);
+          const secondTimestamp = Date.parse(second.dateAdded);
+
+          if (Number.isNaN(firstTimestamp) && Number.isNaN(secondTimestamp)) {
+            return 0;
+          }
+
+          if (Number.isNaN(firstTimestamp)) {
+            return 1;
+          }
+
+          if (Number.isNaN(secondTimestamp)) {
+            return -1;
+          }
+
+          return secondTimestamp - firstTimestamp;
+        })
+        .slice(0, latestAdditionLimit);
+    }
+  }
+});
+
+const latestAdditionSummaries = computed<LatestAdditionSummary[]>(() => {
+  const tracked = trackedProductSet.value;
+
+  return sortedLatestAdditionEntries.value.map((entry) => {
+    const timestamp = Date.parse(entry.dateAdded);
+    return {
+      entry,
+      dateLabel: formatOptionalTimestamp(entry.dateAdded),
+      vendorProduct: `${entry.vendor} · ${entry.product}`,
+      wellKnown: getWellKnownCveName(entry.cveId),
+      sources: entry.sources,
+      internetExposed: entry.internetExposed,
+      timestamp: Number.isNaN(timestamp) ? null : timestamp,
+      isTracked: tracked.has(entry.productKey),
+    };
+  });
+});
+
+const latestAdditionNotes = computed(() => {
+  const items = latestAdditionSummaries.value;
+  const total = items.length;
+  if (!total) {
+    return [] as string[];
+  }
+
+  const contextQualifier = usingPeriodEntries.value
+    ? "this period"
+    : "in recent updates";
+
+  const notes: string[] = [];
+
+  const internetCount = items.filter((item) => item.internetExposed).length;
+  if (internetCount) {
+    notes.push(
+      `${internetCount} of ${total} new CVEs ${contextQualifier} are internet-exposed.`
+    );
+  }
+
+  const highSeverityCount = items.filter((item) => {
+    const severity = item.entry.cvssSeverity;
+    return severity === "High" || severity === "Critical";
+  }).length;
+  if (highSeverityCount) {
+    notes.push(
+      `${highSeverityCount} of ${total} new CVEs ${contextQualifier} are rated High or Critical.`
+    );
+  }
+
+  const ransomwareCount = items.filter((item) => {
+    const signal = item.entry.ransomwareUse?.toLowerCase() ?? "";
+    return signal.includes("known") || signal.includes("active");
+  }).length;
+  if (ransomwareCount) {
+    notes.push(
+      `${ransomwareCount} new CVEs ${contextQualifier} mention ransomware operations.`
+    );
+  }
+
+  const highEpssCount = items.filter(
+    (item) => typeof item.entry.epssScore === "number" && item.entry.epssScore >= 0.7
+  ).length;
+  if (highEpssCount) {
+    notes.push(
+      `${highEpssCount} new CVEs ${contextQualifier} have EPSS ≥ 70%.`
+    );
+  }
+
+  return notes.slice(0, 3);
+});
 
 const toProgressStats = (counts: KevCountDatum[]): ProgressDatum[] => {
   if (!counts.length) {
@@ -2579,22 +2930,32 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         v-model:open="showTrendSlideover"
         v-model:show-risk-details="showRiskDetails"
         v-model:show-trend-lines="showTrendLines"
+        v-model:latest-addition-sort-key="latestAdditionSortKey"
         :is-busy="isBusy"
         :matching-results-label="matchingResultsLabel"
+        :period-label="periodLabel"
         :high-severity-share-label="highSeverityShareLabel"
         :high-severity-summary="highSeveritySummary"
+        :high-severity-trend="highSeverityTrend"
         :average-cvss-label="averageCvssLabel"
         :average-cvss-summary="averageCvssSummary"
+        :average-cvss-trend="averageCvssTrend"
         :ransomware-share-label="ransomwareShareLabel"
         :ransomware-summary="ransomwareSummary"
+        :ransomware-trend="ransomwareTrend"
         :internet-exposed-share-label="internetExposedShareLabel"
         :internet-exposed-summary="internetExposedSummary"
+        :internet-exposed-trend="internetExposedTrend"
         :severity-distribution="severityDistribution"
         :latest-addition-summaries="latestAdditionSummaries"
+        :latest-addition-notes="latestAdditionNotes"
+        :latest-addition-sort-options="latestAdditionSortOptions"
+        :tracked-products-ready="trackedProductsReady"
         :source-badge-map="sourceBadgeMap"
         :catalog-updated-at="catalogUpdatedAt"
         :entries="results"
         @open-details="openDetails"
+        @add-to-tracked="handleAddToTracked"
       />
     </div>
   </div>

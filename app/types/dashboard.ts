@@ -48,6 +48,8 @@ export type LatestAdditionSummary = {
   wellKnown: string | null;
   sources: KevEntrySummary["sources"];
   internetExposed: boolean;
+  timestamp: number | null;
+  isTracked: boolean;
 };
 
 export type SourceBadgeMap = Record<
@@ -68,4 +70,19 @@ export type QuickFilterSummaryConfig = {
   metrics: QuickFilterSummaryMetricKey[];
   showActiveFilterChips: boolean;
   showResetButton: boolean;
+};
+
+export type TrendDirection = "up" | "down" | "flat";
+
+export type StatTrend = {
+  direction: TrendDirection;
+  deltaLabel: string;
+};
+
+export type LatestAdditionSortKey = "recent" | "epss" | "cvss";
+
+export type LatestAdditionSortOption = {
+  label: string;
+  value: LatestAdditionSortKey;
+  icon: string;
 };
