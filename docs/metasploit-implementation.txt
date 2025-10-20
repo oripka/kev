@@ -1,0 +1,200 @@
+we want to add another source, metasploit, it is a bit more complicated as we need to clone part of the repository and run git pull or ferch we ont want the whole metasplot repositroy (see find_aka_cve.py for inspiration) but just the current state and not an of the git history to keep it super lean. the files should not be checked into the git as i think this will be large. this will be another source. and will also have filers and such.. the goal is to extact as much info as possble from the metasploit modules alos like the rank (is it excellent), the cve, aka, evne teh comments as the current pything script doe integrate this well with the otehr sources and in the db. we dont need the exploti itself but the meta info, date, cve, exploit name, description, aka, exploit rank, author, privileged (i dont know what it means, platform arch, , targets, notes, stbaility, reliability, sideeffects, disclousre data here is a sample exploit file as refernce ##
+# This module requires Metasploit: https://metasploit.com/download
+# Current source: https://github.com/rapid7/metasploit-framework
+##
+
+require 'ruby_smb'
+require 'ruby_smb/smb1/packet'
+require 'rubyntlm'
+require 'windows_error'
+
+class MetasploitModule < Msf::Exploit::Remote
+  Rank = AverageRanking
+
+  include Msf::Exploit::Remote::CheckModule
+  include Msf::Exploit::Deprecated
+  include Msf::Exploit::Remote::Tcp
+
+  moved_from 'exploit/windows/smb/ms17_010_eternalblue_win8'
+
+  def initialize(info = {})
+    super(
+      update_info(
+        info,
+        'Name' => 'MS17-010 EternalBlue SMB Remote Windows Kernel Pool Corruption',
+        'Description' => %q{
+          This module is a port of the Equation Group ETERNALBLUE exploit, part of
+          the FuzzBunch toolkit released by Shadow Brokers.
+
+          There is a buffer overflow memmove operation in Srv!SrvOs2FeaToNt. The size
+          is calculated in Srv!SrvOs2FeaListSizeToNt, with mathematical error where a
+          DWORD is subtracted into a WORD. The kernel pool is groomed so that overflow
+          is well laid-out to overwrite an SMBv1 buffer. Actual RIP hijack is later
+          completed in srvnet!SrvNetWskReceiveComplete.
+
+          This exploit, like the original may not trigger 100% of the time, and should be
+          run continuously until triggered. It seems like the pool will get hot streaks
+          and need a cool down period before the shells rain in again.
+
+          The module will attempt to use Anonymous login, by default, to authenticate to perform the
+          exploit. If the user supplies credentials in the SMBUser, SMBPass, and SMBDomain options it will use
+          those instead.
+
+          On some systems, this module may cause system instability and crashes, such as a BSOD or
+          a reboot. This may be more likely with some payloads.
+        },
+
+        'Author' => [
+          # Original Exploit
+          'Equation Group', # OG research and exploit
+          'Shadow Brokers', # Hack and dump
+          'sleepya',        # Research and PoC
+
+          # Original win7 module
+          'Sean Dillon <sean.dillon@risksense.com>', # @zerosum0x0
+          'Dylan Davis <dylan.davis@risksense.com>', # @jennamagius
+          'thelightcosine', # RubySMB refactor and Fallback Credential mode
+
+          # Original win8 module
+          'wvu',             # Babby's first external module
+          'agalway-r7',      # External python module to internal ruby module (sorry wvu)
+          'cdelafuente-r7',  # ruby_smb wizard
+          'cdelafuente-r7', # kernel debugging wizard
+
+          # Combining the two
+          'agalway-r7' # am good at copy pasta
+        ],
+        'License' => MSF_LICENSE,
+        'References' => [
+          # Win 7
+          ['MSB', 'MS17-010'],
+          ['CVE', '2017-0143'],
+          ['CVE', '2017-0144'],
+          ['CVE', '2017-0145'],
+          ['CVE', '2017-0146'],
+          ['CVE', '2017-0147'],
+          ['CVE', '2017-0148'],
+          ['URL', 'https://github.com/RiskSense-Ops/MS17-010'],
+          ['URL', 'https://risksense.com/wp-content/uploads/2018/05/White-Paper_Eternal-Blue.pdf'],
+
+          # Win 8
+          ['EDB', '42030'],
+
+          # MITRE ATT&CK
+          ['ATT&CK', Mitre::Attack::Technique::T1059_COMMAND_AND_SCRIPTING_INTERPRETER],
+          ['ATT&CK', Mitre::Attack::Technique::T1068_EXPLOITATION_FOR_PRIVILEGE_ESCALATION],
+          ['ATT&CK', Mitre::Attack::Technique::T1210_EXPLOITATION_OF_REMOTE_SERVICES]
+        ],
+        'DefaultOptions' => {
+          'CheckModule' => 'auxiliary/scanner/smb/smb_ms17_010',
+          'EXITFUNC' => 'thread',
+          'WfsDelay' => 5
+        },
+        'Privileged' => true,
+        'Platform' => 'win',
+        'Arch' => [ARCH_X64],
+        'Payload' => {
+          'Space' => 2000, # this can be more, needs to be recalculated
+          'EncoderType' => Msf::Encoder::Type::Raw,
+          'DisableNops' => true
+        },
+        'Targets' => [
+          [ 'Automatic Target', {} ],
+          [
+            'Windows 7',
+            {
+              'os_patterns' => ['Windows 7']
+            }
+          ],
+          [
+            'Windows Embedded Standard 7',
+            {
+              'os_patterns' => ['Windows Embedded Standard 7']
+            }
+          ],
+          [
+            'Windows Server 2008 R2',
+            {
+              'os_patterns' => ['Windows Server 2008 R2']
+            }
+          ],
+          [
+            'Windows 8',
+            {
+              'os_patterns' => ['Windows 8']
+            }
+          ],
+          [
+            'Windows 8.1',
+            {
+              'os_patterns' => ['Windows 8.1']
+            }
+          ],
+          [
+            'Windows Server 2012',
+            {
+              'os_patterns' => ['Windows Server 2012']
+            }
+          ],
+          [
+            'Windows 10 Pro',
+            {
+              'os_patterns' => ['Windows Pro Build']
+            }
+          ],
+          [
+            'Windows 10 Enterprise Evaluation',
+            {
+              'os_patterns' => ['Windows 10 Enterprise Evaluation Build']
+            }
+          ]
+        ],
+        'DefaultTarget' => 0,
+        'Notes' => {
+          'AKA' => ['ETERNALBLUE'],
+          'Stability' => UNKNOWN_STABILITY,
+          'Reliability' => UNKNOWN_RELIABILITY,
+          'SideEffects' => UNKNOWN_SIDE_EFFECTS
+        },
+        'DisclosureDate' => '2017-03-14'
+      )
+    ) possible values for stbailitetc Allowed Values
+Stability
+Constant	Description
+CRASH_SAFE	Module should not crash the service or OS
+CRASH_SERVICE_RESTARTS	Module may crash the service, but it will restart
+CRASH_SERVICE_DOWN	Module may crash the service, and remain down
+CRASH_OS_RESTARTS	Module may crash the OS, but it will restart
+CRASH_OS_DOWN	Module may crash the OS, and remain down
+SERVICE_RESOURCE_LOSS	Module causes a resource to be unavailable for the service
+OS_RESOURCE_LOSS	Module causes a resource to be unavailable for the OS
+Side Effects
+Constant	Description
+ARTIFACTS_ON_DISK	Module leaves a payload, a dropper, etc, on the target machine
+CONFIG_CHANGES	Module modifies some config file
+IOC_IN_LOGS	Module leaves an indicator of compromise in the log(s)
+ACCOUNT_LOCKOUTS	Module may cause an account to lock out
+ACCOUNT_LOGOUT	Module may cause an existing valid session to be forced to log out (likely due to restrictions on concurrent sessions)
+SCREEN_EFFECTS	Module shows something on the screen that a human may notice
+PHYSICAL_EFFECTS	Module may produce physical effects in hardware (Examples: light, sound, or heat)
+AUDIO_EFFECTS	Module may cause a noise (Examples: Audio output from the speakers or hardware beeps)
+Reliability
+Constant	Description
+FIRST_ATTEMPT_FAIL	The module may fail for the first attempt
+REPEATABLE_SESSION	The module is expected to get a session every time it runs
+UNRELIABLE_SESSION	The module isn’t expected to get a shell reliably (such as only once)
+EVENT_DEPENDENT	The module may not execute the payload until an external event occurs. For instance, a cron job, machine restart, user interaction within a GUI element, etcList of supported reference identifiers
+ID	Source	Code Example
+CVE	cvedetails.com	['CVE', '2014-9999']
+CWE	cwe.mitre.org	['CWE', '90']
+BID	securityfocus.com	['BID', '1234']
+MSB	technet.microsoft.com	['MSB', 'MS13-055']
+EDB	exploit-db.com	['EDB', '1337']
+US-CERT-VU	kb.cert.org	['US-CERT-VU', '800113']
+ZDI	zerodayinitiative.com	['ZDI', '10-123']
+WPVDB	wpvulndb.com	['WPVDB', '7615']
+PACKETSTORM	packetstormsecurity.com	['PACKETSTORM', '132721']
+URL	anything	['URL', 'http://example.com/blog.php?id=123']
+AKA (deprecated*)	anything	['AKA', 'shellshock']
+
+after you are finished you can remoe the python script
