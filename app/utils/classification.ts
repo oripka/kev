@@ -1,3 +1,6 @@
+// Note: Operating system patterns now distinguish client vs. server OS variants.
+// Do not assume all OS vulnerabilities are server-side — use context from description.
+
 import type {
   KevDomainCategory,
   KevEntry,
@@ -569,52 +572,60 @@ const webApplicationProductPatterns: RegExp[] = [
 ];
 
 const operatingSystemPatterns: RegExp[] = [
-  /\bwindows (?:server\s*(?:2000|2003|2008|2012|2016|2019|2022)?|xp|vista|7|8(?:\.1)?|10|11)\b/i,
-  /\bwindows nt\b/i,
-  /\bwin32k\b/i,
-  /\bntoskrnl\b/i,
+  // --- Client / Desktop Operating Systems ---
+  /\bwindows (?:xp|vista|7|8(?:\.1)?|10|11)\b/i,
   /\bmac ?os(?: x)?\b/i,
+  /\bmacos\b/i,
   /\bios\b/i,
+  /\bipad ?os\b/i,
   /\bipados\b/i,
   /\bandroid\b/i,
   /\bchrome ?os\b/i,
-  /\blinux\b/i,
-  /\bubuntu\b/i,
-  /\bdebian\b/i,
-  /\bred hat\b/i,
+  /\bchromeos\b/i,
+  /\bwindows phone\b/i,
+
+  // --- Server / Infrastructure Operating Systems ---
+  /\bwindows server(?:\s*(?:2000|2003|2008|2012|2016|2019|2022)?)?\b/i,
+  /\bwindows nt\b/i,
+  /\bwin32k\b/i,
+  /\bntoskrnl\b/i,
+  /\bred hat enterprise linux\b/i,
   /\brhel\b/i,
-  /\bcentos\b/i,
-  /\bfedora\b/i,
-  /\bsuse\b/i,
-  /\bopensuse\b/i,
-  /\barch linux\b/i,
-  /\bmanjaro\b/i,
-  /\bgentoo\b/i,
-  /\boracle linux\b/i,
-  /\bamazon linux\b/i,
-  /\balma linux\b/i,
-  /\brocky linux\b/i,
+  /\bcentos(?: stream)?(?: server)?\b/i,
+  /\bfedora(?: server)?\b/i,
+  /\bsuse(?: linux enterprise)?(?: server)?\b/i,
+  /\bopensuse(?: leap| tumbleweed)?(?: server)?\b/i,
+  /\bubuntu(?: server| lts)?\b/i,
+  /\bdebian(?: server)?\b/i,
+  /\boracle linux(?: server)?\b/i,
+  /\bamazon linux(?: server)?\b/i,
+  /\balma(?: ?linux)?(?: server)?\b/i,
+  /\brocky(?: linux)?(?: server)?\b/i,
   /\bkali linux\b/i,
   /\bparrot os\b/i,
   /\blinux mint\b/i,
-  /\bunix\b/i,
+  /\barch linux\b/i,
+  /\bmanjaro\b/i,
+  /\bgentoo\b/i,
   /\bsolaris\b/i,
   /\baix\b/i,
   /\bhp-ux\b/i,
   /\btru64\b/i,
   /\birix\b/i,
   /\bsunos\b/i,
-  /\bbsd\b/i,
-  /\bfreebsd\b/i,
-  /\bnetbsd\b/i,
-  /\bopenbsd\b/i,
-  /\bdragonflybsd\b/i,
-  /\bzos\b/i,
+  /\b(?:free|open|net|dragonfly)bsd\b/i,
+  /\bz\/os\b/i,
   /\bos\/400\b/i,
   /\bibm i\b/i,
-  /\bqnx\b/i,
+
+  // --- Embedded / Real-Time OS ---
+  /\bqnx(?: neutrino)?\b/i,
   /\bvxworks\b/i,
   /\bintegrity os\b/i,
+  /\bfreertos\b/i,
+  /\bthreadx\b/i,
+  /\blynxos\b/i,
+  /\bzephyr os\b/i,
   /\bblackberry os\b/i,
   /\bsymbian\b/i,
   /\btizen\b/i,
@@ -991,8 +1002,9 @@ const clientApplicationPatterns: RegExp[] = [
 ];
 
 const clientFileInteractionPatterns: RegExp[] = [
-  // "specially crafted" or "malicious" within a short window before file-like tokens
-  /\b(?:specially[-\s]?crafted|malicious)[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
+  // malicious file indicators with bounded context
+  /\bmalicious[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
+  /\b(?:specially|specifically)\s+crafted\s+(?:document|file|attachment|email|message|image|font|media|archive|spreadsheet|presentation|installer|package)\b/i,
 
   // verbs that indicate opening/processing/parsing a file or content (limited context window)
   /\b(?:open(?:ing)?|view(?:ing)?|preview(?:ing)?|load(?:ing)?|process(?:ing)?|parse|parsing|render(?:ing)?)'?\b[\s\S]{0,120}?\b(?:document|file|attachment|email|message|image|font|media|archive|content|payload)\b/i,
@@ -1038,7 +1050,11 @@ const clientLocalExecutionPatterns: RegExp[] = [
 ];
 
 const networkProtocolPatterns: RegExp[] = [
-  /\b(smb|cifs|nfs|rpc|rdp|ldap|ftp|smtp|imap|pop3|snmp|telnet|ssh|dcerpc|tcp|udp)\b/i,
+  /\b(?:smb|smbv1|smbv2|smbv3|cifs|nfs|rpc|msrpc|rdp|rdweb|ldap|ldaps|ftp|sftp|smtp|imap|pop3|snmp|telnet|ssh|dcerpc|dce\/?rpc|tcp|udp|nntp|mapi)\b/i,
+];
+
+const kernelServerPatterns: RegExp[] = [
+  /\b(?:kernel(?:[-\s]?mode)?|kernel[-\s]?space|kernel driver|system driver|device driver|ntoskrnl|win32k)\b/i,
 ];
 
 const serverSignalPatterns: RegExp[] = [
@@ -1379,6 +1395,10 @@ export const classifyExploitLayers = (
     pattern.test(text)
   );
   const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
+  const hasKernelDriverSignal = matchesAny(text, kernelServerPatterns);
+  const hasKernelServerSignal =
+    hasKernelDriverSignal &&
+    (hasStrongServerProtocol || hasRemoteContext || hasExplicitRemoteRce);
 
   const domainSuggestsClient = domainCategories.some((category) =>
     clientDomainHints.has(category)
@@ -1392,37 +1412,53 @@ export const classifyExploitLayers = (
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
     hasClientLocalExecutionSignal ||
-    Boolean(cvssSuggestsLocal) ||
-    Boolean(cvssRequiresUserInteraction) ||
     domainSuggestsClient;
 
   const strongServerIndicators =
     hasServerSignal ||
     domainSuggestsServer ||
-    Boolean(cvssSuggestsRemote && !cvssRequiresUserInteraction) ||
+    hasStrongServerProtocol ||
+    hasKernelServerSignal ||
     (hasRemoteContext && !strongClientIndicators);
 
-  const clientScore =
+  const clientScoreBase =
     (hasClientSignal ? 2 : 0) +
     (hasClientApplicationSignal ? 2 : 0) +
     (hasClientFileSignal ? 2 : 0) +
     (hasClientUserInteractionSignal ? 1 : 0) +
     (hasClientLocalExecutionSignal ? 1 : 0) +
-    (cvssSuggestsLocal ? 1 : 0) +
-    (cvssRequiresUserInteraction ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0);
-  let serverScore =
-    (hasServerSignal ? 2 : 0) +
-    (cvssSuggestsRemote ? 1 : 0) +
-    (cvssPreAuth ? 1 : 0) +
-    (domainSuggestsServer ? 1 : 0);
 
-  if (hasStrongServerProtocol) {
-    serverScore += 3;
+  let clientScore = clientScoreBase;
+
+  if (clientScoreBase > 0) {
+    if (cvssSuggestsLocal) {
+      clientScore += 1;
+    }
+    if (cvssRequiresUserInteraction) {
+      clientScore += 1;
+    }
   }
 
-  if (domainCategories.includes("Operating Systems")) {
-    serverScore += 2;
+  let serverScoreBase =
+    (hasServerSignal ? 2 : 0) +
+    (domainSuggestsServer ? 1 : 0) +
+    (hasStrongServerProtocol ? 3 : 0) +
+    (hasKernelServerSignal ? 2 : 0);
+
+  if (hasRemoteContext && !strongClientIndicators) {
+    serverScoreBase += 1;
+  }
+
+  let serverScore = serverScoreBase;
+
+  if (serverScoreBase > 0) {
+    if (cvssSuggestsRemote && !cvssRequiresUserInteraction) {
+      serverScore += 1;
+    }
+    if (cvssPreAuth) {
+      serverScore += 1;
+    }
   }
 
   const determineSide = (): "Client-side" | "Server-side" => {
