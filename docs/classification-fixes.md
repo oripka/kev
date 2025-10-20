@@ -17,7 +17,7 @@
 - **What happens:** `clientLocalExecutionPatterns` treats `local file inclusion`/`LFI` tokens as proof of a client-side exploit.【F:app/utils/classification.ts†L1040-L1049】
 - **Impact:** Server-side vulnerabilities such as CVE-2018-19410 in Paessler PRTG and CVE-2023-2868 in Metabase (both web applications) are pushed into the client-side bucket solely because their descriptions mention "local file inclusion."【F:kev.json†L5559-L5573】【F:kev.json†L3457-L3461】
 - **Why it misfires:** LFI is a server-side web exploitation technique; there is no client execution. The pattern currently boosts the client score without any counter-balancing server signal.
-- [ ] **Suggested fix:** Remove LFI tokens from the client local execution list and instead fold them into server-side web exploit detection (or explicitly tag them under server-side vulnerability categories).
+- [x] **Suggested fix:** Remove LFI tokens from the client local execution list and instead fold them into server-side web exploit detection (or explicitly tag them under server-side vulnerability categories).
 
 - **`clientSignalPatterns`:** Contains multiple high-impact tokens (`mobile`, `ios`, `local user`) that should be paired with context or vendor/product lookups before increasing the client score.【F:app/utils/classification.ts†L936-L954】
 - **`serverSignalPatterns`:** Reliance on generic words like `server`/`service` can still overwhelm legitimate client contexts (e.g., "connects to a server" wording in browser bugs). Introduce negative lookbehinds for phrases such as "malicious server" or couple with network protocol mentions to ensure intent.【F:app/utils/classification.ts†L1060-L1076】
@@ -39,7 +39,7 @@ The final pattern in `clientApplicationPatterns` is declared as:
 ```
 The optional group means the expression can match an empty string between any two word boundaries, so `hasClientApplicationSignal` is set for almost every record. That adds two points to the client score and triggers the tie-breaker that forces a client-side label even when server signals are present. 【F:app/utils/classification.ts†L966-L1001】【F:app/utils/classification.ts†L1424-L1476】
 Example: the Jenkins CLI deserialisation issue (`CVE-2017-1000353`) contains no client keywords, yet the faulty regex still fires and the entry is labelled `RCE · Client-side`. 【060fa7†L1-L299】【74e62a†L1-L8】
-- [ ] Tie-breaking logic favours client indicators
+- [x] Tie-breaking logic favours client indicators
 When client and server scores are equal, `determineSide()` returns "Client-side" whenever `hasClientFileSignal` or `hasClientApplicationSignal` is true—even if server keywords, network protocols, and domain hints point to a server. 【F:app/utils/classification.ts†L1473-L1537】
 Because the bug above makes `hasClientApplicationSignal` true for the majority of records, this clause overwhelms the rest of the logic and pushes remote services (Cisco ISE APIs, ServiceNow platforms, WebLogic, D-Link NAS management UIs, etc.) into the client bucket. 【060fa7†L1-L299】
 - [ ] File/attachment heuristics risk additional false positives
@@ -47,7 +47,7 @@ Even after fixing the catch-all regex, the `clientFileInteractionPatterns` block
 
 ## Recommendations
 - [x]**Fix the regex.** Replace the optional group in `clientApplicationPatterns` with a word-boundary anchored expression, e.g. `/\b(?:ole(?:\s+compound)?|compound file|cfb|com)\b/i`, so that it only matches the intended tokens. 【F:app/utils/classification.ts†L966-L1001】
-- [ ]**Strengthen the tie-breaker.** Update `determineSide()` so that server-domain hints or explicit server signals outrank generic client hints; only fall back to client if the score difference is strictly positive. 【F:app/utils/classification.ts†L1473-L1537】-
+- [x]**Strengthen the tie-breaker.** `determineSide()` now prefers server classifications whenever server protocols, domain hints, or signals stand alongside matching client cues, only returning "Client-side" when the client score is strictly higher or server evidence is absent.【F:app/utils/classification.ts†L1582-L1618】
 - [ ]**Narrow file heuristics.** Add guards to `clientFileInteractionPatterns` to require explicit user-action verbs (“when opening”, “double-click”) before scoring client points, and ignore matches that coexist with server keywords (“upload”, “API request”). 【F:app/utils/classification.ts†L1004-L1023】
 
 ## Toward a bulletproof classifier
@@ -72,8 +72,8 @@ Even after fixing the catch-all regex, the `clientFileInteractionPatterns` block
 - [x] Only treat `mobile` (and related tokens) as client hints when the domain categories include Browsers or when nearby text references actions like "user opens" or "device owner". Otherwise, treat `mobile` inside server/edge domains as neutral or even as a server hint for MDM platforms.
 
 ### 3. Local File Inclusion mapped to client execution
-- [ ]`clientLocalExecutionPatterns` currently consider "local file inclusion" and "file inclusion" to be client-side indicators.【F:app/utils/classification.ts†L1040-L1049】 This inverts the real-world semantics: LFI is a server-side flaw triggered by remote requests.
-- Paessler PRTG’s LFI entry, for example, is assigned server-oriented domains, but the exploit-layer classifier fails to emit a server-side label (the layers array is empty) because it sees the LFI keyword and never accumulates the server score required for RCE/DoS tagging.【6e04f7†L26-L33】【F:kev.json†L2756-L2765】
+- [x] Resolved by routing LFI tokens through `serverSignalPatterns` and clearing the client local-execution flag whenever those keywords appear, preventing server-side LFI cases from being mis-labelled as client exploits.【F:app/utils/classification.ts†L1429-L1452】
+- Paessler PRTG’s LFI entry, for example, previously landed in the client bucket; re-run the evaluation dataset to confirm the new guard now emits server-side exploit layers for those CVEs.【6e04f7†L26-L33】【F:kev.json†L2756-L2765】
 
 - [ ]**Recommendation.** Move the LFI tokens into a dedicated server-side indicator list (or at minimum remove them from the client list) and add tests that ensure LFI CVEs reach a server-side exploit layer.
 

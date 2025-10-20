@@ -1071,6 +1071,8 @@ const kernelServerPatterns: RegExp[] = [
   /\b(?:kernel(?:[-\s]?mode)?|kernel[-\s]?space|kernel driver|system driver|device driver|ntoskrnl|win32k)\b/i,
 ];
 
+const localFileInclusionPattern = /\b(?:local file inclusion|lfi|file inclusion)\b/i;
+
 const serverSignalPatterns: RegExp[] = [
   ...networkProtocolPatterns,
   // management / admin interfaces
@@ -1083,7 +1085,7 @@ const serverSignalPatterns: RegExp[] = [
   /\b(?:gateway|vpn|firewall|router|switch|load[-\s]?balancer)\b/i,
 
   // server-side file inclusion keywords (LFI)
-  /\b(?:local file inclusion|lfi|file inclusion)\b/i,
+  localFileInclusionPattern,
 
   // API / REST / SOAP / RPC / management endpoints
   /\b(?:api endpoint|rest(?: API)?|soap|rpc|management endpoint|control plane)\b/i,
@@ -1424,7 +1426,7 @@ export const classifyExploitLayers = (
       hasClientFileSignal = false;
     }
   }
-  const hasClientLocalExecutionSignal =
+  let hasClientLocalExecutionSignal =
     matchesAny(text, clientLocalExecutionPatterns) ||
     Boolean(cvssSuggestsLocal);
   const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
@@ -1435,6 +1437,15 @@ export const classifyExploitLayers = (
   const hasKernelServerSignal =
     hasKernelDriverSignal &&
     (hasStrongServerProtocol || hasRemoteContext || hasExplicitRemoteRce);
+
+  const hasLocalFileInclusionSignal = localFileInclusionPattern.test(text);
+
+  if (hasLocalFileInclusionSignal) {
+    hasServerSignal = true;
+    if (hasClientLocalExecutionSignal) {
+      hasClientLocalExecutionSignal = false;
+    }
+  }
 
   const networkOperatingSystemSignal = /\bcisco(?:'s)?\s+ios(?:\s+(?:xe|xr))?\b/i.test(
     text
@@ -1573,43 +1584,51 @@ export const classifyExploitLayers = (
       return "Server-side";
     }
 
-    if (strongServerIndicators && !strongClientIndicators) {
+    const serverDominant =
+      strongServerIndicators ||
+      hasStrongServerProtocol ||
+      hasKernelServerSignal ||
+      (domainSuggestsServer && !domainSuggestsClient) ||
+      (hasServerSignal && !hasClientSignal);
+
+    const clientDominant =
+      strongClientIndicators ||
+      (domainSuggestsClient && !domainSuggestsServer) ||
+      (hasClientSignal && !hasServerSignal);
+
+    if (serverDominant && !clientDominant) {
       return "Server-side";
     }
 
-    if (domainSuggestsServer && !domainSuggestsClient) {
-      return "Server-side";
-    }
-
-    if (hasServerSignal && !hasClientSignal) {
-      return "Server-side";
-    }
-
-    if (strongClientIndicators && !strongServerIndicators) {
+    if (clientDominant && !serverDominant) {
       return "Client-side";
     }
 
-    if (domainSuggestsClient && !domainSuggestsServer) {
-      return "Client-side";
-    }
+    if (serverDominant && clientDominant) {
+      if (hasStrongServerProtocol || hasKernelServerSignal) {
+        return "Server-side";
+      }
 
-    if (hasClientSignal && !hasServerSignal) {
-      return "Client-side";
-    }
+      if (hasClientApplicationSignal && hasClientFileSignal) {
+        return "Client-side";
+      }
 
-    if (strongServerIndicators) {
+      if (hasRemoteContext && !cvssSuggestsLocal) {
+        return "Server-side";
+      }
+
+      if (cvssSuggestsLocal && !hasRemoteContext) {
+        return "Client-side";
+      }
+
       return "Server-side";
     }
 
-    if (strongClientIndicators) {
-      return "Client-side";
-    }
-
-    if (hasServerSignal) {
+    if (hasStrongServerProtocol || hasKernelServerSignal || hasServerSignal) {
       return "Server-side";
     }
 
-    if (hasClientSignal) {
+    if (strongClientIndicators || domainSuggestsClient || hasClientSignal) {
       return "Client-side";
     }
 
