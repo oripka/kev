@@ -10,7 +10,7 @@ import {
   watch,
 } from "vue";
 import { format, parseISO } from "date-fns";
-import type { AccordionItem, SelectMenuItem, TableColumn } from "@nuxt/ui";
+import type { AccordionItem, SelectMenuItem, TableColumn, TableRow } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
@@ -520,6 +520,10 @@ const openDetails = async (entry: KevEntrySummary) => {
   } finally {
     detailLoading.value = false;
   }
+};
+
+const handleTableSelect = (row: TableRow<KevEntrySummary>) => {
+  openDetails(row.original);
 };
 
 const closeDetails = () => {
@@ -2474,6 +2478,12 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
     },
   ];
 });
+
+const tableMeta = {
+  class: {
+    tr: "cursor-pointer transition-colors hover:bg-neutral-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:bg-neutral-800/60 dark:focus-visible:ring-offset-neutral-900",
+  },
+};
 </script>
 
 <template>
@@ -3201,7 +3211,12 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
             animation="swing"
             color="primary"
           />
-          <UTable :data="results" :columns="columns" />
+          <UTable
+            :data="results"
+            :columns="columns"
+            :meta="tableMeta"
+            @select="handleTableSelect"
+          />
         </div>
       </UCard>
 
