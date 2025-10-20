@@ -1,1 +1,0 @@
-ALTER TABLE `catalog_entries` ADD `has_source_metasploit` integer DEFAULT 0 NOT NULL;

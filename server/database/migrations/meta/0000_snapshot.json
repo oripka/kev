@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "eb7095fe-ee3f-418c-a568-2afadd2c6058",
+  "id": "6ad5d8e4-c281-4eaf-92cb-fd154d61134e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "catalog_entries": {
@@ -225,6 +225,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "metasploit_module_path": {
+          "name": "metasploit_module_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "is_well_known": {
           "name": "is_well_known",
           "type": "integer",
@@ -272,6 +279,22 @@
         },
         "has_source_enisa": {
           "name": "has_source_enisa",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "has_source_historic": {
+          "name": "has_source_historic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "has_source_metasploit": {
+          "name": "has_source_metasploit",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -770,6 +793,13 @@
         },
         "aliases": {
           "name": "aliases",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "metasploit_module_path": {
+          "name": "metasploit_module_path",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1760903938723,
-      "tag": "0000_fancy_jasper_sitwell",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1760939437675,
-      "tag": "0001_exotic_wrecking_crew",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1760943423620,
-      "tag": "0002_lively_the_hood",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1764988800000,
-      "tag": "0003_metasploit_module_paths",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1760955364817,
-      "tag": "0004_futuristic_rage",
+      "when": 1760961307231,
+      "tag": "0000_cynical_eternity",
       "breakpoints": true
     }
   ]
