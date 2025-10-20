@@ -54,3 +54,18 @@ export type SourceBadgeMap = Record<
   KevEntrySummary["sources"][number],
   { label: string; color: string }
 >;
+
+export type QuickFilterSummaryMetricKey =
+  | "count"
+  | "year"
+  | "activeFilters"
+  | "highSeverityShare"
+  | "averageCvss"
+  | "ransomwareShare"
+  | "internetExposedShare";
+
+export type QuickFilterSummaryConfig = {
+  metrics: QuickFilterSummaryMetricKey[];
+  showActiveFilterChips: boolean;
+  showResetButton: boolean;
+};

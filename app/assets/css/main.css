@@ -1,2 +1,14 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+:root {
+  --chart-domain-color: #059669; /* emerald-600 */
+  --chart-exploit-color: #d97706; /* amber-600 */
+  --chart-vulnerability-color: #e11d48; /* rose-600 */
+}
+
+.dark {
+  --chart-domain-color: #34d399; /* emerald-400 */
+  --chart-exploit-color: #fbbf24; /* amber-400 */
+  --chart-vulnerability-color: #fb7185; /* rose-400 */
+}

@@ -46,3 +46,4 @@ See `NUXTUI.md` for Nuxt UI details.
 - [x] Add a dedicated poage for the vulns of the last two weeks. show as a list or cards in a grid 1 col or 2 cols. with a fancy card that has some detials about all the vulns.
 - [ ] Add auth and persist my software to database per user
 - [ ] Alerting (Slack / Email) when a new "in the wild" CVE matches saved filters.
+- [ ] Make badge colors more consisten (enisa stands out from the source and has differnet color i the filter panel than int he vuln display

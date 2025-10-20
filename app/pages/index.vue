@@ -14,6 +14,7 @@ import type { AccordionItem, SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
+import { defaultQuickFilterSummaryConfig, quickFilterSummaryMetricInfo } from "~/utils/quickFilterSummaryConfig";
 import type { CatalogSource, KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
 import type {
   ActiveFilter,
@@ -23,6 +24,8 @@ import type {
   SeverityDistributionDatum,
   SeverityKey,
   SourceBadgeMap,
+  QuickFilterSummaryConfig,
+  QuickFilterSummaryMetricKey,
 } from "~/types/dashboard";
 
 const formatTimestamp = (value: string) => {
@@ -72,6 +75,16 @@ type QuickFilterUpdate = {
 };
 
 const catalogPreferences = useCatalogPreferences();
+
+const { data: quickFilterSummaryConfigData } = await useFetch<QuickFilterSummaryConfig>(
+  "/api/quick-filter-summary",
+  {
+    default: () => defaultQuickFilterSummaryConfig,
+    headers: {
+      "cache-control": "no-store",
+    },
+  },
+);
 
 const replaceFiltersOnQuickApply = computed(
   () => catalogPreferences.value.replaceFiltersOnQuickApply
@@ -979,32 +992,92 @@ const averageCvssSummary = computed(() => {
   return `${count.toLocaleString()} CVEs with CVSS data`;
 });
 
-const quickStatItems = computed(() => [
-  {
-    key: "count",
-    icon: "i-lucide-list-checks",
-    label: "In view",
-    value: `${matchingResultsLabel.value} CVEs`,
-  },
-  {
-    key: "high",
-    icon: "i-lucide-activity",
-    label: "High/Critical",
-    value: highSeverityShareLabel.value,
-  },
-  {
-    key: "cvss",
-    icon: "i-lucide-gauge",
-    label: "Avg CVSS",
-    value: averageCvssLabel.value,
-  },
-  {
-    key: "ransomware",
-    icon: "i-lucide-flame",
-    label: "Ransomware",
-    value: ransomwareShareLabel.value,
-  },
-]);
+type QuickStatItem = {
+  key: QuickFilterSummaryMetricKey;
+  icon: string;
+  label: string;
+  value: string;
+};
+
+const quickFilterSummaryConfig = computed(
+  () => quickFilterSummaryConfigData.value ?? defaultQuickFilterSummaryConfig,
+);
+
+const quickFilterYearLabel = computed(() => {
+  const [start, end] = yearRange.value;
+  return start === end ? `${start}` : `${start}–${end}`;
+});
+
+const activeFiltersSummaryLabel = computed(() => {
+  const count = activeFilterCount.value;
+  if (!count) {
+    return "None";
+  }
+  return count === 1 ? "1 active" : `${count} active`;
+});
+
+const quickFilterSummaryMetricMap = computed<
+  Record<QuickFilterSummaryMetricKey, QuickStatItem>
+>(() => {
+  const info = quickFilterSummaryMetricInfo;
+  return {
+    count: {
+      key: "count",
+      icon: info.count.icon,
+      label: info.count.label,
+      value: `${matchingResultsLabel.value} CVEs`,
+    },
+    year: {
+      key: "year",
+      icon: info.year.icon,
+      label: info.year.label,
+      value: quickFilterYearLabel.value,
+    },
+    activeFilters: {
+      key: "activeFilters",
+      icon: info.activeFilters.icon,
+      label: info.activeFilters.label,
+      value: activeFiltersSummaryLabel.value,
+    },
+    highSeverityShare: {
+      key: "highSeverityShare",
+      icon: info.highSeverityShare.icon,
+      label: info.highSeverityShare.label,
+      value: highSeverityShareLabel.value,
+    },
+    averageCvss: {
+      key: "averageCvss",
+      icon: info.averageCvss.icon,
+      label: info.averageCvss.label,
+      value: averageCvssLabel.value,
+    },
+    ransomwareShare: {
+      key: "ransomwareShare",
+      icon: info.ransomwareShare.icon,
+      label: info.ransomwareShare.label,
+      value: ransomwareShareLabel.value,
+    },
+    internetExposedShare: {
+      key: "internetExposedShare",
+      icon: info.internetExposedShare.icon,
+      label: info.internetExposedShare.label,
+      value: internetExposedShareLabel.value,
+    },
+  };
+});
+
+const quickStatItems = computed(() => {
+  const config = quickFilterSummaryConfig.value;
+  const metrics = config.metrics.length ? config.metrics : defaultQuickFilterSummaryConfig.metrics;
+  const map = quickFilterSummaryMetricMap.value;
+
+  return metrics
+    .map((key) => map[key])
+    .filter((item): item is QuickStatItem => Boolean(item));
+});
+
+const showQuickFilterChips = computed(() => quickFilterSummaryConfig.value.showActiveFilterChips);
+const showQuickFilterResetButton = computed(() => quickFilterSummaryConfig.value.showResetButton);
 
 const hasActiveFilterChips = computed(() => activeFilters.value.length > 0);
 
@@ -2477,6 +2550,8 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           :active-filters="activeFilters"
           :has-active-filters="hasActiveFilters"
           :has-active-filter-chips="hasActiveFilterChips"
+          :show-filter-chips="showQuickFilterChips"
+          :show-reset-button="showQuickFilterResetButton"
           @reset="resetFilters"
           @clear-filter="clearFilter"
         />
