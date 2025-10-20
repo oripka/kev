@@ -325,45 +325,6 @@ const buildGapLabel = (days: number): string => {
   return parts.join(" ");
 };
 
-const getDateKey = (value: Date | null, fallback: string): string => {
-  if (!value) {
-    return fallback;
-  }
-
-  const year = value.getUTCFullYear();
-  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(value.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const buildGapLabel = (days: number): string => {
-  if (!Number.isFinite(days) || days <= 0) {
-    return "";
-  }
-
-  const parts: string[] = [];
-  const years = Math.floor(days / 365);
-  if (years > 0) {
-    parts.push(`${years} year${years === 1 ? "" : "s"}`);
-  }
-
-  let remainingDays = days - years * 365;
-
-  if (years === 0 && remainingDays >= 7 && remainingDays % 7 === 0) {
-    const weeks = Math.floor(remainingDays / 7);
-    if (weeks > 0) {
-      parts.push(`${weeks} week${weeks === 1 ? "" : "s"}`);
-      remainingDays = 0;
-    }
-  }
-
-  if (remainingDays > 0) {
-    parts.push(`${remainingDays} day${remainingDays === 1 ? "" : "s"}`);
-  }
-
-  return parts.join(" ");
-};
-
 const timelineItems = computed<TimelineItem[]>(() => {
   const entry = props.entry;
   if (!entry) {
@@ -497,8 +458,11 @@ const timelineItems = computed<TimelineItem[]>(() => {
       value: items.length,
       date: group.formattedDate,
       title: `${group.events.length} events recorded`,
-      description: aggregated.join("\n"),
+      description: aggregated.join("\n\n"),
       icon: "i-lucide-layers",
+      ui: {
+        description: "whitespace-pre-line",
+      },
     });
   });
 
