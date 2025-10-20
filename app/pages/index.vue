@@ -2523,7 +2523,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
             </template>
 
         <template #presets>
-          <div class="space-y-6 px-2">
+          <div class="space-y-6 px-2 py-4">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               Jump to curated combinations of catalog filters.
             </p>
@@ -2568,7 +2568,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #filters>
-          <div class="space-y-6 px-2">
+          <div class="space-y-6 px-2  py-4">
             <div class="flex items-start justify-between gap-3">
               <p class="text-sm text-neutral-500 dark:text-neutral-400">
                     Tune the dataset without leaving the table view.
@@ -2696,7 +2696,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #domain>
-          <div class="space-y-4 px-2">
+          <div class="space-y-4 px-2  py-4">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               Share of vulnerabilities per domain grouping.
             </p>
@@ -2757,7 +2757,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #exploit>
-          <div class="space-y-4  px-2">
+          <div class="space-y-4  px-2  py-4">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               How execution paths cluster for these CVEs.
             </p>
@@ -2820,7 +2820,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #vulnerability>
-          <div class="space-y-4  px-2">
+          <div class="space-y-4  px-2  py-4">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               Breakdown of vulnerability categories across matching exploits.
             </p>
@@ -2883,7 +2883,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #topVendors>
-          <div class="space-y-4  px-2">
+          <div class="space-y-4  px-2  py-4">
             <UFormField label="Show" class="w-32">
               <USelectMenu
                 v-model="topVendorCount"
@@ -2939,7 +2939,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #topProducts>
-          <div class="space-y-4  px-2">
+          <div class="space-y-4  px-2  py-4">
             <UFormField label="Show" class="w-32">
               <USelectMenu
                 v-model="topProductCount"
@@ -3003,7 +3003,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         </template>
 
         <template #focus>
-          <div class="space-y-4">
+          <div class="space-y-4  py-4">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
               Highlight the vulnerabilities that matter most to your
               organisation.

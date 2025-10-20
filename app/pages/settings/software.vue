@@ -197,7 +197,7 @@ const columns = computed<
 <template>
   <UPage>
     <UPageBody>
-      <div class="mx-auto grid w-full max-w-7xl gap-4 px-6">
+      <div class="mx-auto grid w-full  gap-4 px-6">
         <UCard>
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
