@@ -66,6 +66,307 @@ const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
   };
 };
 
+const normaliseKeySegment = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const makeVendorKey = (value?: string | null) => normaliseKeySegment(value ?? "");
+const makeProductKey = (value?: string | null) => normaliseKeySegment(value ?? "");
+const makeVendorProductKey = (vendor?: string | null, product?: string | null) => {
+  const vendorKey = makeVendorKey(vendor);
+  const productKey = makeProductKey(product);
+
+  if (!vendorKey && !productKey) {
+    return "";
+  }
+
+  return `${vendorKey}::${productKey}`.trim();
+};
+
+type CuratedProductHint = {
+  categories?: KevDomainCategory[];
+  addCategories?: KevDomainCategory[];
+  internetExposed?: boolean;
+  serverBias?: boolean;
+  clientBias?: boolean;
+};
+
+const curatedVendorProductHints: Record<string, CuratedProductHint> = {
+  [makeVendorProductKey("Cisco", "IOS")]: {
+    categories: ["Networking & VPN", "Operating Systems"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Cisco", "IOS XE")]: {
+    categories: ["Networking & VPN", "Operating Systems"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Cisco", "IOS XR")]: {
+    categories: ["Networking & VPN", "Operating Systems"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Cisco", "IOS XE Software")]: {
+    categories: ["Networking & VPN", "Operating Systems"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Cisco", "IOS and IOS XE Software")]: {
+    categories: ["Networking & VPN", "Operating Systems"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Cisco", "IOS Software")]: {
+    categories: ["Networking & VPN", "Operating Systems"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Cisco", "IOS XE Web UI")]: {
+    categories: ["Networking & VPN", "Web Applications"],
+    addCategories: ["Internet Edge", "Security Appliances"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Ivanti", "Endpoint Manager Mobile (EPMM)")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Ivanti", "Endpoint Manager Mobile")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Ivanti", "Sentry")]: {
+    addCategories: ["Security Appliances", "Networking & VPN", "Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("MobileIron", "Core")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("MobileIron", "Sentry")]: {
+    addCategories: ["Security Appliances", "Networking & VPN", "Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("MobileIron", "Endpoint Manager Mobile (EPMM)")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Ivanti", "Endpoint Manager Mobile (EPMM) and MobileIron Core")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Ivanti", "MobileIron Multiple Products")]: {
+    addCategories: ["Security Appliances", "Networking & VPN", "Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+};
+
+const curatedProductHints: Record<string, CuratedProductHint> = {
+  [makeProductKey("endpoint manager mobile (epmm)")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("endpoint manager mobile")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("ivanti epmm")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("mobileiron core")]: {
+    addCategories: [
+      "Security Appliances",
+      "Networking & VPN",
+      "Web Applications",
+      "Internet Edge",
+    ],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("mobileiron sentry")]: {
+    addCategories: ["Security Appliances", "Networking & VPN", "Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("mobileiron multiple products")]: {
+    addCategories: ["Security Appliances", "Networking & VPN", "Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+};
+
+const mergeCuratedHints = (
+  base: CuratedProductHint | undefined,
+  addition: CuratedProductHint
+): CuratedProductHint => {
+  const merged: CuratedProductHint = {
+    categories: base?.categories ? [...base.categories] : undefined,
+    addCategories: base?.addCategories ? [...base.addCategories] : undefined,
+    internetExposed: base?.internetExposed,
+    serverBias: base?.serverBias,
+    clientBias: base?.clientBias,
+  };
+
+  if (addition.categories?.length) {
+    merged.categories = [...addition.categories];
+  }
+
+  if (addition.addCategories?.length) {
+    const set = new Set(merged.addCategories ?? []);
+    for (const category of addition.addCategories) {
+      set.add(category);
+    }
+    merged.addCategories = Array.from(set);
+  }
+
+  if (addition.internetExposed !== undefined) {
+    merged.internetExposed = addition.internetExposed;
+  }
+
+  if (addition.serverBias) {
+    merged.serverBias = true;
+  }
+
+  if (addition.clientBias) {
+    merged.clientBias = true;
+  }
+
+  return merged;
+};
+
+const dynamicCuratedHint = (
+  vendorKey: string,
+  productKey: string
+): CuratedProductHint | undefined => {
+  if (!vendorKey || !productKey) {
+    return undefined;
+  }
+
+  if (
+    vendorKey === "cisco" &&
+    /\bios(?:\s+(?:xe|xr))?(?:\s+software)?\b/i.test(productKey)
+  ) {
+    return {
+      categories: ["Networking & VPN", "Operating Systems"],
+      addCategories: ["Internet Edge"],
+      internetExposed: true,
+      serverBias: true,
+    };
+  }
+
+  if (
+    (vendorKey === "ivanti" || vendorKey === "mobileiron") &&
+    /(?:endpoint manager mobile|epmm|mobileiron (?:core|sentry))/i.test(
+      productKey
+    )
+  ) {
+    return {
+      addCategories: [
+        "Security Appliances",
+        "Networking & VPN",
+        "Web Applications",
+        "Internet Edge",
+      ],
+      internetExposed: true,
+      serverBias: true,
+    };
+  }
+
+  return undefined;
+};
+
+const resolveCuratedHint = (
+  vendor?: string | null,
+  product?: string | null
+): CuratedProductHint | undefined => {
+  const vendorKey = makeVendorKey(vendor);
+  const productKey = makeProductKey(product);
+  let hint: CuratedProductHint | undefined;
+
+  if (productKey && curatedProductHints[productKey]) {
+    hint = mergeCuratedHints(hint, curatedProductHints[productKey]);
+  }
+
+  const vendorProductKey = makeVendorProductKey(vendor, product);
+  if (vendorProductKey && curatedVendorProductHints[vendorProductKey]) {
+    hint = mergeCuratedHints(
+      hint,
+      curatedVendorProductHints[vendorProductKey]
+    );
+  }
+
+  const dynamicHint = dynamicCuratedHint(vendorKey, productKey);
+  if (dynamicHint) {
+    hint = mergeCuratedHints(hint, dynamicHint);
+  }
+
+  return hint;
+};
+
 // --- Primary edge / perimeter products (VPNs, gateways, ADCs, secure access) ---
 const edgeStrongProductPatterns: RegExp[] = [
   // Citrix / Netscaler family
@@ -858,6 +1159,8 @@ const remoteContextPatterns: RegExp[] = [
   // network or protocol context
   /\b(over|across|via|through)\s+(?:the\s+)?network\b/i,
   /\b(network[-\s]?(?:based|accessible|reachable)|network access)\b/i,
+  /\b(?:get|post|put|delete|patch|options|head)\s+(?:request|requests)\b/i,
+  /\b(?:get|post|put|delete|patch|options|head)\s+\/[a-z0-9._~\-?=&%]+/i,
 
   // specific protocols / transports
   /\b(?:http|https|smb|rpc|rdp|ftp|smtp|imap|pop3|dns|tcp|udp|ldap|snmp|modbus|dce\/?rpc|nfs|ssh|telnet|mqtt|coap)\b/i,
@@ -1080,6 +1383,9 @@ const serverSignalPatterns: RegExp[] = [
   /\bremote[-\s]?management(?: (?:portal|interface|server))?\b/i,
   /(?<!windows\s)(?<!microsoft\s)\bmanagement (?:server|interface|console)\b/i,
   /\badmin(?:istration)? (?:interface|console|portal)\b/i,
+  /\bmobile device management (?:server|platform|gateway|interface|appliance)\b/i,
+  /\bdevice management (?:server|platform|gateway|interface|appliance)\b/i,
+  /\bmdm (?:server|gateway|platform|appliance)\b/i,
 
   // network / remote service signals
   /\b(?:remote service|http service|https service|network service|tcp service|listens on port|listening on port)\b/i,
@@ -1206,6 +1512,20 @@ export const classifyDomainCategories = (
   );
   const text = `${source} ${context}`;
   const categories = new Set(matchCategory(text, domainRules, "Other"));
+  const curatedHint = resolveCuratedHint(entry.vendor, entry.product);
+
+  if (curatedHint?.categories?.length) {
+    categories.clear();
+    for (const category of curatedHint.categories) {
+      categories.add(category);
+    }
+  }
+
+  if (curatedHint?.addCategories?.length) {
+    for (const category of curatedHint.addCategories) {
+      categories.add(category);
+    }
+  }
 
   const isBrowser =
     categories.has("Browsers") || matchesAny(source, webNegativePatterns);
@@ -1347,10 +1667,20 @@ export const classifyDomainCategories = (
     (edgeSupportingProduct && hasExposureContext) ||
     domainEdgeSignal;
 
-  const internetExposed =
+  let internetExposed =
     strongProductBackers &&
     hasExposureContext &&
     productConfidence + contextConfidence + remoteConfidence >= 3.5;
+
+  if (curatedHint?.internetExposed !== undefined) {
+    internetExposed = curatedHint.internetExposed;
+  } else if (
+    !internetExposed &&
+    (curatedHint?.addCategories?.includes("Internet Edge") ||
+      curatedHint?.categories?.includes("Internet Edge"))
+  ) {
+    internetExposed = true;
+  }
 
   if (internetExposed) {
     categories.add("Internet Edge");
@@ -1361,6 +1691,8 @@ export const classifyDomainCategories = (
 
 export const classifyExploitLayers = (
   entry: {
+    vendor: string;
+    product: string;
     vulnerabilityName: string;
     description: string;
     cvssVector?: string | null;
@@ -1377,6 +1709,7 @@ export const classifyExploitLayers = (
     cvssTraits?.attackVector === "N" || cvssTraits?.attackVector === "A";
   const cvssRequiresUserInteraction = cvssTraits?.userInteraction === "R";
   const cvssPreAuth = cvssTraits?.privilegesRequired === "N";
+  const cvssStrongServer = cvssSuggestsRemote && cvssPreAuth;
 
   const hasPrivilegeSignal = privilegePatterns.some((pattern) =>
     pattern.test(text)
@@ -1401,6 +1734,14 @@ export const classifyExploitLayers = (
   );
   const hasDosSignal = matchesAny(text, denialOfServicePatterns);
   let hasClientSignal = matchesAny(text, clientSignalPatterns);
+  const curatedHint = resolveCuratedHint(entry.vendor, entry.product);
+  const curatedServerBias = curatedHint?.serverBias ?? false;
+  const curatedClientBias = curatedHint?.clientBias ?? false;
+
+  if (curatedClientBias) {
+    hasClientSignal = true;
+  }
+
   let hasClientApplicationSignal = matchesAny(
     text,
     clientApplicationPatterns
@@ -1450,6 +1791,10 @@ export const classifyExploitLayers = (
     }
   }
 
+  if (curatedServerBias) {
+    hasServerSignal = true;
+  }
+
   const networkOperatingSystemSignal = /\bcisco(?:'s)?\s+ios(?:\s+(?:xe|xr))?\b/i.test(
     text
   ) || /\bios\s+(?:xe|xr)\b/i.test(text);
@@ -1469,12 +1814,12 @@ export const classifyExploitLayers = (
     hasServerSignal = true;
   }
 
-  const domainSuggestsClient = domainCategories.some((category) =>
-    clientDomainHints.has(category)
-  );
-  const domainSuggestsServer = domainCategories.some((category) =>
-    serverDomainHints.has(category)
-  );
+  const domainSuggestsClient =
+    domainCategories.some((category) => clientDomainHints.has(category)) ||
+    curatedClientBias;
+  const domainSuggestsServer =
+    domainCategories.some((category) => serverDomainHints.has(category)) ||
+    curatedServerBias;
 
   if (hasClientApplicationSignal) {
     const hasClientArtifactContext =
@@ -1529,14 +1874,17 @@ export const classifyExploitLayers = (
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
     hasClientLocalExecutionSignal ||
-    domainSuggestsClient;
+    domainSuggestsClient ||
+    curatedClientBias;
 
   const strongServerIndicators =
     hasServerSignal ||
     domainSuggestsServer ||
     hasStrongServerProtocol ||
     hasKernelServerSignal ||
-    (hasRemoteContext && !strongClientIndicators);
+    (hasRemoteContext && !strongClientIndicators) ||
+    cvssStrongServer ||
+    curatedServerBias;
 
   const clientArtifactSupport =
     hasClientFileSignal ||
@@ -1567,7 +1915,8 @@ export const classifyExploitLayers = (
     clientFileScore +
     (hasClientUserInteractionSignal ? 1 : 0) +
     (hasClientLocalExecutionSignal ? 1 : 0) +
-    (domainSuggestsClient ? 1 : 0);
+    (domainSuggestsClient ? 1 : 0) +
+    (curatedClientBias ? 1 : 0);
 
   let clientScore = clientScoreBase;
 
@@ -1584,18 +1933,25 @@ export const classifyExploitLayers = (
     (hasServerSignal ? 2 : 0) +
     (domainSuggestsServer ? 2 : 0) +
     (hasStrongServerProtocol ? 3 : 0) +
-    (hasKernelServerSignal ? 2 : 0);
+    (hasKernelServerSignal ? 2 : 0) +
+    (curatedServerBias ? 2 : 0);
 
   if (hasRemoteContext && !strongClientIndicators) {
     serverScoreBase += 1;
   }
 
+  if (cvssStrongServer) {
+    serverScoreBase += 1;
+  }
+
   const serverHardConstraint =
-    domainSuggestsServer &&
-    (hasStrongServerProtocol ||
-      hasServerSignal ||
-      networkOperatingSystemSignal ||
-      (hasRemoteContext && !cvssSuggestsLocal));
+    (domainSuggestsServer &&
+      (hasStrongServerProtocol ||
+        hasServerSignal ||
+        networkOperatingSystemSignal ||
+        (hasRemoteContext && !cvssSuggestsLocal))) ||
+    curatedServerBias ||
+    cvssStrongServer;
 
   if (serverHardConstraint) {
     serverScoreBase += 2;
@@ -1634,12 +1990,14 @@ export const classifyExploitLayers = (
       hasStrongServerProtocol ||
       hasKernelServerSignal ||
       (domainSuggestsServer && !domainSuggestsClient) ||
-      (hasServerSignal && !hasClientSignal);
+      (hasServerSignal && !hasClientSignal) ||
+      cvssStrongServer;
 
     const clientDominant =
       strongClientIndicators ||
       (domainSuggestsClient && !domainSuggestsServer) ||
-      (hasClientSignal && !hasServerSignal);
+      (hasClientSignal && !hasServerSignal) ||
+      curatedClientBias;
 
     if (serverDominant && !clientDominant) {
       return "Server-side";

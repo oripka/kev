@@ -21,16 +21,16 @@
 
 - **`clientSignalPatterns`:** Contains multiple high-impact tokens (`mobile`, `ios`, `local user`) that should be paired with context or vendor/product lookups before increasing the client score.【F:app/utils/classification.ts†L936-L954】
 - **`serverSignalPatterns`:** Reliance on generic words like `server`/`service` can still overwhelm legitimate client contexts (e.g., "connects to a server" wording in browser bugs). Introduce negative lookbehinds for phrases such as "malicious server" or couple with network protocol mentions to ensure intent.【F:app/utils/classification.ts†L1060-L1076】
-- -[ ]**Dataset hints:** Cached data makes it feasible to maintain a whitelist/blacklist per `vendorProject`/`product` pair. Deriving domain hints from that metadata is more stable than raw regex matches.
+- -[x]**Dataset hints:** Cached data makes it feasible to maintain a whitelist/blacklist per `vendorProject`/`product` pair. Deriving domain hints from that metadata is more stable than raw regex matches.
 
-1. -[ ]**Curated product taxonomy:** Build a maintained lookup table mapping normalized vendor/product keys to domain categories (client app, server app, network device, etc.). Use it to seed `domainCategories` before any regex scoring.
+1. -[x]**Curated product taxonomy:** Build a maintained lookup table mapping normalized vendor/product keys to domain categories (client app, server app, network device, etc.). Use it to seed `domainCategories` before any regex scoring.
 2. - [x] **Contextual keyword matching:** For mobile/iOS detection, require composite expressions (e.g., `(apple|ipad|iphone) ios`) and add explicit exclusions (`cisco ios`, `ios xe`, `ios xr`). Apply similar guards to `mobile` (`mobile app`, `mobile device`, `android mobile`).
 
 
 
 
 
-- [ ] Because `/api/fetchKev` enriches entries before they are persisted, these incorrect labels are written directly into `data/cache/*.json`, so every cached dataset and downstream view inherits the error. 【F:server/api/fetchKev.post.ts†L327-L358】【F:server/utils/cache.ts†L22-L105】【F:app/utils/classification.ts†L1581-L1599】
+- [x] Because `/api/fetchKev` enriches entries before they are persisted, these incorrect labels are written directly into `data/cache/*.json`, so every cached dataset and downstream view inherits the error. 【F:server/api/fetchKev.post.ts†L327-L358】【F:server/utils/cache.ts†L22-L105】【F:app/utils/classification.ts†L1581-L1599】
 
 - [x] Catch-all regular expression in `clientApplicationPatterns`
 The final pattern in `clientApplicationPatterns` is declared as:
@@ -84,7 +84,7 @@ Even after fixing the catch-all regex, the `clientFileInteractionPatterns` block
 r.
 
 
-- -[ ]**Augment feature extraction.** Consider layering lightweight NLP (keyword lists for “API endpoint”, “admin portal”, HTTP verbs) and CVSS hints (e.g., treat AV:N + PR:N as strong server evidence) to supplement regex matching and further separate client from server contexts.【F:app/utils/classification.ts†L1176-L1314】【F:app/utils/classification.ts†L1382-L1474】
+- -[x]**Augment feature extraction.** Consider layering lightweight NLP (keyword lists for “API endpoint”, “admin portal”, HTTP verbs) and CVSS hints (e.g., treat AV:N + PR:N as strong server evidence) to supplement regex matching and further separate client from server contexts.【F:app/utils/classification.ts†L1176-L1314】【F:app/utils/classification.ts†L1382-L1474】
 
 2.- [x] **Rebalance scoring weights.** Gate the +2 client bonus on combined evidence (e.g., require both a client application match and a file/interaction cue) and add similar weight for `domainSuggestsServer` or explicit server signals so network appliances cannot be overridden by a stray client pattern.【F:app/utils/classification.ts†L1410-L1476】
 
@@ -110,3 +110,107 @@ r.
 - [ ] **Add non-RCE exploit layer buckets.** Introduce classifications such as "Auth Bypass ·
    Edge" or "Configuration Abuse" so the catalog captures high-severity API failures instead
    of returning empty arrays.【6a6ebe†L3-L16】
+
+
+
+
+# evaluate why this is categoirze as non.memory  it can be ewither memory coruption or not not both!!!
+
+- [ ] fix tagging stuff both a smemory corruption and non-emmorcoruption
+Microsoft SMBv1 Remote Code Execution Vulnerability
+
+CVE-2017-0144
+CISA KEV
+ENISA
+Historic dataset
+Metasploit
+Description
+
+ETERNALBLUE / DOUBLEPULSAR
+The SMBv1 server in multiple Microsoft Windows versions allows remote attackers to execute arbitrary code via crafted packets.
+Vendor
+
+Microsoft
+Product
+
+Windows
+Date added
+
+2017-01-01T00:00:00.000Z
+Ransomware use
+
+Known
+
+CVSS
+
+High 8.8
+v3.1
+CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+
+EPSS
+
+94.3%
+Assigner
+
+microsoft
+
+Exploit activity
+
+Timeline of key milestones
+
+Follow how this CVE moved from publication to active exploitation across monitored feeds.
+
+7 events
+3214 days from first to latest milestone
+Jan 1, 2017
+2 events recorded
+• CVE published — Published by microsoft. · Source: NVD
+
+• Historic exploitation noted — Captured in the historic exploited vulnerability archive. · Source: Historic dataset
+—
+72 days later
+No tracked activity was recorded during this gap.
+Mar 14, 2017
+Metasploit entry published
+Module path: exploits/windows/smb/ms17_010_eternalblue · Source: Metasploit
+—
+31 days later
+No tracked activity was recorded during this gap.
+Apr 14, 2017
+Metasploit entry published
+Module path: exploits/windows/smb/smb_doublepulsar_rce · Source: Metasploit
+—
+4 years 303 days later
+No tracked activity was recorded during this gap.
+Feb 10, 2022
+Listed by ENISA
+ENISA highlighted this CVE as actively exploited in the Threat Landscape for exploited vulnerabilities. · Source: ENISA
+Feb 10, 2022
+Flagged in CISA KEV
+CISA confirmed active exploitation and added the CVE to the Known Exploited Vulnerabilities catalog. · Source: CISA KEV
+—
+3 years 253 days later
+No tracked activity was recorded during this gap.
+Oct 20, 2025
+Last updated
+Most recent catalog update recorded for this entry.
+Source
+
+View advisory
+Domain categories
+
+Non-Web Applications
+Exploit profiles
+
+RCE · Server-side Non-memory
+RCE · Server-side Memory Corruption
+DoS · Server-side
+Vulnerability categories
+
+Remote Code Execution
+Memory Corruption
+Denial of Service
+References
+
+https://packetstormsecurity.com/files/cve/CVE-2017-0144
+https://www.exploit-db.com/exploits/42031/
