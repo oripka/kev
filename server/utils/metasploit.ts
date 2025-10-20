@@ -1,7 +1,7 @@
 import { access, mkdir, readdir, readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { join, relative } from 'node:path'
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray, ne } from 'drizzle-orm'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
@@ -723,14 +723,93 @@ const parseModuleFile = async (filePath: string, repoRoot: string): Promise<Modu
   }
 }
 
+const PLATFORM_VENDOR_MAP: Record<string, { vendor: string; product: string }> = {
+  windows: { vendor: 'Microsoft', product: 'Windows' },
+  win: { vendor: 'Microsoft', product: 'Windows' },
+  linux: { vendor: 'Linux', product: 'Linux' },
+  unix: { vendor: 'Unix', product: 'Unix' },
+  osx: { vendor: 'Apple', product: 'macOS' },
+  macos: { vendor: 'Apple', product: 'macOS' },
+  mac: { vendor: 'Apple', product: 'macOS' },
+  ios: { vendor: 'Apple', product: 'iOS' },
+  android: { vendor: 'Google', product: 'Android' },
+  solaris: { vendor: 'Oracle', product: 'Solaris' },
+  aix: { vendor: 'IBM', product: 'AIX' },
+  hpux: { vendor: 'Hewlett Packard Enterprise', product: 'HP-UX' },
+  freebsd: { vendor: 'FreeBSD Project', product: 'FreeBSD' },
+  netbsd: { vendor: 'NetBSD Project', product: 'NetBSD' },
+  openbsd: { vendor: 'OpenBSD', product: 'OpenBSD' },
+  junos: { vendor: 'Juniper Networks', product: 'Junos' }
+}
+
+const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; product: string | null } => {
+  const findMapping = (token: string | undefined): { vendor: string; product: string } | null => {
+    if (!token) {
+      return null
+    }
+    const mapping = PLATFORM_VENDOR_MAP[token.toLowerCase()]
+    return mapping ?? null
+  }
+
+  for (const platform of metadata.platforms) {
+    const mapping = findMapping(platform)
+    if (mapping) {
+      return mapping
+    }
+  }
+
+  const pathSegments = metadata.path
+    .split('/')
+    .map(segment => segment.trim().toLowerCase())
+    .filter(Boolean)
+
+  for (const segment of pathSegments) {
+    const mapping = findMapping(segment)
+    if (mapping) {
+      return mapping
+    }
+  }
+
+  if (metadata.targets.length) {
+    const joinedTargets = metadata.targets.join(' ').toLowerCase()
+    if (joinedTargets.includes('windows')) {
+      return { vendor: 'Microsoft', product: 'Windows' }
+    }
+    if (joinedTargets.includes('linux')) {
+      return { vendor: 'Linux', product: 'Linux' }
+    }
+    if (joinedTargets.includes('mac os') || joinedTargets.includes('macos')) {
+      return { vendor: 'Apple', product: 'macOS' }
+    }
+    if (joinedTargets.includes('ios')) {
+      return { vendor: 'Apple', product: 'iOS' }
+    }
+    if (joinedTargets.includes('android')) {
+      return { vendor: 'Google', product: 'Android' }
+    }
+    if (joinedTargets.includes('solaris')) {
+      return { vendor: 'Oracle', product: 'Solaris' }
+    }
+    if (joinedTargets.includes('aix')) {
+      return { vendor: 'IBM', product: 'AIX' }
+    }
+  }
+
+  return { vendor: null, product: null }
+}
+
 const createBaseEntries = (moduleResult: ModuleParseResult, commit: string | null): KevBaseEntry[] => {
   const { metadata, cveIds, references, aliases } = moduleResult
   const moduleId = metadata.path.replace(/\.rb$/i, '')
   const sourceRef = commit ?? METASPLOIT_BRANCH
   const sourceUrl = `https://github.com/rapid7/metasploit-framework/blob/${sourceRef}/${metadata.path}`
   const notes = createNotes(metadata)
+  const guessedVendorProduct = guessVendorProduct(metadata)
   return cveIds.map(cveId => {
-    const normalised = normaliseVendorProduct({ vendor: 'Metasploit', product: metadata.name })
+    const normalised = normaliseVendorProduct({
+      vendor: guessedVendorProduct.vendor,
+      product: guessedVendorProduct.product ?? metadata.name
+    })
     const aliasList = unique([cveId, ...aliases])
     return {
       id: `metasploit:${moduleId}:${cveId}`,
@@ -761,6 +840,85 @@ const createBaseEntries = (moduleResult: ModuleParseResult, commit: string | nul
       references,
       aliases: aliasList,
       internetExposed: false
+    }
+  })
+}
+
+const applyVendorProductOverrides = (entries: KevBaseEntry[], db: DrizzleDatabase): KevBaseEntry[] => {
+  if (!entries.length) {
+    return entries
+  }
+
+  const cveIds = Array.from(new Set(entries.map(entry => entry.cveId).filter(Boolean)))
+  if (!cveIds.length) {
+    return entries
+  }
+
+  const rows = db
+    .select({
+      cveId: tables.vulnerabilityEntries.cveId,
+      vendor: tables.vulnerabilityEntries.vendor,
+      product: tables.vulnerabilityEntries.product,
+      source: tables.vulnerabilityEntries.source
+    })
+    .from(tables.vulnerabilityEntries)
+    .where(
+      and(
+        inArray(tables.vulnerabilityEntries.cveId, cveIds),
+        ne(tables.vulnerabilityEntries.source, 'metasploit')
+      )
+    )
+    .all()
+
+  const priorities: Record<string, number> = { kev: 3, historic: 2, enisa: 1 }
+  const overrides = new Map<
+    string,
+    { vendor: string; product: string; score: number }
+  >()
+
+  for (const row of rows) {
+    if (!row.cveId) {
+      continue
+    }
+    const vendor = (row.vendor ?? '').trim()
+    const product = (row.product ?? '').trim()
+    if (!vendor && !product) {
+      continue
+    }
+    const score = priorities[row.source ?? ''] ?? 0
+    const existing = overrides.get(row.cveId)
+    if (!existing || score > existing.score) {
+      overrides.set(row.cveId, { vendor, product, score })
+      continue
+    }
+    if (score === existing.score) {
+      const existingLength = existing.vendor.length + existing.product.length
+      const candidateLength = vendor.length + product.length
+      if (candidateLength > existingLength) {
+        overrides.set(row.cveId, { vendor, product, score })
+      }
+    }
+  }
+
+  if (!overrides.size) {
+    return entries
+  }
+
+  return entries.map(entry => {
+    const override = overrides.get(entry.cveId)
+    if (!override) {
+      return entry
+    }
+    const normalised = normaliseVendorProduct({ vendor: override.vendor, product: override.product })
+    if (normalised.vendor.label === entry.vendor && normalised.product.label === entry.product) {
+      return entry
+    }
+    return {
+      ...entry,
+      vendor: normalised.vendor.label,
+      vendorKey: normalised.vendor.key,
+      product: normalised.product.label,
+      productKey: normalised.product.key
     }
   })
 }
@@ -851,7 +1009,8 @@ export const importMetasploitCatalog = async (
     return { imported: 0, commit, modules: processedModules.size }
   }
 
-  const entries = baseEntries.map(entry => enrichEntry(entry))
+  const vendorAdjustedEntries = applyVendorProductOverrides(baseEntries, db)
+  const entries = vendorAdjustedEntries.map(entry => enrichEntry(entry))
 
   setImportPhase('savingMetasploit', {
     message: 'Saving Metasploit entries to the local cache',
