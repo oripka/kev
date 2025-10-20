@@ -13,6 +13,7 @@ import { format, parseISO } from "date-fns";
 import type { AccordionItem, SelectMenuItem, TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
+import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
 import type { CatalogSource, KevCountDatum, KevEntry, KevEntrySummary } from "~/types";
 import type {
   ActiveFilter,
@@ -63,6 +64,18 @@ const showTrendLines = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
+
+type QuickFilterUpdate = {
+  filters?: Partial<Record<FilterKey, string | null>>;
+  source?: CatalogSource;
+  year?: number;
+};
+
+const catalogPreferences = useCatalogPreferences();
+
+const replaceFiltersOnQuickApply = computed(
+  () => catalogPreferences.value.replaceFiltersOnQuickApply
+);
 
 type SortOption = "publicationDate" | "cvssScore" | "epssScore" | "cveId";
 type SortDirection = "asc" | "desc";
@@ -490,6 +503,11 @@ const openDetails = async (entry: KevEntrySummary) => {
 
 const closeDetails = () => {
   showDetails.value = false;
+};
+
+const handleDetailQuickFilter = (update: QuickFilterUpdate) => {
+  applyQuickFilters(update);
+  closeDetails();
 };
 
 watch(showDetails, (value) => {
@@ -1329,6 +1347,69 @@ const toggleFilter = (key: FilterKey, value: string) => {
   resetDownstreamFilters(key);
 };
 
+const openAccordionSections = (...sections: string[]) => {
+  if (!sections.length) {
+    return;
+  }
+
+  const next = new Set(asideAccordionValue.value);
+  for (const section of sections) {
+    if (section) {
+      next.add(section);
+    }
+  }
+
+  asideAccordionValue.value = Array.from(next);
+};
+
+const applyQuickFilters = (update: QuickFilterUpdate) => {
+  const { filters: filterUpdates, source, year } = update;
+
+  if (replaceFiltersOnQuickApply.value) {
+    resetFilters();
+  }
+
+  if (filterUpdates) {
+    for (const [rawKey, rawValue] of Object.entries(filterUpdates) as Array<[
+      FilterKey,
+      string | null | undefined,
+    ]>) {
+      const key = rawKey as FilterKey;
+      filters[key] = rawValue ?? null;
+    }
+  }
+
+  if (source) {
+    selectedSource.value = source;
+  }
+
+  if (typeof year === "number" && Number.isFinite(year)) {
+    yearRange.value = [year, year];
+  }
+
+  const sectionsToOpen: string[] = ["filters"];
+
+  if (filterUpdates?.domain) {
+    sectionsToOpen.push("domain");
+  }
+  if (filterUpdates?.exploit) {
+    sectionsToOpen.push("exploit");
+  }
+  if (filterUpdates?.vulnerability) {
+    sectionsToOpen.push("vulnerability");
+  }
+  if (filterUpdates?.vendor) {
+    sectionsToOpen.push("top-vendors");
+  }
+  if (filterUpdates?.product) {
+    sectionsToOpen.push("top-products");
+  }
+
+  openAccordionSections(...sectionsToOpen);
+
+  showAllResults.value = true;
+};
+
 const clearFilter = (
   key:
     | FilterKey
@@ -1396,262 +1477,363 @@ const clearFilter = (
   resetDownstreamFilters(key);
 };
 
-const columns: TableColumn<KevEntrySummary>[] = [
-  {
-    id: "summary",
-    header: "Description",
-    cell: ({ row }) => {
-      const description =
-        row.original.description || "No description provided.";
-      const wellKnownLabel = getWellKnownCveName(row.original.cveId);
-      const badgeRowChildren = [] as Array<ReturnType<typeof h>>;
-
-      const entry = row.original;
-      const isTracked =
-        trackedProductsReady.value &&
-        trackedProductSet.value.has(entry.productKey);
-      const hasServerSideRce = entry.exploitLayers.some((layer) =>
-        layer.startsWith("RCE · Server-side")
-      );
-      const hasTrivialServerSide = entry.exploitLayers.includes(
-        "RCE · Server-side Non-memory"
-      );
-
-      for (const source of row.original.sources) {
-        const meta = sourceBadgeMap[source];
-        badgeRowChildren.push(
-          h(
-            UBadge,
-            {
-              color: meta?.color ?? "neutral",
-              variant: "soft",
-              class: "text-xs font-semibold",
-            },
-            () => meta?.label ?? source.toUpperCase()
-          )
-        );
-      }
-
-      if (wellKnownLabel) {
-        badgeRowChildren.push(
-          h(
-            UBadge,
-            {
-              color: "primary",
-              variant: "soft",
-              class: "shrink-0 text-xs font-semibold",
-            },
-            () => wellKnownLabel
-          )
-        );
-      }
-
-      if (isTracked) {
-        badgeRowChildren.push(
-          h(
-            UBadge,
-            {
-              color: "warning",
-              variant: "soft",
-              class: "shrink-0 text-xs font-semibold",
-            },
-            () => "My software"
-          )
-        );
-      }
-
-      if (hasServerSideRce) {
-        badgeRowChildren.push(
-          h(
-            UBadge,
-            {
-              color: "error",
-              variant: "soft",
-              class: "shrink-0 text-xs font-semibold",
-            },
-            () =>
-              hasTrivialServerSide
-                ? "Server-side RCE · Non-memory"
-                : "Server-side RCE"
-          )
-        );
-      }
-
-      const children: Array<ReturnType<typeof h>> = [
+const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
+  const createBadgeButton = (
+    label: string,
+    color: string,
+    onClick: () => void,
+    options: { isActive?: boolean; ariaLabel?: string } = {}
+  ) =>
+    h(
+      "button",
+      {
+        type: "button",
+        class: [
+          "group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition",
+          options.isActive
+            ? "ring-1 ring-inset ring-primary-400 dark:ring-primary-500/50"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        onClick,
+        "aria-label": options.ariaLabel ?? undefined,
+        "aria-pressed":
+          typeof options.isActive === "boolean" ? options.isActive : undefined,
+      },
+      [
         h(
-          "p",
+          UBadge,
           {
+            color,
+            variant: "soft",
             class:
-              "max-w-2xl whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
+              "pointer-events-none text-xs font-semibold transition-colors group-hover:bg-primary-100/80 group-hover:text-primary-700 dark:group-hover:bg-primary-500/15 dark:group-hover:text-primary-200",
           },
-          row.original.vulnerabilityName
+          () => label
         ),
-      ];
+      ]
+    );
 
-      if (badgeRowChildren.length) {
-        children.push(
+  return [
+    {
+      id: "summary",
+      header: "Description",
+      cell: ({ row }) => {
+        const description =
+          row.original.description || "No description provided.";
+        const wellKnownLabel = getWellKnownCveName(row.original.cveId);
+        const badgeRowChildren: Array<ReturnType<typeof h>> = [];
+
+        const entry = row.original;
+        const isTracked =
+          trackedProductsReady.value &&
+          trackedProductSet.value.has(entry.productKey);
+        const hasServerSideRce = entry.exploitLayers.some((layer) =>
+          layer.startsWith("RCE · Server-side")
+        );
+        const hasTrivialServerSide = entry.exploitLayers.includes(
+          "RCE · Server-side Non-memory"
+        );
+
+        for (const source of row.original.sources) {
+          const meta = sourceBadgeMap[source];
+          const label = meta?.label ?? source.toUpperCase();
+          const color = meta?.color ?? "neutral";
+          badgeRowChildren.push(
+            createBadgeButton(label, color, () => applyQuickFilters({ source }), {
+              ariaLabel: `Filter catalog by ${label} source`,
+              isActive: selectedSource.value === source,
+            })
+          );
+        }
+
+        if (entry.vendorKey && entry.vendor) {
+          badgeRowChildren.push(
+            createBadgeButton(
+              entry.vendor,
+              "primary",
+              () =>
+                applyQuickFilters({
+                  filters: { vendor: entry.vendorKey },
+                }),
+              {
+                ariaLabel: `Filter by vendor ${entry.vendor}`,
+                isActive: filters.vendor === entry.vendorKey,
+              }
+            )
+          );
+        }
+
+        if (entry.productKey && entry.product) {
+          badgeRowChildren.push(
+            createBadgeButton(
+              entry.product,
+              "secondary",
+              () =>
+                applyQuickFilters({
+                  filters: { product: entry.productKey },
+                }),
+              {
+                ariaLabel: `Filter by product ${entry.product}`,
+                isActive: filters.product === entry.productKey,
+              }
+            )
+          );
+        }
+
+        if (wellKnownLabel) {
+          badgeRowChildren.push(
+            h(
+              UBadge,
+              {
+                color: "primary",
+                variant: "soft",
+                class: "shrink-0 text-xs font-semibold",
+              },
+              () => wellKnownLabel
+            )
+          );
+        }
+
+        if (isTracked) {
+          badgeRowChildren.push(
+            h(
+              UBadge,
+              {
+                color: "warning",
+                variant: "soft",
+                class: "shrink-0 text-xs font-semibold",
+              },
+              () => "My software"
+            )
+          );
+        }
+
+        if (hasServerSideRce) {
+          badgeRowChildren.push(
+            h(
+              UBadge,
+              {
+                color: "error",
+                variant: "soft",
+                class: "shrink-0 text-xs font-semibold",
+              },
+              () =>
+                hasTrivialServerSide
+                  ? "Server-side RCE · Non-memory"
+                  : "Server-side RCE"
+            )
+          );
+        }
+
+        const children: Array<ReturnType<typeof h>> = [
           h(
-            "div",
+            "p",
             {
               class:
-                "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400",
+                "max-w-2xl whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
             },
-            badgeRowChildren
-          )
-        );
-      }
+            row.original.vulnerabilityName
+          ),
+        ];
 
-      children.push(
-        h(
-          "p",
-          {
-            class:
-              "text-sm text-neutral-500 dark:text-neutral-400 max-w-3xl whitespace-normal break-words text-pretty leading-relaxed",
-          },
-          description
-        )
-      );
-
-      return h("div", { class: "space-y-1" }, children);
-    },
-  },
-  {
-    accessorKey: "dateAdded",
-    header: "Date added",
-    cell: ({ row }) => {
-      const parsed = parseISO(row.original.dateAdded);
-      return Number.isNaN(parsed.getTime())
-        ? row.original.dateAdded
-        : format(parsed, "dd.MM.yyyy");
-    },
-  },
-  {
-    id: "risk",
-    header: "CVSS · EPSS",
-    cell: ({ row }) => {
-      const { cvssScore, cvssSeverity, epssScore } = row.original;
-      const formattedCvss = formatCvssScore(cvssScore);
-      const cvssLabel =
-        formattedCvss || cvssSeverity
-          ? buildCvssLabel(cvssSeverity, cvssScore)
-          : null;
-      const cvssColor = cvssSeverity
-        ? cvssSeverityColors[cvssSeverity] ?? "neutral"
-        : "neutral";
-      const epssLabel = formatEpssScore(epssScore);
-
-      const cvssNode = cvssLabel
-        ? h(
-            UBadge,
-            {
-              color: cvssColor,
-              variant: "soft",
-              class: "font-semibold",
-            },
-            () => cvssLabel
-          )
-        : h(
-            "span",
-            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-            "—"
-          );
-
-      const epssNode = epssLabel
-        ? h(
-            UBadge,
-            {
-              color: "success",
-              variant: "soft",
-              class: "font-semibold",
-            },
-            () => `${epssLabel}%`
-          )
-        : h(
-            "span",
-            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-            "—"
-          );
-
-      return h("div", { class: "flex flex-col gap-1" }, [cvssNode, epssNode]);
-    },
-  },
-  {
-    id: "taxonomy",
-    header: "Domain · Exploit · Type",
-    cell: ({ row }) => {
-      const sections: Array<{
-        title: string;
-        values: string[];
-        color: string;
-      }> = [
-        {
-          title: "Domain",
-          values: row.original.domainCategories,
-          color: "primary",
-        },
-        {
-          title: "Exploit profile",
-          values: row.original.exploitLayers,
-          color: "warning",
-        },
-        {
-          title: "Type",
-          values: row.original.vulnerabilityCategories,
-          color: "secondary",
-        },
-      ];
-
-      const sectionNodes = sections
-        .filter((section) => section.values.length)
-        .map((section) =>
-          h("div", { class: "flex flex-col gap-1" }, [
+        if (badgeRowChildren.length) {
+          children.push(
             h(
               "div",
-              { class: "flex flex-wrap gap-2" },
-              section.values.map((value) =>
-                h(
-                  UBadge,
-                  {
-                    color: section.color,
-                    variant: "soft",
-                    class: "text-xs font-semibold",
-                  },
-                  () => value
-                )
-              )
-            ),
-          ])
+              {
+                class:
+                  "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400",
+              },
+              badgeRowChildren
+            )
+          );
+        }
+
+        children.push(
+          h(
+            "p",
+            {
+              class:
+                "text-sm text-neutral-500 dark:text-neutral-400 max-w-3xl whitespace-normal break-words text-pretty leading-relaxed",
+            },
+            description
+          )
         );
 
-      if (!sectionNodes.length) {
-        return h(
-          "span",
-          { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-          "—"
-        );
-      }
-
-      return h("div", { class: "flex flex-col gap-3" }, sectionNodes);
+        return h("div", { class: "space-y-1" }, children);
+      },
     },
-  },
-  {
-    id: "actions",
-    header: "",
-    enableSorting: false,
-    cell: ({ row }) =>
-      h(
-        "div",
-        { class: "flex justify-end" },
-        h(UButton, {
-          icon: "i-lucide-eye",
-          color: "neutral",
-          variant: "ghost",
-          "aria-label": `View ${row.original.cveId} details`,
-          onClick: () => void openDetails(row.original),
-        })
-      ),
-  },
-];
+    {
+      accessorKey: "dateAdded",
+      header: "Date added",
+      cell: ({ row }) => {
+        const parsed = parseISO(row.original.dateAdded);
+        if (Number.isNaN(parsed.getTime())) {
+          return row.original.dateAdded;
+        }
+
+        const label = format(parsed, "dd.MM.yyyy");
+        const year = parsed.getFullYear();
+        const isActive =
+          yearRange.value[0] === year && yearRange.value[1] === year;
+
+        return h(
+          "button",
+          {
+            type: "button",
+            class: [
+              "rounded-md px-2 py-1 text-sm font-medium text-primary-600 transition hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:text-primary-200",
+              isActive ? "bg-primary-50/70 dark:bg-primary-500/10" : "",
+            ]
+              .filter(Boolean)
+              .join(" "),
+            onClick: () => applyQuickFilters({ year }),
+            "aria-label": `Filter catalog by year ${year}`,
+            "aria-pressed": isActive,
+          },
+          label
+        );
+      },
+    },
+    {
+      id: "risk",
+      header: "CVSS · EPSS",
+      cell: ({ row }) => {
+        const { cvssScore, cvssSeverity, epssScore } = row.original;
+        const formattedCvss = formatCvssScore(cvssScore);
+        const cvssLabel =
+          formattedCvss || cvssSeverity
+            ? buildCvssLabel(cvssSeverity, cvssScore)
+            : null;
+        const cvssColor = cvssSeverity
+          ? cvssSeverityColors[cvssSeverity] ?? "neutral"
+          : "neutral";
+        const epssLabel = formatEpssScore(epssScore);
+
+        const cvssNode = cvssLabel
+          ? h(
+              UBadge,
+              {
+                color: cvssColor,
+                variant: "soft",
+                class: "font-semibold",
+              },
+              () => cvssLabel
+            )
+          : h(
+              "span",
+              { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+              "—"
+            );
+
+        const epssNode = epssLabel
+          ? h(
+              UBadge,
+              {
+                color: "success",
+                variant: "soft",
+                class: "font-semibold",
+              },
+              () => `${epssLabel}%`
+            )
+          : h(
+              "span",
+              { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+              "—"
+            );
+
+        return h("div", { class: "flex flex-col gap-1" }, [cvssNode, epssNode]);
+      },
+    },
+    {
+      id: "taxonomy",
+      header: "Domain · Exploit · Type",
+      cell: ({ row }) => {
+        const sections: Array<{
+          title: string;
+          values: string[];
+          color: string;
+          filterKey: "domain" | "exploit" | "vulnerability";
+        }> = [
+          {
+            title: "Domain",
+            values: row.original.domainCategories,
+            color: "primary",
+            filterKey: "domain",
+          },
+          {
+            title: "Exploit profile",
+            values: row.original.exploitLayers,
+            color: "warning",
+            filterKey: "exploit",
+          },
+          {
+            title: "Type",
+            values: row.original.vulnerabilityCategories,
+            color: "secondary",
+            filterKey: "vulnerability",
+          },
+        ];
+
+        const sectionNodes = sections
+          .filter((section) => section.values.length)
+          .map((section) =>
+            h("div", { class: "flex flex-col gap-1" }, [
+              h(
+                "div",
+                { class: "flex flex-wrap gap-2" },
+                section.values.map((value) => {
+                  const isActive = filters[section.filterKey] === value;
+                  const filterPayload: Partial<Record<FilterKey, string>> = {
+                    [section.filterKey]: value,
+                  };
+
+                  return createBadgeButton(
+                    value,
+                    section.color,
+                    () => applyQuickFilters({ filters: filterPayload }),
+                    {
+                      ariaLabel: `Filter by ${section.title.toLowerCase()} ${value}`,
+                      isActive,
+                    }
+                  );
+                })
+              ),
+            ])
+          );
+
+        if (!sectionNodes.length) {
+          return h(
+            "span",
+            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+            "—"
+          );
+        }
+
+        return h("div", { class: "flex flex-col gap-3" }, sectionNodes);
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) =>
+        h(
+          "div",
+          { class: "flex justify-end" },
+          h(UButton, {
+            icon: "i-lucide-eye",
+            color: "neutral",
+            variant: "ghost",
+            "aria-label": `View ${row.original.cveId} details`,
+            onClick: () => void openDetails(row.original),
+          })
+        ),
+    },
+  ];
+});
 </script>
 
 <template>
@@ -2324,6 +2506,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         :format-optional-timestamp="formatOptionalTimestamp"
         :get-well-known-cve-name="getWellKnownCveName"
         @close="closeDetails"
+        @quick-filter="handleDetailQuickFilter"
       />
       <TrendExplorerSlideover
         v-model:open="showTrendSlideover"

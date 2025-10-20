@@ -9,6 +9,7 @@ import type {
   TrackedProduct,
 } from "~/types";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
+import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
 
 const sourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
@@ -83,6 +84,15 @@ const {
   sessionId,
   ensureSession,
 } = useTrackedProducts();
+
+const catalogPreferences = useCatalogPreferences();
+
+const replaceFiltersOnQuickApply = computed({
+  get: () => catalogPreferences.value.replaceFiltersOnQuickApply,
+  set: (value: boolean) => {
+    catalogPreferences.value.replaceFiltersOnQuickApply = value;
+  },
+});
 
 const trackedProductCount = computed(() => trackedProducts.value.length);
 
@@ -326,6 +336,30 @@ const columns = computed<
                     }}
                   </p>
                 </div>
+              </div>
+
+              <div
+                class="space-y-3 rounded-lg border border-neutral-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                      Badge filter behaviour
+                    </p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                      Control how catalog badges apply filters when you click them.
+                    </p>
+                  </div>
+                  <USwitch
+                    :model-value="replaceFiltersOnQuickApply"
+                    aria-label="Toggle replacing filters when using badges"
+                    @update:model-value="(value) => (replaceFiltersOnQuickApply = value)"
+                  />
+                </div>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                  When off, new badge clicks add to your existing filters (OR logic). Enable this
+                  to clear the active filters before applying a badge.
+                </p>
               </div>
 
               <div

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { KevEntry, KevEntrySummary } from "~/types";
+import { parseISO } from "date-fns";
+import type { CatalogSource, KevEntry, KevEntrySummary } from "~/types";
 
 type SourceBadgeMap = Record<
   KevEntrySummary["sources"][number],
@@ -22,9 +23,22 @@ const props = defineProps<{
   getWellKnownCveName: (cveId: string) => string | null;
 }>();
 
+type QuickFilterPayload = {
+  filters?: Partial<{
+    domain: string;
+    exploit: string;
+    vulnerability: string;
+    vendor: string;
+    product: string;
+  }>;
+  source?: CatalogSource;
+  year?: number;
+};
+
 const emit = defineEmits<{
   (event: "update:open", value: boolean): void;
   (event: "close"): void;
+  (event: "quick-filter", payload: QuickFilterPayload): void;
 }>();
 
 const isOpen = computed({
@@ -35,6 +49,53 @@ const isOpen = computed({
 const handleClose = () => {
   emit("close");
   emit("update:open", false);
+};
+
+const emitQuickFilter = (payload: QuickFilterPayload) => {
+  emit("quick-filter", payload);
+};
+
+const handleSourceQuickFilter = (source: CatalogSource) => {
+  emitQuickFilter({ source });
+};
+
+const handleDomainQuickFilter = (value: string) => {
+  emitQuickFilter({ filters: { domain: value } });
+};
+
+const handleExploitQuickFilter = (value: string) => {
+  emitQuickFilter({ filters: { exploit: value } });
+};
+
+const handleVulnerabilityQuickFilter = (value: string) => {
+  emitQuickFilter({ filters: { vulnerability: value } });
+};
+
+const handleVendorQuickFilter = (vendorKey: string | undefined) => {
+  if (!vendorKey) {
+    return;
+  }
+  emitQuickFilter({ filters: { vendor: vendorKey } });
+};
+
+const handleProductQuickFilter = (productKey: string | undefined) => {
+  if (!productKey) {
+    return;
+  }
+  emitQuickFilter({ filters: { product: productKey } });
+};
+
+const handleYearQuickFilter = (value: string | null) => {
+  if (!value) {
+    return;
+  }
+
+  const parsed = parseISO(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return;
+  }
+
+  emitQuickFilter({ year: parsed.getFullYear() });
 };
 </script>
 
@@ -63,15 +124,21 @@ const handleClose = () => {
                 >
                   {{ props.entry.cveId }}
                 </ULink>
-                <UBadge
+                <button
                   v-for="source in props.entry.sources"
                   :key="source"
-                  :color="props.sourceBadgeMap[source]?.color ?? 'neutral'"
-                  variant="soft"
-                  class="text-xs font-semibold"
+                  type="button"
+                  class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition"
+                  @click="handleSourceQuickFilter(source)"
                 >
-                  {{ props.sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
-                </UBadge>
+                  <UBadge
+                    :color="props.sourceBadgeMap[source]?.color ?? 'neutral'"
+                    variant="soft"
+                    class="pointer-events-none text-xs font-semibold transition-colors group-hover:bg-primary-100/80 group-hover:text-primary-700 dark:group-hover:bg-primary-500/15 dark:group-hover:text-primary-200"
+                  >
+                    {{ props.sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
+                  </UBadge>
+                </button>
               </div>
             </div>
           </template>
@@ -83,25 +150,40 @@ const handleClose = () => {
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Vendor
                   </p>
-                  <p class="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                  <button
+                    type="button"
+                    class="rounded-md text-left text-base font-semibold text-neutral-900 transition hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-neutral-100 dark:hover:text-primary-300"
+                    :aria-label="`Filter catalog by vendor ${props.entry.vendor}`"
+                    @click="handleVendorQuickFilter(props.entry.vendorKey)"
+                  >
                     {{ props.entry.vendor }}
-                  </p>
+                  </button>
                 </div>
                 <div>
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Product
                   </p>
-                  <p class="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                  <button
+                    type="button"
+                    class="rounded-md text-left text-base font-semibold text-neutral-900 transition hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-neutral-100 dark:hover:text-primary-300"
+                    :aria-label="`Filter catalog by product ${props.entry.product}`"
+                    @click="handleProductQuickFilter(props.entry.productKey)"
+                  >
                     {{ props.entry.product }}
-                  </p>
+                  </button>
                 </div>
                 <div>
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Date added
                   </p>
-                  <p class="text-base text-neutral-900 dark:text-neutral-100">
+                  <button
+                    type="button"
+                    class="rounded-md text-left text-base text-primary-600 transition hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:text-primary-200"
+                    :aria-label="`Filter catalog by year ${props.entry.dateAdded}`"
+                    @click="handleYearQuickFilter(props.entry.dateAdded)"
+                  >
                     {{ props.entry.dateAdded }}
-                  </p>
+                  </button>
                 </div>
                 <div>
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
@@ -230,14 +312,21 @@ const handleClose = () => {
                     Domain categories
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <UBadge
+                    <button
                       v-for="category in props.entry.domainCategories"
                       :key="category"
-                      color="primary"
-                      variant="soft"
+                      type="button"
+                      class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition"
+                      @click="handleDomainQuickFilter(category)"
                     >
-                      {{ category }}
-                    </UBadge>
+                      <UBadge
+                        color="primary"
+                        variant="soft"
+                        class="pointer-events-none text-xs font-semibold transition-colors group-hover:bg-primary-100/80 group-hover:text-primary-700 dark:group-hover:bg-primary-500/15 dark:group-hover:text-primary-200"
+                      >
+                        {{ category }}
+                      </UBadge>
+                    </button>
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -245,14 +334,21 @@ const handleClose = () => {
                     Exploit profiles
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <UBadge
+                    <button
                       v-for="layer in props.entry.exploitLayers"
                       :key="layer"
-                      color="warning"
-                      variant="soft"
+                      type="button"
+                      class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 transition"
+                      @click="handleExploitQuickFilter(layer)"
                     >
-                      {{ layer }}
-                    </UBadge>
+                      <UBadge
+                        color="warning"
+                        variant="soft"
+                        class="pointer-events-none text-xs font-semibold transition-colors group-hover:bg-amber-100/80 group-hover:text-amber-700 dark:group-hover:bg-amber-500/15 dark:group-hover:text-amber-200"
+                      >
+                        {{ layer }}
+                      </UBadge>
+                    </button>
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -260,14 +356,21 @@ const handleClose = () => {
                     Vulnerability categories
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <UBadge
+                    <button
                       v-for="category in props.entry.vulnerabilityCategories"
                       :key="category"
-                      color="secondary"
-                      variant="soft"
+                      type="button"
+                      class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 transition"
+                      @click="handleVulnerabilityQuickFilter(category)"
                     >
-                      {{ category }}
-                    </UBadge>
+                      <UBadge
+                        color="secondary"
+                        variant="soft"
+                        class="pointer-events-none text-xs font-semibold transition-colors group-hover:bg-rose-100/80 group-hover:text-rose-700 dark:group-hover:bg-rose-500/15 dark:group-hover:text-rose-200"
+                      >
+                        {{ category }}
+                      </UBadge>
+                    </button>
                   </div>
                 </div>
               </div>
