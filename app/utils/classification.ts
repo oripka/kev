@@ -885,6 +885,12 @@ const memoryCorruptionPatterns: RegExp[] = [
 
   // Format string vulns that cause memory corruption
   /\bformat[-\s]?string(?: vulnerability| bug)?\b/i,
+
+  // Well-known exploit family names and primitives lacking explicit memory wording
+  /\bkernel pool\b/i,
+  /\b(?:eternal(?:blue|romance|synergy|champion)|doublepulsar|smbghost|coronablue|educatedscholar)\b/i,
+];
+
 ];
 
 const denialOfServicePatterns: RegExp[] = [
@@ -928,7 +934,7 @@ const clientSignalPatterns: RegExp[] = [
   /\b(?:render(?:er|ing) engine|render engine|layout engine)\b/i,
 
   // Client application hosts / runtimes / containers (desktop, mobile, electron, office viewers)
-  /\b(?:desktop|workstation|endpoint|client(?: application| app)?|viewer|reader|player|media player)\b/i,
+  /\b(?:desktop|workstation|endpoint|client(?: application| app| software| program| binary)|viewer|reader|player|media player)\b/i,
   /\b(?:mobile|android|ios|ipad|iphone|tablet)\b/i,
   /\b(?:electron|nwjs|cordova|capacitor|react[-\s]?native)\b/i,
 
