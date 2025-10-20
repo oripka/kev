@@ -35,9 +35,14 @@ const formatTimestamp = (value: string) => {
 
 const sliderMinYear = 2021;
 const sliderMaxYear = new Date().getFullYear();
+const defaultYearStart = Math.max(sliderMinYear, sliderMaxYear - 1);
+const defaultYearEnd = sliderMaxYear;
 
-const yearRange = ref<[number, number]>([sliderMinYear, sliderMaxYear]);
-const defaultYearRange = ref<[number, number]>([sliderMinYear, sliderMaxYear]);
+const defaultYearRange = ref<[number, number]>([
+  defaultYearStart,
+  defaultYearEnd,
+]);
+const yearRange = ref<[number, number]>([defaultYearStart, defaultYearEnd]);
 
 const defaultFilters: FilterState = {
   domain: null,
@@ -57,7 +62,7 @@ const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
-const showAllResults = ref(false);
+const showAllResults = ref(true);
 
 type SortOption = "publicationDate" | "cvssScore" | "epssScore" | "cveId";
 type SortDirection = "asc" | "desc";
@@ -94,6 +99,7 @@ const sortBadgeText = computed(
 );
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
+const maxEntryLimit = 10_000;
 const catalogSourceLabels: Record<CatalogSource, string> = {
   kev: "CISA KEV",
   enisa: "ENISA",
@@ -236,7 +242,7 @@ const filterParams = computed(() => {
   }
 
   if (showAllResults.value) {
-    params.limit = 10000;
+    params.limit = maxEntryLimit;
   }
 
   return params;
@@ -297,15 +303,21 @@ watch(
   ([min, max]) => {
     const hadCustomRange = hasCustomYearRange.value;
 
-    if (
-      defaultYearRange.value[0] !== min ||
-      defaultYearRange.value[1] !== max
-    ) {
-      defaultYearRange.value = [min, max];
+    const [defaultStart, defaultEnd] = defaultYearRange.value;
+    const nextDefaultStart = Math.min(Math.max(defaultStart, min), max);
+    const nextDefaultEnd = Math.min(Math.max(defaultEnd, min), max);
+    const defaultChanged =
+      nextDefaultStart !== defaultStart || nextDefaultEnd !== defaultEnd;
+
+    if (defaultChanged) {
+      defaultYearRange.value = [nextDefaultStart, nextDefaultEnd];
     }
 
-    if (!hadCustomRange) {
-      yearRange.value = [min, max];
+    if (!hadCustomRange || defaultChanged) {
+      yearRange.value = [
+        defaultYearRange.value[0],
+        defaultYearRange.value[1],
+      ];
       return;
     }
 
@@ -314,8 +326,11 @@ watch(
     let nextEnd = Math.min(Math.max(currentEnd, min), max);
 
     if (nextStart > nextEnd) {
-      nextStart = min;
-      nextEnd = max;
+      yearRange.value = [
+        defaultYearRange.value[0],
+        defaultYearRange.value[1],
+      ];
+      return;
     }
 
     if (nextStart !== currentStart || nextEnd !== currentEnd) {
@@ -698,7 +713,7 @@ const resetFilters = () => {
   showWellKnownOnly.value = false;
   showInternetExposedOnly.value = false;
   showOwnedOnly.value = false;
-  showAllResults.value = false;
+  showAllResults.value = true;
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
   selectedSource.value = "all";
@@ -1938,7 +1953,7 @@ const columns: TableColumn<KevEntrySummary>[] = [
         <template #vulnerability>
           <div class="space-y-4  px-2">
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
-              Breakdown of vulnerability categories in view.
+              Breakdown of vulnerability categories across matching exploits.
             </p>
 
             <div v-if="vulnerabilityStats.length" class="space-y-3">

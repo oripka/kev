@@ -69,7 +69,7 @@ const openDetails = (entry: KevEntrySummary) => {
           </p>
         </div>
         <UBadge color="primary" variant="soft" class="text-sm font-semibold">
-          {{ props.matchingResultsLabel }} CVEs in view
+          {{ props.matchingResultsLabel }} matching exploits
         </UBadge>
       </div>
     </template>

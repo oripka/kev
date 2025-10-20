@@ -176,7 +176,7 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
               Vulnerability mix
             </p>
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
-              Breakdown of vulnerability categories in view
+              Breakdown of vulnerability categories across matching exploits
             </p>
           </div>
           <UBadge color="violet" variant="soft">
