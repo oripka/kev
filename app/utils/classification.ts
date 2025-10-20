@@ -949,9 +949,9 @@ const clientSignalPatterns: RegExp[] = [
   /\bworkstation (?:application|app|client)\b/i,
   /\bendpoint (?:agent|client)\b/i,
   /\b(?:viewer|reader|player|media player)\b/i,
-  /\bmobile\s+(?:app(?:lication)?|client|browser|device|endpoint)\b/i,
-  /\b(?:android\s+(?:app(?:lication)?|client|browser|device)|google\s+android)\b/i,
-  /\b(?:apple\s+ios|ios\/ipad(?:os)?|ios\s+(?:app|application|client)|ipad(?:os)?|iphone|ipod\s+touch)\b/i,
+  /\bmobile\s+(?:app(?:lication)?|client|browser|device|endpoint|platform)\b/i,
+  /\b(?:android\s+(?:app(?:lication)?|client|browser|device|endpoint|platform)|google\s+android)\b/i,
+  /\b(?:apple\s+ios|ios[,/\s]+ipad(?:os)?|ios\s+(?:app(?:lication)?|client|device|devices|platform|version|versions|and\s+ipad(?:os)?|and\s+iphone)|ipad(?:os)?|iphone|ipod\s+touch)\b/i,
   /\btablet\s+(?:app|application|client|device)\b/i,
   /\b(?:electron|nwjs|cordova|capacitor|react[-\s]?native)\b/i,
 
@@ -1073,9 +1073,6 @@ const kernelServerPatterns: RegExp[] = [
 
 const serverSignalPatterns: RegExp[] = [
   ...networkProtocolPatterns,
-  // generic server/service tokens with word boundaries
-  /\b(?:server|service|daemon|appliance|controller)\b/i,
-
   // management / admin interfaces
   /\b(?:web[-\s]?based management|management (?:server|interface|console)|admin(?:istration)? (?:interface|console|portal))\b/i,
 
@@ -1091,6 +1088,8 @@ const serverSignalPatterns: RegExp[] = [
   // API / REST / SOAP / RPC / management endpoints
   /\b(?:api endpoint|rest(?: API)?|soap|rpc|management endpoint|control plane)\b/i,
 ];
+
+const genericServerTokenPattern = /\b(?:server|service|daemon|appliance|controller)\b/i;
 const clientDomainHints: ReadonlySet<KevDomainCategory> = new Set(["Browsers"]);
 
 const serverDomainHints: ReadonlySet<KevDomainCategory> = new Set([
@@ -1397,7 +1396,7 @@ export const classifyExploitLayers = (
   );
   const hasDosSignal = matchesAny(text, denialOfServicePatterns);
   let hasClientSignal = matchesAny(text, clientSignalPatterns);
-  const hasClientApplicationSignal = matchesAny(
+  let hasClientApplicationSignal = matchesAny(
     text,
     clientApplicationPatterns
   );
@@ -1428,10 +1427,10 @@ export const classifyExploitLayers = (
   const hasClientLocalExecutionSignal =
     matchesAny(text, clientLocalExecutionPatterns) ||
     Boolean(cvssSuggestsLocal);
+  const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
   let hasServerSignal = serverSignalPatterns.some((pattern) =>
     pattern.test(text)
   );
-  const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
   const hasKernelDriverSignal = matchesAny(text, kernelServerPatterns);
   const hasKernelServerSignal =
     hasKernelDriverSignal &&
@@ -1448,6 +1447,10 @@ export const classifyExploitLayers = (
     text
   );
 
+  if (mobileManagementSignal || mobileDeviceManagementContext) {
+    hasServerSignal = true;
+  }
+
   if (networkOperatingSystemSignal) {
     hasServerSignal = true;
   }
@@ -1458,6 +1461,44 @@ export const classifyExploitLayers = (
   const domainSuggestsServer = domainCategories.some((category) =>
     serverDomainHints.has(category)
   );
+
+  if (hasClientApplicationSignal) {
+    const hasClientArtifactContext =
+      hasClientFileSignal ||
+      hasClientUserInteractionSignal ||
+      hasExplicitFileUserAction ||
+      domainSuggestsClient;
+    const serverDominantContext =
+      domainSuggestsServer ||
+      hasStrongServerProtocol ||
+      networkOperatingSystemSignal ||
+      mobileManagementSignal ||
+      mobileDeviceManagementContext ||
+      hasRemoteContext;
+
+    if (!hasClientArtifactContext && serverDominantContext) {
+      hasClientApplicationSignal = false;
+    }
+  }
+
+  const hasGenericServerToken = genericServerTokenPattern.test(text);
+  const hostileServerContext =
+    /\b(?:malicious|attacker(?:-controlled)?|adversary|rogue|fake)\s+(?:server|service|daemon|appliance|controller)s?\b/i.test(
+      text
+    );
+
+  if (
+    hasGenericServerToken &&
+    (!hostileServerContext ||
+      domainSuggestsServer ||
+      hasStrongServerProtocol ||
+      networkOperatingSystemSignal ||
+      mobileManagementSignal ||
+      mobileDeviceManagementContext ||
+      hasRemoteContext)
+  ) {
+    hasServerSignal = true;
+  }
 
   if (
     hasClientSignal &&
