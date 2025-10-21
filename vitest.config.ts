@@ -1,8 +1,8 @@
-import { defineConfig } from "vitest/config";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "vitest/config";
 
-const projectRoot = path.dirname(fileURLToPath(new URL("./", import.meta.url)));
+const projectRoot = path.resolve(fileURLToPath(new URL(".", import.meta.url)));
 
 export default defineConfig({
   test: {
