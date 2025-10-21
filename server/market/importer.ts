@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 import type { CatalogSource } from '~/types'
+import { matchExploitProduct } from '~/utils/exploitProductHints'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from '../utils/sqlite'
@@ -35,6 +36,54 @@ type NormalisedTarget = {
   cveId: string | null
   confidence: number
   matchMethod: 'exact' | 'fuzzy' | 'manual-review'
+}
+
+const cveProductCache = new Map<string, { vendor: string; product: string } | null>()
+
+const normaliseCveId = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  return trimmed.toUpperCase()
+}
+
+const normaliseInputLabel = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
+const lookupProductForCve = (tx: DrizzleDatabase, cveId: string | null | undefined) => {
+  const normalised = normaliseCveId(cveId)
+  if (!normalised) {
+    return null
+  }
+
+  if (cveProductCache.has(normalised)) {
+    return cveProductCache.get(normalised) ?? null
+  }
+
+  const row = tx
+    .select({
+      vendor: tables.vulnerabilityEntries.vendor,
+      product: tables.vulnerabilityEntries.product
+    })
+    .from(tables.vulnerabilityEntries)
+    .where(eq(tables.vulnerabilityEntries.cveId, normalised))
+    .get()
+
+  const result = row?.vendor && row?.product ? { vendor: row.vendor, product: row.product } : null
+  cveProductCache.set(normalised, result)
+  return result
 }
 
 type ImportOptions = {
@@ -168,29 +217,112 @@ const ensureCatalogRecord = (
 const prepareTargets = (
   tx: DrizzleDatabase,
   catalog: Map<string, ProductCatalogRecord>,
-  targets: MarketOfferInput['targets']
+  program: MarketProgramDefinition,
+  offer: MarketOfferInput
 ): NormalisedTarget[] => {
   const results: NormalisedTarget[] = []
   const seen = new Set<string>()
 
-  for (const target of targets ?? []) {
-    const rawProduct = target.product ?? target.rawText ?? null
-    const rawVendor = target.vendor ?? null
-    if (!rawProduct && !rawVendor) {
+  const offerLevelCveIds = new Set<string>()
+  for (const raw of offer.cveIds ?? []) {
+    const normalised = normaliseCveId(raw)
+    if (normalised) {
+      offerLevelCveIds.add(normalised)
+    }
+  }
+
+  for (const target of offer.targets ?? []) {
+    const candidateVendor = normaliseInputLabel(target.vendor)
+    const candidateProduct = normaliseInputLabel(target.product)
+    const fallbackProduct =
+      candidateProduct ??
+      normaliseInputLabel(target.rawText) ??
+      normaliseInputLabel(offer.title) ??
+      normaliseInputLabel(program.name) ??
+      'Unknown target'
+
+    if (!candidateProduct && !candidateVendor && !target.rawText && !offer.title) {
       continue
     }
-    const record = ensureCatalogRecord(tx, catalog, 'market', rawVendor ?? '', rawProduct ?? '')
+
+    let resolvedVendor = candidateVendor
+    let resolvedProduct = candidateProduct
+    let matchedCveId: string | null = null
+
+    const targetCveIds = new Set<string>(offerLevelCveIds)
+    const targetSpecificCve = normaliseCveId(target.cveId)
+    if (targetSpecificCve) {
+      targetCveIds.add(targetSpecificCve)
+    }
+
+    if ((!resolvedVendor || !resolvedProduct) && targetCveIds.size) {
+      for (const cveId of targetCveIds) {
+        const match = lookupProductForCve(tx, cveId)
+        if (match) {
+          if (!resolvedVendor) {
+            resolvedVendor = match.vendor
+          }
+          if (!resolvedProduct) {
+            resolvedProduct = match.product
+          }
+          matchedCveId = cveId
+          break
+        }
+      }
+    }
+
+    let hintMatch: ReturnType<typeof matchExploitProduct> | null = null
+    if ((!resolvedVendor || !resolvedProduct) && (target.rawText || fallbackProduct)) {
+      hintMatch = matchExploitProduct(target.rawText ?? fallbackProduct ?? '')
+      if (hintMatch) {
+        if (!resolvedVendor) {
+          resolvedVendor = hintMatch.vendor
+        }
+        if (!resolvedProduct) {
+          resolvedProduct = hintMatch.product
+        }
+      }
+    }
+
+    if (!resolvedVendor) {
+      resolvedVendor = program.operator || 'Unknown'
+    }
+
+    if (!resolvedProduct) {
+      resolvedProduct = fallbackProduct
+    }
+
+    const record = ensureCatalogRecord(tx, catalog, 'market', resolvedVendor, resolvedProduct)
     if (seen.has(record.productKey)) {
       continue
     }
     seen.add(record.productKey)
+
+    const effectiveCveId = targetSpecificCve ?? matchedCveId
+    const confidence =
+      typeof target.confidence === 'number'
+        ? target.confidence
+        : matchedCveId
+          ? 100
+          : hintMatch
+            ? 75
+            : 50
+    const matchMethod: NormalisedTarget['matchMethod'] = target.matchMethod
+      ?? (matchedCveId
+        ? 'exact'
+        : hintMatch
+          ? 'fuzzy'
+          : candidateVendor || candidateProduct
+            ? 'exact'
+            : 'manual-review')
+
     results.push({
       productKey: record.productKey,
       vendorName: record.vendorName,
       productName: record.productName,
-      cveId: target.cveId ?? null,
-      confidence: target.confidence ?? 100,
-      matchMethod: target.matchMethod ?? 'exact'
+      cveId: effectiveCveId,
+      confidence,
+      matchMethod
     })
   }
 
@@ -258,7 +390,7 @@ const saveOffer = (
   catalog: Map<string, ProductCatalogRecord>,
   rates: ExchangeRates
 ): string | null => {
-  const targets = prepareTargets(tx, catalog, offer.targets)
+  const targets = prepareTargets(tx, catalog, program, offer)
   if (!targets.length) {
     return null
   }
