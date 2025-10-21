@@ -346,4 +346,84 @@ export type ClassificationProgress = {
   error: string | null
 }
 
+export type ClassificationReviewFilterContext = {
+  key: string
+  label: string
+  value: string
+}
+
+export type ClassificationReviewRequestContext = {
+  matchingResultsLabel?: string
+  activeFilters?: ClassificationReviewFilterContext[]
+}
+
+export type ClassificationReviewConfidence = 'low' | 'medium' | 'high'
+
+export type ClassificationReviewCategorySet = {
+  domain?: KevDomainCategory[]
+  exploit?: KevExploitLayer[]
+  vulnerability?: KevVulnerabilityCategory[]
+  internetExposed?: boolean | null
+}
+
+export type ClassificationReviewIssue = {
+  cveId: string
+  summary: string
+  suspectedIssues: string[]
+  recommendedCategories: ClassificationReviewCategorySet | null
+  justification: string
+  confidence: ClassificationReviewConfidence
+}
+
+export type ClassificationReviewTaxonomySuggestion = {
+  vendorKey: string | null
+  productKey: string
+  proposedCategories: KevDomainCategory[]
+  proposedAddCategories: KevDomainCategory[]
+  internetExposed?: boolean | null
+  serverBias?: boolean | null
+  clientBias?: boolean | null
+  rationale: string
+}
+
+export type ClassificationReviewHeuristicIdea = {
+  focusArea: string
+  description: string
+  justification: string
+}
+
+export type ClassificationReviewOverview = {
+  totalEntries: number
+  domainCounts: Array<{ value: KevDomainCategory; count: number; share: number }>
+  exploitCounts: Array<{ value: KevExploitLayer; count: number; share: number }>
+  vulnerabilityCounts: Array<{ value: KevVulnerabilityCategory; count: number; share: number }>
+  internetExposure: { exposed: number; total: number }
+  sources: CatalogSource[]
+}
+
+export type ClassificationReviewSuccess = {
+  status: 'ok'
+  model: string
+  usedEntryIds: string[]
+  missingEntryIds?: string[]
+  issues: ClassificationReviewIssue[]
+  taxonomySuggestions: ClassificationReviewTaxonomySuggestion[]
+  heuristicImprovements: ClassificationReviewHeuristicIdea[]
+  generalRecommendations: string[]
+  overview: ClassificationReviewOverview
+  rawResponseSnippet?: string
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
+}
+
+export type ClassificationReviewError = {
+  status: 'error'
+  message: string
+  code?: string
+  details?: string
+}
+
+export type ClassificationReviewResponse =
+  | ClassificationReviewSuccess
+  | ClassificationReviewError
+
 export type { KevFilterState } from './kev'

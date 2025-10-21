@@ -83,6 +83,7 @@ const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
 const showMySoftwareSlideover = ref(false);
+const showClassificationReviewSlideover = ref(false);
 
 const latestAdditionWindowDays = 14;
 const latestAdditionWindowMs = latestAdditionWindowDays * 24 * 60 * 60 * 1000;
@@ -4236,6 +4237,27 @@ const tableMeta = {
       </div>
 
       <UCard class="mt-24">
+        <template #header>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="space-y-1">
+              <p class="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                Catalog results
+              </p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                Explore the filtered entries and launch the classification audit when you spot anomalies.
+              </p>
+            </div>
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-sparkles"
+              :disabled="isBusy || !results.length"
+              @click="showClassificationReviewSlideover = true"
+            >
+              LLM classification audit
+            </UButton>
+          </div>
+        </template>
         <div>
           <UProgress
             v-if="isBusy"
@@ -4321,6 +4343,14 @@ const tableMeta = {
         @clear="clearTrackedProducts"
         @quick-filter="handleTrackedInsightQuickFilter"
         @quick-filter-summary="handleTrackedSummaryQuickFilter"
+      />
+      <ClassificationReviewSlideover
+        v-model:open="showClassificationReviewSlideover"
+        :entries="results"
+        :matching-results-label="matchingResultsLabel"
+        :active-filters="activeFilters"
+        :has-active-filters="hasActiveFilters"
+        :is-busy="isBusy"
       />
     </div>
   </div>
