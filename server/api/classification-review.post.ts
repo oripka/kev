@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
   const db = getDatabase();
   const { catalogEntries } = tables;
 
-  const rows = db
+  const rows = await db
     .select({
       cve_id: catalogEntries.cveId,
       entry_id: catalogEntries.entryId,
