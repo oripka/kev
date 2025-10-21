@@ -15,6 +15,7 @@ import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
 import { useDateDisplay } from "~/composables/useDateDisplay";
+import { useMarketFilters } from "~/composables/useMarketFilters";
 import { createFilterPresets } from "~/utils/filterPresets";
 import { defaultQuickFilterSummaryConfig, quickFilterSummaryMetricInfo } from "~/utils/quickFilterSummaryConfig";
 import {
@@ -160,9 +161,19 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-const priceRange = ref<[number, number]>([0, 0]);
-let priceRangeInitialised = false;
-let pendingPriceRange: [number, number] | null = null;
+const {
+  attachMarketOverview,
+  priceRange,
+  priceSliderReady,
+  defaultPriceRange,
+  applyPriceRange,
+  resetPriceRange,
+  applyPriceRangeFromQuery,
+  filteredMarketPriceSummary,
+  marketOfferCount,
+  marketProgramCounts,
+  marketCategoryCounts,
+} = useMarketFilters({ currencyFormatter });
 
 const selectedSource = ref<"all" | "kev" | "enisa" | "historic" | "metasploit">("all");
 const isFiltering = ref(false);
@@ -186,52 +197,6 @@ watch(
   },
   { immediate: true }
 );
-
-watch(
-  defaultPriceRange,
-  (next) => {
-    if (!priceSliderReady.value) {
-      return;
-    }
-
-    if (!priceRangeInitialised) {
-      priceRange.value = [next[0], next[1]];
-      priceRangeInitialised = true;
-      pendingPriceRange = null;
-      return;
-    }
-
-    const [currentMin, currentMax] = priceRange.value;
-    let nextMin = currentMin;
-    let nextMax = currentMax;
-
-    if (currentMin < next[0]) {
-      nextMin = next[0];
-    }
-    if (currentMax > next[1]) {
-      nextMax = next[1];
-    }
-
-    if (nextMin > nextMax) {
-      nextMin = next[0];
-      nextMax = next[1];
-    }
-
-    if (nextMin !== currentMin || nextMax !== currentMax) {
-      priceRange.value = [nextMin, nextMax];
-    }
-  },
-  { immediate: true }
-);
-
-watch(priceSliderReady, (ready) => {
-  if (ready) {
-    const target = pendingPriceRange ?? defaultPriceRange.value;
-    priceRange.value = [target[0], target[1]];
-    priceRangeInitialised = true;
-    pendingPriceRange = null;
-  }
-});
 
 onBeforeUnmount(() => {
   if (searchDebounce) {
@@ -464,33 +429,7 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
 
   const priceMin = parseQueryFloat(getValue("priceMin"));
   const priceMax = parseQueryFloat(getValue("priceMax"));
-  const [defaultPriceMin, defaultPriceMax] = defaultPriceRange.value;
-  const nextPriceRange =
-    priceMin === null && priceMax === null
-      ? [defaultPriceMin, defaultPriceMax]
-      : normaliseNumericRange(
-          priceMin,
-          priceMax,
-          [defaultPriceMin, defaultPriceMax],
-          (value) => {
-            const [minDefault, maxDefault] = defaultPriceRange.value;
-            return Math.min(Math.max(value, minDefault), maxDefault);
-          },
-        );
-
-  if (priceSliderReady.value) {
-    if (
-      priceRange.value[0] !== nextPriceRange[0] ||
-      priceRange.value[1] !== nextPriceRange[1]
-    ) {
-      priceRange.value = [nextPriceRange[0], nextPriceRange[1]];
-    }
-    priceRangeInitialised = true;
-    pendingPriceRange = null;
-  } else {
-    pendingPriceRange = [nextPriceRange[0], nextPriceRange[1]];
-    priceRangeInitialised = false;
-  }
+  applyPriceRangeFromQuery(priceMin, priceMax);
 
   const sourceParam = extractQueryString(getValue("source"));
   let resolvedSource: typeof selectedSource.value = "all";
@@ -883,13 +822,6 @@ const normalizedSearchTerm = computed(() =>
 );
 
 
-const priceSliderReady = computed(
-  () =>
-    typeof marketPriceBounds.value.minRewardUsd === "number" &&
-    typeof marketPriceBounds.value.maxRewardUsd === "number" &&
-    marketPriceBounds.value.maxRewardUsd > marketPriceBounds.value.minRewardUsd
-);
-
 const {
   entries,
   counts,
@@ -901,27 +833,7 @@ const {
   pending: dataPending,
   market: marketOverview,
 } = useKevData(filterParams);
-
-const marketOfferCount = computed(() => marketOverview.value.offerCount ?? 0);
-const marketProgramCounts = computed(() => marketOverview.value.programCounts ?? []);
-const marketCategoryCounts = computed(
-  () => marketOverview.value.categoryCounts ?? []
-);
-const filteredMarketPriceBounds = computed(
-  () => marketOverview.value.filteredPriceBounds
-);
-const filteredMarketPriceSummary = computed(() => {
-  const bounds = filteredMarketPriceBounds.value;
-  if (
-    typeof bounds.minRewardUsd === "number" &&
-    typeof bounds.maxRewardUsd === "number" &&
-    Number.isFinite(bounds.minRewardUsd) &&
-    Number.isFinite(bounds.maxRewardUsd)
-  ) {
-    return `${currencyFormatter.format(bounds.minRewardUsd)} – ${currencyFormatter.format(bounds.maxRewardUsd)}`;
-  }
-  return "No valuation data in current view.";
-});
+attachMarketOverview(marketOverview);
 
 const filterParamsWithoutYear = computed(() => {
   const [cvssStart, cvssEnd] = cvssRange.value;
@@ -1339,25 +1251,6 @@ const compareNullableNumbers = (
     : secondValue - firstValue;
 };
 
-const marketPriceBounds = computed(() => marketOverview.value.priceBounds);
-
-const defaultPriceRange = computed<[number, number]>(() => {
-  const bounds = marketPriceBounds.value;
-  if (
-    typeof bounds.minRewardUsd === "number" &&
-    typeof bounds.maxRewardUsd === "number" &&
-    Number.isFinite(bounds.minRewardUsd) &&
-    Number.isFinite(bounds.maxRewardUsd)
-  ) {
-    const min = Math.floor(bounds.minRewardUsd);
-    const max = Math.ceil(bounds.maxRewardUsd);
-    if (Number.isFinite(min) && Number.isFinite(max)) {
-      return [min, max];
-    }
-  }
-  return [0, 0];
-});
-
 const applySorting = (collection: KevEntrySummary[]) => {
   const sorted = [...collection];
   const direction = sortDirection.value;
@@ -1533,14 +1426,7 @@ const resetFilters = () => {
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
   selectedSource.value = "all";
   resetYearRange();
-  if (priceSliderReady.value) {
-    const [min, max] = defaultPriceRange.value;
-    priceRange.value = [min, max];
-  } else {
-    priceRange.value = [0, 0];
-    priceRangeInitialised = false;
-    pendingPriceRange = null;
-  }
+  resetPriceRange();
 };
 
 type ProgressDatum = {
@@ -2780,14 +2666,7 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
   }
 
   if (Array.isArray(nextPriceRange) && nextPriceRange.length === 2) {
-    if (priceSliderReady.value) {
-      priceRange.value = [nextPriceRange[0], nextPriceRange[1]];
-      priceRangeInitialised = true;
-      pendingPriceRange = null;
-    } else {
-      pendingPriceRange = [nextPriceRange[0], nextPriceRange[1]];
-      priceRangeInitialised = false;
-    }
+    applyPriceRange([nextPriceRange[0], nextPriceRange[1]]);
   }
 
   if (typeof nextWellKnownOnly === "boolean") {
@@ -2947,14 +2826,7 @@ const clearFilter = (
   }
 
   if (key === "priceRange") {
-    if (priceSliderReady.value) {
-      const [min, max] = defaultPriceRange.value;
-      priceRange.value = [min, max];
-    } else {
-      priceRange.value = [0, 0];
-      priceRangeInitialised = false;
-      pendingPriceRange = null;
-    }
+    resetPriceRange();
     return;
   }
 
