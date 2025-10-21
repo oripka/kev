@@ -2,7 +2,7 @@ import { createError, getRouterParam } from 'h3'
 import { sql } from 'drizzle-orm'
 import { tables } from '../../database/client'
 import type { CatalogEntryRow } from '../../utils/catalog'
-import { catalogRowToEntry } from '../../utils/catalog'
+import { catalogRowToEntry, getMarketSignalsForProducts } from '../../utils/catalog'
 import { getDatabase } from '../../utils/sqlite'
 import type {
   CatalogSource,
@@ -240,7 +240,12 @@ export default defineEventHandler(async event => {
     })
   }
 
-  const entry = catalogRowToEntry(row)
+  const marketSignals = getMarketSignalsForProducts(
+    db,
+    row.product_key ? [row.product_key] : []
+  )
+
+  const entry = catalogRowToEntry(row, { marketSignals })
 
   const cveId = normalizeValue(entry.cveId)
 

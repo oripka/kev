@@ -9,6 +9,8 @@ import type {
   KevEntrySummary,
   KevEntryTimelineEvent,
   KevTimelineEventType,
+  MarketProgramType,
+  MarketSignal,
 } from "~/types";
 import { useDateDisplay } from "~/composables/useDateDisplay";
 
@@ -51,6 +53,62 @@ const emit = defineEmits<{
 }>();
 
 const { formatDate } = useDateDisplay();
+
+const programTypeLabels: Record<MarketProgramType, string> = {
+  "exploit-broker": "Exploit brokers",
+  "bug-bounty": "Bug bounty",
+  other: "Other",
+};
+
+const formatProgramTypeLabel = (type: MarketProgramType) =>
+  programTypeLabels[type] ?? type;
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+const marketSignal = computed<MarketSignal | null>(
+  () => props.entry?.marketSignals ?? null,
+);
+
+const marketCategoryChips = computed(() =>
+  marketSignal.value?.categories?.slice(0, 6) ?? [],
+);
+
+const offerCountLabel = computed(() => {
+  const signal = marketSignal.value;
+  if (!signal) {
+    return null;
+  }
+  return signal.offerCount === 1
+    ? "1 linked offer"
+    : `${signal.offerCount.toLocaleString()} linked offers`;
+});
+
+const rewardRangeLabel = computed(() => {
+  const signal = marketSignal.value;
+  if (!signal) {
+    return null;
+  }
+
+  const { minRewardUsd, maxRewardUsd } = signal;
+
+  if (typeof minRewardUsd === "number" && typeof maxRewardUsd === "number") {
+    return `${currencyFormatter.format(minRewardUsd)} – ${currencyFormatter.format(maxRewardUsd)}`;
+  }
+
+  if (typeof maxRewardUsd === "number") {
+    return currencyFormatter.format(maxRewardUsd);
+  }
+
+  if (typeof minRewardUsd === "number") {
+    return currencyFormatter.format(minRewardUsd);
+  }
+
+  return null;
+});
 
 const isOpen = computed({
   get: () => props.open,
@@ -635,6 +693,44 @@ const timelineStats = computed(() => {
                   </div>
                   <p v-else class="text-base text-neutral-500 dark:text-neutral-400">
                     Not available
+                  </p>
+                </div>
+                <div class="space-y-2 lg:col-span-2">
+                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    Market valuation
+                  </p>
+                  <div v-if="marketSignal" class="space-y-2">
+                    <p class="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+                      {{ rewardRangeLabel ?? "No reward data" }}
+                    </p>
+                    <p v-if="offerCountLabel" class="text-xs text-neutral-500 dark:text-neutral-400">
+                      {{ offerCountLabel }}
+                    </p>
+                    <div v-if="marketSignal.programTypes.length" class="flex flex-wrap gap-2">
+                      <UBadge
+                        v-for="type in marketSignal.programTypes"
+                        :key="type"
+                        color="info"
+                        variant="soft"
+                        class="text-xs font-semibold"
+                      >
+                        {{ formatProgramTypeLabel(type) }}
+                      </UBadge>
+                    </div>
+                    <div v-if="marketCategoryChips.length" class="flex flex-wrap gap-2">
+                      <UBadge
+                        v-for="category in marketCategoryChips"
+                        :key="`${category.type}-${category.name}`"
+                        color="neutral"
+                        variant="soft"
+                        class="text-xs"
+                      >
+                        {{ category.name }}
+                      </UBadge>
+                    </div>
+                  </div>
+                  <p v-else class="text-base text-neutral-500 dark:text-neutral-400">
+                    No linked market offers yet.
                   </p>
                 </div>
                 <div>

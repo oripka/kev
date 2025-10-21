@@ -5,7 +5,8 @@ import {
   primaryKey,
   real,
   sqliteTable,
-  text
+  text,
+  uniqueIndex
 } from 'drizzle-orm/sqlite-core'
 
 export const catalogEntries = sqliteTable(
@@ -153,6 +154,130 @@ export const productCatalog = sqliteTable(
   },
   table => ({
     searchIdx: index('idx_product_catalog_search').on(table.searchTerms)
+  })
+)
+
+export const marketPrograms = sqliteTable(
+  'market_programs',
+  {
+    id: text('id').primaryKey(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    operator: text('operator').notNull(),
+    programType: text('program_type').notNull(),
+    homepageUrl: text('homepage_url').notNull(),
+    scrapeFrequency: text('scrape_frequency').notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    description: text('description')
+  },
+  table => ({
+    slugIdx: uniqueIndex('uq_market_programs_slug').on(table.slug),
+    typeIdx: index('idx_market_programs_type').on(table.programType)
+  })
+)
+
+export const marketProgramSnapshots = sqliteTable(
+  'market_program_snapshots',
+  {
+    id: text('id').primaryKey(),
+    programId: text('program_id')
+      .notNull()
+      .references(() => marketPrograms.id, { onDelete: 'cascade' }),
+    fetchedAt: text('fetched_at').notNull(),
+    rawContent: text('raw_content').notNull(),
+    parserVersion: text('parser_version').notNull(),
+    contentHash: text('content_hash')
+  },
+  table => ({
+    programIdx: index('idx_market_program_snapshots_program').on(table.programId),
+    fetchedIdx: index('idx_market_program_snapshots_fetched').on(table.fetchedAt)
+  })
+)
+
+export const marketOffers = sqliteTable(
+  'market_offers',
+  {
+    id: text('id').primaryKey(),
+    programId: text('program_id')
+      .notNull()
+      .references(() => marketPrograms.id, { onDelete: 'cascade' }),
+    cveId: text('cve_id'),
+    title: text('title').notNull(),
+    description: text('description'),
+    minRewardUsd: real('min_reward_usd'),
+    maxRewardUsd: real('max_reward_usd'),
+    currency: text('currency').notNull().default('USD'),
+    rewardType: text('reward_type').notNull().default('range'),
+    exclusivity: text('exclusivity'),
+    sourceUrl: text('source_url').notNull(),
+    sourceCaptureDate: text('source_capture_date').notNull(),
+    effectiveStart: text('effective_start'),
+    effectiveEnd: text('effective_end'),
+    termsHash: text('terms_hash').notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+  },
+  table => ({
+    programIdx: index('idx_market_offers_program').on(table.programId),
+    captureIdx: index('idx_market_offers_capture').on(table.sourceCaptureDate)
+  })
+)
+
+export const marketOfferTargets = sqliteTable(
+  'market_offer_targets',
+  {
+    offerId: text('offer_id')
+      .notNull()
+      .references(() => marketOffers.id, { onDelete: 'cascade' }),
+    productKey: text('product_key')
+      .notNull()
+      .references(() => productCatalog.productKey, { onDelete: 'cascade' }),
+    cveId: text('cve_id'),
+    confidence: integer('confidence').notNull().default(100),
+    matchMethod: text('match_method').notNull().default('exact'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`)
+  },
+  table => ({
+    pk: primaryKey({ columns: [table.offerId, table.productKey] }),
+    productIdx: index('idx_market_offer_targets_product').on(table.productKey),
+    cveIdx: index('idx_market_offer_targets_cve').on(table.cveId)
+  })
+)
+
+export const marketOfferCategories = sqliteTable(
+  'market_offer_categories',
+  {
+    offerId: text('offer_id')
+      .notNull()
+      .references(() => marketOffers.id, { onDelete: 'cascade' }),
+    categoryType: text('category_type').notNull(),
+    categoryKey: text('category_key').notNull(),
+    categoryName: text('category_name').notNull()
+  },
+  table => ({
+    pk: primaryKey({ columns: [table.offerId, table.categoryType, table.categoryKey] }),
+    typeIdx: index('idx_market_offer_categories_type').on(
+      table.categoryType,
+      table.categoryKey
+    )
+  })
+)
+
+export const marketOfferMetrics = sqliteTable(
+  'market_offer_metrics',
+  {
+    id: text('id').primaryKey(),
+    offerId: text('offer_id')
+      .notNull()
+      .references(() => marketOffers.id, { onDelete: 'cascade' }),
+    valuationScore: real('valuation_score').notNull(),
+    scoreBreakdown: text('score_breakdown').notNull(),
+    computedAt: text('computed_at').default(sql`CURRENT_TIMESTAMP`)
+  },
+  table => ({
+    offerIdx: index('idx_market_offer_metrics_offer').on(table.offerId),
+    computedIdx: index('idx_market_offer_metrics_computed').on(table.computedAt)
   })
 )
 

@@ -153,6 +153,17 @@ const epssRange = ref<[number, number]>([
   defaultEpssRange[0],
   defaultEpssRange[1],
 ]);
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+const priceRange = ref<[number, number]>([0, 0]);
+let priceRangeInitialised = false;
+let pendingPriceRange: [number, number] | null = null;
+
 const selectedSource = ref<"all" | "kev" | "enisa" | "historic" | "metasploit">("all");
 const isFiltering = ref(false);
 
@@ -175,6 +186,52 @@ watch(
   },
   { immediate: true }
 );
+
+watch(
+  defaultPriceRange,
+  (next) => {
+    if (!priceSliderReady.value) {
+      return;
+    }
+
+    if (!priceRangeInitialised) {
+      priceRange.value = [next[0], next[1]];
+      priceRangeInitialised = true;
+      pendingPriceRange = null;
+      return;
+    }
+
+    const [currentMin, currentMax] = priceRange.value;
+    let nextMin = currentMin;
+    let nextMax = currentMax;
+
+    if (currentMin < next[0]) {
+      nextMin = next[0];
+    }
+    if (currentMax > next[1]) {
+      nextMax = next[1];
+    }
+
+    if (nextMin > nextMax) {
+      nextMin = next[0];
+      nextMax = next[1];
+    }
+
+    if (nextMin !== currentMin || nextMax !== currentMax) {
+      priceRange.value = [nextMin, nextMax];
+    }
+  },
+  { immediate: true }
+);
+
+watch(priceSliderReady, (ready) => {
+  if (ready) {
+    const target = pendingPriceRange ?? defaultPriceRange.value;
+    priceRange.value = [target[0], target[1]];
+    priceRangeInitialised = true;
+    pendingPriceRange = null;
+  }
+});
 
 onBeforeUnmount(() => {
   if (searchDebounce) {
@@ -405,6 +462,36 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
     epssRange.value = nextEpssRange;
   }
 
+  const priceMin = parseQueryFloat(getValue("priceMin"));
+  const priceMax = parseQueryFloat(getValue("priceMax"));
+  const [defaultPriceMin, defaultPriceMax] = defaultPriceRange.value;
+  const nextPriceRange =
+    priceMin === null && priceMax === null
+      ? [defaultPriceMin, defaultPriceMax]
+      : normaliseNumericRange(
+          priceMin,
+          priceMax,
+          [defaultPriceMin, defaultPriceMax],
+          (value) => {
+            const [minDefault, maxDefault] = defaultPriceRange.value;
+            return Math.min(Math.max(value, minDefault), maxDefault);
+          },
+        );
+
+  if (priceSliderReady.value) {
+    if (
+      priceRange.value[0] !== nextPriceRange[0] ||
+      priceRange.value[1] !== nextPriceRange[1]
+    ) {
+      priceRange.value = [nextPriceRange[0], nextPriceRange[1]];
+    }
+    priceRangeInitialised = true;
+    pendingPriceRange = null;
+  } else {
+    pendingPriceRange = [nextPriceRange[0], nextPriceRange[1]];
+    priceRangeInitialised = false;
+  }
+
   const sourceParam = extractQueryString(getValue("source"));
   let resolvedSource: typeof selectedSource.value = "all";
   if (
@@ -573,6 +660,18 @@ const routeQueryState = computed<Record<string, string>>(() => {
   ) {
     query.epssMin = String(currentEpssMin);
     query.epssMax = String(currentEpssMax);
+  }
+
+  if (priceSliderReady.value) {
+    const [defaultPriceMin, defaultPriceMax] = defaultPriceRange.value;
+    const [currentPriceMin, currentPriceMax] = priceRange.value;
+    if (
+      currentPriceMin !== defaultPriceMin ||
+      currentPriceMax !== defaultPriceMax
+    ) {
+      query.priceMin = String(Math.round(currentPriceMin));
+      query.priceMax = String(Math.round(currentPriceMax));
+    }
   }
 
   if (selectedSource.value !== "all") {
@@ -760,6 +859,18 @@ const filterParams = computed(() => {
     params.epssMax = epssEnd;
   }
 
+  if (priceSliderReady.value) {
+    const [defaultPriceMin, defaultPriceMax] = defaultPriceRange.value;
+    const [currentPriceMin, currentPriceMax] = priceRange.value;
+    if (
+      currentPriceMin > defaultPriceMin ||
+      currentPriceMax < defaultPriceMax
+    ) {
+      params.priceMin = currentPriceMin;
+      params.priceMax = currentPriceMax;
+    }
+  }
+
   if (showAllResults.value) {
     params.limit = maxEntryLimit;
   }
@@ -771,6 +882,14 @@ const normalizedSearchTerm = computed(() =>
   debouncedSearch.value.trim().toLowerCase()
 );
 
+
+const priceSliderReady = computed(
+  () =>
+    typeof marketPriceBounds.value.minRewardUsd === "number" &&
+    typeof marketPriceBounds.value.maxRewardUsd === "number" &&
+    marketPriceBounds.value.maxRewardUsd > marketPriceBounds.value.minRewardUsd
+);
+
 const {
   entries,
   counts,
@@ -780,7 +899,29 @@ const {
   totalEntries,
   entryLimit,
   pending: dataPending,
+  market: marketOverview,
 } = useKevData(filterParams);
+
+const marketOfferCount = computed(() => marketOverview.value.offerCount ?? 0);
+const marketProgramCounts = computed(() => marketOverview.value.programCounts ?? []);
+const marketCategoryCounts = computed(
+  () => marketOverview.value.categoryCounts ?? []
+);
+const filteredMarketPriceBounds = computed(
+  () => marketOverview.value.filteredPriceBounds
+);
+const filteredMarketPriceSummary = computed(() => {
+  const bounds = filteredMarketPriceBounds.value;
+  if (
+    typeof bounds.minRewardUsd === "number" &&
+    typeof bounds.maxRewardUsd === "number" &&
+    Number.isFinite(bounds.minRewardUsd) &&
+    Number.isFinite(bounds.maxRewardUsd)
+  ) {
+    return `${currencyFormatter.format(bounds.minRewardUsd)} – ${currencyFormatter.format(bounds.maxRewardUsd)}`;
+  }
+  return "No valuation data in current view.";
+});
 
 const filterParamsWithoutYear = computed(() => {
   const [cvssStart, cvssEnd] = cvssRange.value;
@@ -816,6 +957,18 @@ const filterParamsWithoutYear = computed(() => {
   if (epssStart > defaultEpssRange[0] || epssEnd < defaultEpssRange[1]) {
     params.epssMin = epssStart;
     params.epssMax = epssEnd;
+  }
+
+  if (priceSliderReady.value) {
+    const [defaultPriceMin, defaultPriceMax] = defaultPriceRange.value;
+    const [currentPriceMin, currentPriceMax] = priceRange.value;
+    if (
+      currentPriceMin > defaultPriceMin ||
+      currentPriceMax < defaultPriceMax
+    ) {
+      params.priceMin = currentPriceMin;
+      params.priceMax = currentPriceMax;
+    }
   }
 
   return params;
@@ -1186,6 +1339,25 @@ const compareNullableNumbers = (
     : secondValue - firstValue;
 };
 
+const marketPriceBounds = computed(() => marketOverview.value.priceBounds);
+
+const defaultPriceRange = computed<[number, number]>(() => {
+  const bounds = marketPriceBounds.value;
+  if (
+    typeof bounds.minRewardUsd === "number" &&
+    typeof bounds.maxRewardUsd === "number" &&
+    Number.isFinite(bounds.minRewardUsd) &&
+    Number.isFinite(bounds.maxRewardUsd)
+  ) {
+    const min = Math.floor(bounds.minRewardUsd);
+    const max = Math.ceil(bounds.maxRewardUsd);
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      return [min, max];
+    }
+  }
+  return [0, 0];
+});
+
 const applySorting = (collection: KevEntrySummary[]) => {
   const sorted = [...collection];
   const direction = sortDirection.value;
@@ -1361,6 +1533,14 @@ const resetFilters = () => {
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
   selectedSource.value = "all";
   resetYearRange();
+  if (priceSliderReady.value) {
+    const [min, max] = defaultPriceRange.value;
+    priceRange.value = [min, max];
+  } else {
+    priceRange.value = [0, 0];
+    priceRangeInitialised = false;
+    pendingPriceRange = null;
+  }
 };
 
 type ProgressDatum = {
@@ -2400,6 +2580,19 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     });
   }
 
+  if (
+    priceSliderReady.value &&
+    (priceRange.value[0] > defaultPriceRange.value[0] ||
+      priceRange.value[1] < defaultPriceRange.value[1])
+  ) {
+    const [min, max] = priceRange.value;
+    items.push({
+      key: "priceRange",
+      label: "Reward",
+      value: `${currencyFormatter.format(min)} – ${currencyFormatter.format(max)}`,
+    });
+  }
+
   return items;
 });
 
@@ -2474,6 +2667,13 @@ const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
     badgeText: activeFilterCount.value.toString(),
   },
   {
+    value: "market",
+    label: "Market signals",
+    slot: "market",
+    badgeColor: "info",
+    badgeText: marketOfferCount.value.toLocaleString(),
+  },
+  {
     value: "sort",
     label: "Sort order",
     slot: "sort",
@@ -2537,6 +2737,7 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     showOwnedOnly: nextOwnedOnly,
     cvssRange: nextCvssRange,
     epssRange: nextEpssRange,
+    priceRange: nextPriceRange,
     showAllResults: nextShowAllResults,
   } = update;
 
@@ -2576,6 +2777,17 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
 
   if (Array.isArray(nextEpssRange) && nextEpssRange.length === 2) {
     epssRange.value = [nextEpssRange[0], nextEpssRange[1]];
+  }
+
+  if (Array.isArray(nextPriceRange) && nextPriceRange.length === 2) {
+    if (priceSliderReady.value) {
+      priceRange.value = [nextPriceRange[0], nextPriceRange[1]];
+      priceRangeInitialised = true;
+      pendingPriceRange = null;
+    } else {
+      pendingPriceRange = [nextPriceRange[0], nextPriceRange[1]];
+      priceRangeInitialised = false;
+    }
   }
 
   if (typeof nextWellKnownOnly === "boolean") {
@@ -2621,7 +2833,11 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     sectionsToOpen.add("focus");
   }
 
-  if (Array.isArray(nextCvssRange) || Array.isArray(nextEpssRange)) {
+  if (
+    Array.isArray(nextCvssRange) ||
+    Array.isArray(nextEpssRange) ||
+    Array.isArray(nextPriceRange)
+  ) {
     sectionsToOpen.add("filters");
   }
 
@@ -2727,6 +2943,18 @@ const clearFilter = (
 
   if (key === "epssRange") {
     epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
+    return;
+  }
+
+  if (key === "priceRange") {
+    if (priceSliderReady.value) {
+      const [min, max] = defaultPriceRange.value;
+      priceRange.value = [min, max];
+    } else {
+      priceRange.value = [0, 0];
+      priceRangeInitialised = false;
+      pendingPriceRange = null;
+    }
     return;
   }
 
@@ -3022,6 +3250,89 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
       },
     },
     {
+      id: "market",
+      header: "Market value",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const signal = row.original.marketSignals;
+        if (!signal || signal.offerCount === 0) {
+          return h(
+            "span",
+            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+            "—"
+          );
+        }
+
+        const minLabel =
+          typeof signal.minRewardUsd === "number"
+            ? currencyFormatter.format(signal.minRewardUsd)
+            : null;
+        const maxLabel =
+          typeof signal.maxRewardUsd === "number"
+            ? currencyFormatter.format(signal.maxRewardUsd)
+            : null;
+
+        const rangeLabel =
+          minLabel && maxLabel
+            ? `${minLabel} – ${maxLabel}`
+            : minLabel ?? maxLabel ?? null;
+
+        const offerLabel =
+          signal.offerCount === 1
+            ? "1 offer"
+            : `${signal.offerCount.toLocaleString()} offers`;
+
+        const children: Array<ReturnType<typeof h>> = [];
+
+        if (rangeLabel) {
+          children.push(
+            h(
+              "p",
+              {
+                class:
+                  "text-sm font-semibold text-neutral-900 dark:text-neutral-50",
+              },
+              rangeLabel
+            )
+          );
+        }
+
+        children.push(
+          h(
+            "p",
+            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+            offerLabel
+          )
+        );
+
+        if (signal.programTypes.length) {
+          const typeLabel = signal.programTypes
+            .map((type) => {
+              if (type === "exploit-broker") {
+                return "Exploit brokers";
+              }
+              if (type === "bug-bounty") {
+                return "Bug bounty";
+              }
+              return type;
+            })
+            .join(" · ");
+
+          if (typeLabel) {
+            children.push(
+              h(
+                "p",
+                { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+                typeLabel
+              )
+            );
+          }
+        }
+
+        return h("div", { class: "flex flex-col gap-1" }, children);
+      },
+    },
+    {
       id: "taxonomy",
       header: "Domain · Exploit · Type",
       cell: ({ row }) => {
@@ -3309,8 +3620,91 @@ const tableMeta = {
                       </p>
                     </div>
                   </UFormField>
+
+                  <UFormField label="Reward range">
+                    <div class="space-y-2">
+                      <USlider
+                        v-model="priceRange"
+                        :min="defaultPriceRange[0]"
+                        :max="defaultPriceRange[1]"
+                        :step="1000"
+                        :disabled="!priceSliderReady"
+                        :min-steps-between-thumbs="1"
+                        tooltip
+                      />
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Filter vulnerabilities by the highest published payout signal.
+                      </p>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        <span v-if="priceSliderReady">
+                          {{ currencyFormatter.format(priceRange[0]) }} –
+                          {{ currencyFormatter.format(priceRange[1]) }}
+                        </span>
+                        <span v-else>Reward data not available.</span>
+                      </p>
+                    </div>
+                  </UFormField>
                 </div>
               </div>
+        </template>
+
+        <template #market>
+          <div class="space-y-4 px-2 py-4">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+              Link exploited products to current exploit acquisition and bounty signals.
+            </p>
+            <div
+              class="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800"
+            >
+              <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                {{ marketOfferCount.toLocaleString() }} mapped offers
+              </p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                {{ filteredMarketPriceSummary }}
+              </p>
+            </div>
+
+            <div v-if="marketProgramCounts.length" class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                Program types
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <UBadge
+                  v-for="program in marketProgramCounts.slice(0, 3)"
+                  :key="program.key"
+                  color="info"
+                  variant="soft"
+                  class="text-xs font-semibold"
+                >
+                  {{ program.name }} · {{ program.count.toLocaleString() }}
+                </UBadge>
+              </div>
+            </div>
+
+            <div v-if="marketCategoryCounts.length" class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                Leading categories
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <UBadge
+                  v-for="category in marketCategoryCounts.slice(0, 4)"
+                  :key="`${category.categoryType}-${category.key}`"
+                  color="neutral"
+                  variant="soft"
+                  class="text-xs"
+                >
+                  {{ category.name }} · {{ category.count.toLocaleString() }}
+                </UBadge>
+              </div>
+            </div>
+
+            <ULink
+              to="/market-intel"
+              class="text-sm font-medium text-primary-600 transition hover:text-primary-500 dark:text-primary-300"
+            >
+              View market intelligence →
+            </ULink>
+          </div>
         </template>
 
         <template #sort>

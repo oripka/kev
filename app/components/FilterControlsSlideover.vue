@@ -15,6 +15,9 @@ const props = defineProps<{
   defaultCvssRange: readonly [number, number];
   epssRange: [number, number];
   defaultEpssRange: readonly [number, number];
+  priceRange: [number, number];
+  defaultPriceRange: readonly [number, number];
+  priceSliderEnabled: boolean;
   activeFilters: ActiveFilter[];
 }>();
 
@@ -25,6 +28,7 @@ const emit = defineEmits<{
   (event: "update:year-range", value: [number, number]): void;
   (event: "update:cvss-range", value: [number, number]): void;
   (event: "update:epss-range", value: [number, number]): void;
+  (event: "update:price-range", value: [number, number]): void;
   (event: "reset"): void;
   (event: "clear-filter", key: ActiveFilter["key"]): void;
 }>();
@@ -57,6 +61,17 @@ const cvssRange = computed({
 const epssRange = computed({
   get: () => props.epssRange,
   set: (value: [number, number]) => emit("update:epss-range", value),
+});
+
+const priceRange = computed({
+  get: () => props.priceRange,
+  set: (value: [number, number]) => emit("update:price-range", value),
+});
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
 });
 
 const handleReset = () => {
@@ -182,6 +197,30 @@ const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit"
               </p>
               <p class="text-xs text-neutral-500 dark:text-neutral-400">
                 {{ Math.round(epssRange[0]) }} – {{ Math.round(epssRange[1]) }}
+              </p>
+            </div>
+          </UFormField>
+
+          <UFormField label="Reward range">
+            <div class="space-y-2">
+              <USlider
+                v-model="priceRange"
+                :min="props.defaultPriceRange[0]"
+                :max="props.defaultPriceRange[1]"
+                :step="1000"
+                :disabled="!props.priceSliderEnabled"
+                :min-steps-between-thumbs="1"
+                tooltip
+              />
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                Filter vulnerabilities by the highest linked payout signal.
+              </p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                <span v-if="props.priceSliderEnabled">
+                  {{ currencyFormatter.format(priceRange[0]) }} –
+                  {{ currencyFormatter.format(priceRange[1]) }}
+                </span>
+                <span v-else>Reward data not available.</span>
               </p>
             </div>
           </UFormField>

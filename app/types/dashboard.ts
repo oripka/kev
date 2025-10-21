@@ -22,6 +22,7 @@ export type QuickFilterUpdate = {
   showOwnedOnly?: boolean;
   cvssRange?: [number, number];
   epssRange?: [number, number];
+  priceRange?: [number, number];
   showAllResults?: boolean;
 };
 
@@ -35,6 +36,7 @@ export type ActiveFilterKey =
   | "source"
   | "cvssRange"
   | "epssRange"
+  | "priceRange"
   | "owned";
 
 export type ActiveFilter = {

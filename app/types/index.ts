@@ -9,6 +9,23 @@ export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 
 export type CatalogSource = 'kev' | 'enisa' | 'historic' | 'metasploit'
 
+export type MarketProgramType = 'exploit-broker' | 'bug-bounty' | 'other'
+
+export type MarketCategory = {
+  type: string
+  name: string
+}
+
+export type MarketSignal = {
+  offerCount: number
+  minRewardUsd: number | null
+  maxRewardUsd: number | null
+  averageRewardUsd: number | null
+  lastSeenAt: string | null
+  programTypes: MarketProgramType[]
+  categories: MarketCategory[]
+}
+
 export type KevTimelineEventType =
   | 'cve_published'
   | 'kev_listed'
@@ -107,6 +124,7 @@ export type KevEntry = {
   exploitLayers: KevExploitLayer[]
   vulnerabilityCategories: KevVulnerabilityCategory[]
   internetExposed: boolean
+  marketSignals: MarketSignal | null
 }
 
 export type KevEntryDetail = KevEntry & {
@@ -136,6 +154,7 @@ export type KevEntrySummary = Pick<
   | 'vulnerabilityCategories'
   | 'internetExposed'
   | 'aliases'
+  | 'marketSignals'
 >
 
 export type KevCountDatum = {
@@ -144,6 +163,13 @@ export type KevCountDatum = {
   count: number
   vendorKey?: string
   vendorName?: string
+}
+
+export type MarketCategoryDatum = {
+  key: string
+  name: string
+  categoryType: string
+  count: number
 }
 
 export type TrackedProduct = {
@@ -175,6 +201,15 @@ export type KevResponse = {
   }
   totalEntries: number
   entryLimit: number
+  market: MarketOverview
+}
+
+export type MarketOverview = {
+  priceBounds: { minRewardUsd: number | null; maxRewardUsd: number | null }
+  filteredPriceBounds: { minRewardUsd: number | null; maxRewardUsd: number | null }
+  offerCount: number
+  programCounts: KevCountDatum[]
+  categoryCounts: MarketCategoryDatum[]
 }
 
 export type ProductCatalogItem = {
@@ -188,6 +223,34 @@ export type ProductCatalogItem = {
 
 export type ProductCatalogResponse = {
   items: ProductCatalogItem[]
+}
+
+export type MarketOfferSummary = {
+  id: string
+  title: string
+  programName: string
+  programType: MarketProgramType
+  minRewardUsd: number | null
+  maxRewardUsd: number | null
+  averageRewardUsd: number | null
+  sourceUrl: string
+  sourceCaptureDate: string | null
+  productNames: string[]
+  vendorNames: string[]
+}
+
+export type MarketStatsResponse = {
+  totals: {
+    offerCount: number
+    programCount: number
+    averageRewardUsd: number | null
+    minRewardUsd: number | null
+    maxRewardUsd: number | null
+    lastSeenAt: string | null
+  }
+  programCounts: KevCountDatum[]
+  categoryCounts: MarketCategoryDatum[]
+  topOffers: MarketOfferSummary[]
 }
 
 export type ImportPhase =

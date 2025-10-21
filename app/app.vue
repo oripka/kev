@@ -18,6 +18,12 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     active: route.path === "/vulns-last-two-weeks",
   },
   {
+    label: "Market intel",
+    to: "/market-intel",
+    icon: "i-lucide-dollar-sign",
+    active: route.path === "/market-intel",
+  },
+  {
     label: "My software",
     to: "/settings/software",
     icon: "i-lucide-monitor-cog",

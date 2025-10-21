@@ -11,8 +11,11 @@ import type {
   KevVulnerabilityCategory
 } from '~/types'
 import { tables } from '../database/client'
-import { catalogRowToSummary, type CatalogSummaryRow } from '../utils/catalog'
-import { tables } from '../database/client'
+import {
+  catalogRowToSummary,
+  getMarketSignalsForProducts,
+  type CatalogSummaryRow
+} from '../utils/catalog'
 import { getDatabase, getMetadata } from '../utils/sqlite'
 import type { DrizzleDatabase } from '../utils/sqlite'
 
@@ -34,6 +37,8 @@ type CatalogQuery = {
   cvssMax?: number
   epssMin?: number
   epssMax?: number
+  priceMin?: number
+  priceMax?: number
   fromDate?: string
   toDate?: string
   fromUpdatedDate?: string
@@ -209,6 +214,26 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.epssMax = Math.max(0, Math.min(100, epssMax))
   }
 
+  const priceMin = getFloat('priceMin')
+  if (priceMin !== undefined && Number.isFinite(priceMin)) {
+    filters.priceMin = Math.max(0, priceMin)
+  }
+
+  const priceMax = getFloat('priceMax')
+  if (priceMax !== undefined && Number.isFinite(priceMax)) {
+    filters.priceMax = Math.max(0, priceMax)
+  }
+
+  if (
+    filters.priceMin !== undefined &&
+    filters.priceMax !== undefined &&
+    filters.priceMin > filters.priceMax
+  ) {
+    const [min, max] = [filters.priceMax, filters.priceMin]
+    filters.priceMin = min
+    filters.priceMax = max
+  }
+
   const fromDate = getString('fromDate')
   if (fromDate) {
     filters.fromDate = fromDate
@@ -368,6 +393,30 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
     conditions.push(sql`${ce.epssScore} IS NOT NULL AND ${ce.epssScore} <= ${filters.epssMax}`)
   }
 
+  if (filters.priceMin !== undefined) {
+    conditions.push(
+      sql`exists (
+        select 1
+        from market_offer_targets target
+        inner join market_offers offer on offer.id = target.offer_id
+        where target.product_key = ${ce.productKey}
+          and coalesce(offer.max_reward_usd, offer.min_reward_usd) >= ${filters.priceMin}
+      )`
+    )
+  }
+
+  if (filters.priceMax !== undefined) {
+    conditions.push(
+      sql`exists (
+        select 1
+        from market_offer_targets target
+        inner join market_offers offer on offer.id = target.offer_id
+        where target.product_key = ${ce.productKey}
+          and coalesce(offer.min_reward_usd, offer.max_reward_usd) <= ${filters.priceMax}
+      )`
+    )
+  }
+
   return conditions
 }
 
@@ -431,7 +480,12 @@ const queryEntries = (
     .limit(limit)
     .all() as CatalogSummaryRow[]
 
-  return rows.map(catalogRowToSummary)
+  const productKeys = Array.from(
+    new Set(rows.map(row => row.product_key).filter((key): key is string => typeof key === 'string' && key.length > 0))
+  )
+  const marketSignals = getMarketSignalsForProducts(db, productKeys)
+
+  return rows.map(row => catalogRowToSummary(row, { marketSignals }))
 }
 
 const queryDimensionCounts = (
@@ -621,6 +675,134 @@ const computeUpdatedAt = (db: DrizzleDatabase): string => {
   return row?.latest ?? ''
 }
 
+const formatProgramTypeLabel = (value: string | null | undefined): string => {
+  if (value === 'exploit-broker') {
+    return 'Exploit brokers'
+  }
+  if (value === 'bug-bounty') {
+    return 'Bug bounty'
+  }
+  return value ? value.replace(/-/g, ' ') : 'Other'
+}
+
+const normaliseReward = (value: number | null | undefined): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+  return value
+}
+
+const createEmptyMarketOverview = (): KevResponse['market'] => ({
+  priceBounds: { minRewardUsd: null, maxRewardUsd: null },
+  filteredPriceBounds: { minRewardUsd: null, maxRewardUsd: null },
+  offerCount: 0,
+  programCounts: [],
+  categoryCounts: []
+})
+
+const computeMarketOverview = (
+  db: DrizzleDatabase,
+  productKeys: string[]
+): KevResponse['market'] => {
+  const offer = tables.marketOffers
+  const target = tables.marketOfferTargets
+  const program = tables.marketPrograms
+  const category = tables.marketOfferCategories
+
+  const globalBoundsRow = db
+    .select({
+      minRewardUsd: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
+      maxRewardUsd: sql<number | null>`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd}))`
+    })
+    .from(offer)
+    .innerJoin(target, eq(target.offerId, offer.id))
+    .get()
+
+  const uniqueKeys = Array.from(new Set(productKeys.filter(key => Boolean(key))))
+
+  if (!uniqueKeys.length) {
+    return {
+      ...createEmptyMarketOverview(),
+      priceBounds: {
+        minRewardUsd: normaliseReward(globalBoundsRow?.minRewardUsd ?? null),
+        maxRewardUsd: normaliseReward(globalBoundsRow?.maxRewardUsd ?? null)
+      }
+    }
+  }
+
+  const filteredRow = db
+    .select({
+      count: sql<number>`count(distinct ${offer.id})`,
+      minRewardUsd: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
+      maxRewardUsd: sql<number | null>`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd}))`
+    })
+    .from(target)
+    .innerJoin(offer, eq(offer.id, target.offerId))
+    .where(inArray(target.productKey, uniqueKeys))
+    .get()
+
+  const programCountRows = db
+    .select({
+      programType: program.programType,
+      count: sql<number>`count(distinct ${offer.id})`
+    })
+    .from(target)
+    .innerJoin(offer, eq(offer.id, target.offerId))
+    .innerJoin(program, eq(program.id, offer.programId))
+    .where(inArray(target.productKey, uniqueKeys))
+    .groupBy(program.programType)
+    .all()
+
+  const programCounts = programCountRows
+    .map(row => ({
+      key: row.programType ?? 'other',
+      name: formatProgramTypeLabel(row.programType),
+      count: Number(row.count ?? 0)
+    }))
+    .sort((first, second) => second.count - first.count)
+
+  const categoryRows = db
+    .select({
+      categoryType: category.categoryType,
+      categoryKey: category.categoryKey,
+      categoryName: category.categoryName,
+      count: sql<number>`count(distinct ${offer.id})`
+    })
+    .from(target)
+    .innerJoin(offer, eq(offer.id, target.offerId))
+    .innerJoin(category, eq(category.offerId, target.offerId))
+    .where(inArray(target.productKey, uniqueKeys))
+    .groupBy(
+      category.categoryType,
+      category.categoryKey,
+      category.categoryName
+    )
+    .all()
+
+  const categoryCounts = categoryRows
+    .map(row => ({
+      key: row.categoryKey,
+      name: row.categoryName,
+      categoryType: row.categoryType,
+      count: Number(row.count ?? 0)
+    }))
+    .sort((first, second) => second.count - first.count)
+
+  return {
+    priceBounds: {
+      minRewardUsd: normaliseReward(globalBoundsRow?.minRewardUsd ?? null),
+      maxRewardUsd: normaliseReward(globalBoundsRow?.maxRewardUsd ?? null)
+    },
+    filteredPriceBounds: {
+      minRewardUsd: normaliseReward(filteredRow?.minRewardUsd ?? null),
+      maxRewardUsd: normaliseReward(filteredRow?.maxRewardUsd ?? null)
+    },
+    offerCount: filteredRow?.count ? Number(filteredRow.count) : 0,
+    programCounts,
+    categoryCounts
+  }
+}
+
 export default defineEventHandler(async (event): Promise<KevResponse> => {
   const filters = normaliseQuery(getQuery(event))
   const entryLimit = Math.max(1, Math.min(MAX_ENTRY_LIMIT, filters.limit ?? DEFAULT_ENTRY_LIMIT))
@@ -639,7 +821,8 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       },
       catalogBounds: getCatalogBounds(db),
       totalEntries: 0,
-      entryLimit
+      entryLimit,
+      market: createEmptyMarketOverview()
     }
   }
 
@@ -689,6 +872,10 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
 
   const catalogBounds = getCatalogBounds(db)
   const updatedAt = computeUpdatedAt(db)
+  const market = computeMarketOverview(
+    db,
+    entries.map(entry => entry.productKey).filter((key): key is string => typeof key === 'string' && key.length > 0)
+  )
 
   return {
     updatedAt,
@@ -696,6 +883,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     counts,
     catalogBounds,
     totalEntries,
-    entryLimit
+    entryLimit,
+    market
   }
 })

@@ -1,7 +1,13 @@
-import { sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { lookupCveName } from '~/utils/cveToNameMap'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
-import type { CatalogSource, KevEntry, KevEntrySummary } from '~/types'
+import type {
+  CatalogSource,
+  KevEntry,
+  KevEntrySummary,
+  MarketProgramType,
+  MarketSignal
+} from '~/types'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { ensureCatalogTables, setMetadata } from './sqlite'
@@ -797,7 +803,128 @@ const parseJsonStringArray = (value: string): string[] => {
   }
 }
 
-export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
+const toProgramType = (value: string | null | undefined): MarketProgramType => {
+  if (value === 'exploit-broker' || value === 'bug-bounty') {
+    return value
+  }
+  return 'other'
+}
+
+const createEmptyMarketSignal = (): MarketSignal => ({
+  offerCount: 0,
+  minRewardUsd: null,
+  maxRewardUsd: null,
+  averageRewardUsd: null,
+  lastSeenAt: null,
+  programTypes: [],
+  categories: []
+})
+
+export const getMarketSignalsForProducts = (
+  db: DrizzleDatabase,
+  productKeys: string[]
+): Map<string, MarketSignal> => {
+  const keys = Array.from(new Set(productKeys.filter(key => Boolean(key))))
+  const signals = new Map<string, MarketSignal>()
+
+  if (!keys.length) {
+    return signals
+  }
+
+  const target = tables.marketOfferTargets
+  const offer = tables.marketOffers
+  const program = tables.marketPrograms
+  const category = tables.marketOfferCategories
+
+  const priceRows = db
+    .select({
+      productKey: target.productKey,
+      minReward: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
+      maxReward: sql<number | null>`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd}))`,
+      averageReward: sql<number | null>`avg((COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}) + COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd})) / 2.0)`,
+      lastSeenAt: sql<string | null>`max(${offer.sourceCaptureDate})`,
+      offerCount: sql<number>`count(distinct ${offer.id})`,
+      programTypes: sql<string | null>`json_group_array(distinct ${program.programType})`
+    })
+    .from(target)
+    .innerJoin(offer, eq(offer.id, target.offerId))
+    .innerJoin(program, eq(program.id, offer.programId))
+    .where(inArray(target.productKey, keys))
+    .groupBy(target.productKey)
+    .all()
+
+  for (const row of priceRows) {
+    const programTypeValues = typeof row.programTypes === 'string'
+      ? parseJsonStringArray(row.programTypes)
+      : []
+    const programTypes = Array.from(
+      new Set(programTypeValues.map(type => toProgramType(type)))
+    )
+
+    signals.set(row.productKey, {
+      offerCount: Number(row.offerCount ?? 0),
+      minRewardUsd:
+        typeof row.minReward === 'number' && Number.isFinite(row.minReward)
+          ? row.minReward
+          : null,
+      maxRewardUsd:
+        typeof row.maxReward === 'number' && Number.isFinite(row.maxReward)
+          ? row.maxReward
+          : null,
+      averageRewardUsd:
+        typeof row.averageReward === 'number' && Number.isFinite(row.averageReward)
+          ? row.averageReward
+          : null,
+      lastSeenAt: row.lastSeenAt ?? null,
+      programTypes,
+      categories: []
+    })
+  }
+
+  const categoryRows = db
+    .select({
+      productKey: target.productKey,
+      categoryType: category.categoryType,
+      categoryKey: category.categoryKey,
+      categoryName: category.categoryName
+    })
+    .from(target)
+    .innerJoin(category, eq(category.offerId, target.offerId))
+    .where(inArray(target.productKey, keys))
+    .groupBy(
+      target.productKey,
+      category.categoryType,
+      category.categoryKey,
+      category.categoryName
+    )
+    .all()
+
+  for (const row of categoryRows) {
+    const existing = signals.get(row.productKey) ?? createEmptyMarketSignal()
+    if (!signals.has(row.productKey)) {
+      signals.set(row.productKey, existing)
+    }
+
+    const exists = existing.categories.some(
+      categoryItem =>
+        categoryItem.type === row.categoryType && categoryItem.name === row.categoryName
+    )
+
+    if (!exists) {
+      existing.categories.push({
+        type: row.categoryType,
+        name: row.categoryName
+      })
+    }
+  }
+
+  return signals
+}
+
+export const catalogRowToEntry = (
+  row: CatalogEntryRow,
+  options?: { marketSignals?: Map<string, MarketSignal> }
+): KevEntry => {
   const sources = parseJsonStringArray(row.sources) as CatalogSource[]
   const notes = parseJsonStringArray(row.notes)
   const cwes = parseJsonStringArray(row.cwes)
@@ -806,6 +933,8 @@ export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
   const domainCategories = parseJsonStringArray(row.domain_categories) as KevEntry['domainCategories']
   const exploitLayers = parseJsonStringArray(row.exploit_layers) as KevEntry['exploitLayers']
   const vulnerabilityCategories = parseJsonStringArray(row.vulnerability_categories) as KevEntry['vulnerabilityCategories']
+
+  const marketSignals = options?.marketSignals?.get(row.product_key) ?? null
 
   return {
     id: row.entry_id,
@@ -843,11 +972,15 @@ export const catalogRowToEntry = (row: CatalogEntryRow): KevEntry => {
     vulnerabilityCategories,
     internetExposed: row.internet_exposed === 1,
     metasploitModulePath: row.metasploit_module_path,
-    metasploitModulePublishedAt: row.metasploit_module_published_at
+    metasploitModulePublishedAt: row.metasploit_module_published_at,
+    marketSignals
   }
 }
 
-export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => {
+export const catalogRowToSummary = (
+  row: CatalogSummaryRow,
+  options?: { marketSignals?: Map<string, MarketSignal> }
+): KevEntrySummary => {
   const sources = parseJsonStringArray(row.sources) as CatalogSource[]
   const aliases = parseJsonStringArray(row.aliases)
   const domainCategories = parseJsonStringArray(
@@ -859,6 +992,8 @@ export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => 
   const vulnerabilityCategories = parseJsonStringArray(
     row.vulnerability_categories
   ) as KevEntrySummary['vulnerabilityCategories']
+
+  const marketSignals = options?.marketSignals?.get(row.product_key) ?? null
 
   return {
     id: row.entry_id,
@@ -884,6 +1019,7 @@ export const catalogRowToSummary = (row: CatalogSummaryRow): KevEntrySummary => 
     exploitLayers,
     vulnerabilityCategories,
     internetExposed: row.internet_exposed === 1,
-    aliases: aliases.length ? aliases : [row.cve_id]
+    aliases: aliases.length ? aliases : [row.cve_id],
+    marketSignals
   }
 }

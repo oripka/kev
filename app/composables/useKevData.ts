@@ -13,7 +13,8 @@ import type {
   ImportTaskKey,
   KevCountDatum,
   KevEntrySummary,
-  KevResponse
+  KevResponse,
+  MarketOverview
 } from '~/types'
 import { lookupCveName } from '~/utils/cveToNameMap'
 
@@ -80,6 +81,14 @@ const createDefaultCounts = (): DefaultCounts => ({
   product: []
 })
 
+const createDefaultMarketOverview = (): MarketOverview => ({
+  priceBounds: { minRewardUsd: null, maxRewardUsd: null },
+  filteredPriceBounds: { minRewardUsd: null, maxRewardUsd: null },
+  offerCount: 0,
+  programCounts: [],
+  categoryCounts: []
+})
+
 const DEFAULT_ENTRY_LIMIT = 250
 
 const normaliseQuery = (source?: KevQueryParams): NormalisedQuery => {
@@ -116,7 +125,8 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
       counts: createDefaultCounts(),
       catalogBounds: { earliest: null, latest: null },
       totalEntries: 0,
-      entryLimit: DEFAULT_ENTRY_LIMIT
+      entryLimit: DEFAULT_ENTRY_LIMIT,
+      market: createDefaultMarketOverview()
     })
   })
 
@@ -248,6 +258,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   const entryLimit = computed(() => data.value?.entryLimit ?? DEFAULT_ENTRY_LIMIT)
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
   const catalogBounds = computed(() => data.value?.catalogBounds ?? { earliest: null, latest: null })
+  const market = computed(() => data.value?.market ?? createDefaultMarketOverview())
 
   const isWellKnownCve = (rawCve: string) => Boolean(lookupCveName(rawCve))
 
@@ -285,6 +296,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     lastImportSummary,
     importProgress,
     isWellKnownCve,
-    getWellKnownCveName
+    getWellKnownCveName,
+    market
   }
 }
