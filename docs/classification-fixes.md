@@ -38,7 +38,7 @@
 
 ## TODO 
 
-- [ ] **Evaluation suite:** Build hand-labeled CVE test set (edge gateways, MDM, LFI, etc.) and fail CI on regressions. build this in -> use vitests implement somethign where i can easyl generate more testcases by adding more vuln definiton to a json or something
+- [x] **Evaluation suite:** Build hand-labeled CVE test set (edge gateways, MDM, LFI, etc.) and fail CI on regressions. build this in -> use vitests implement somethign where i can easyl generate more testcases by adding more vuln definiton to a json or something
 - [x] **Product taxonomy:** Exported normalized curated vendor/product map for reuse.
 - [x] **Scoring rules:** Client +2 now requires multiple cues; server weights boosted.
 - [x] **NLP hints:** Added admin/API HTTP verb patterns to domain detection logic.

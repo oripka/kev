@@ -44,6 +44,16 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     <NuxtLoadingIndicator />
     <UToaster />
     <UHeader title="In the Wild" to="/">
+      <template #title>
+        <span class="inline-flex items-center gap-2">
+          <img
+            src="/apple-touch-icon.png"
+            alt="In the Wild logo"
+            class="h-6 w-6"
+          />
+          <span>In the Wild</span>
+        </span>
+      </template>
       <UNavigationMenu :items="navigationItems" />
     </UHeader>
 

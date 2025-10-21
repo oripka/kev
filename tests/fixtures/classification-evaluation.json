@@ -1,0 +1,123 @@
+[
+  {
+    "id": "globalprotect-rce",
+    "title": "GlobalProtect gateway RCE is treated as an internet edge server exploit",
+    "entry": {
+      "cveId": "CVE-2024-3400",
+      "vendor": "Palo Alto Networks",
+      "product": "PAN-OS GlobalProtect",
+      "vulnerabilityName": "GlobalProtect portal remote code execution",
+      "description": "An unauthenticated remote attacker can execute arbitrary code in the GlobalProtect gateway interface of PAN-OS next-generation firewalls.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 10,
+      "cvssSeverity": "Critical"
+    },
+    "expect": {
+      "internetExposed": true,
+      "domainCategories": {
+        "includes": [
+          "Security Appliances",
+          "Networking & VPN",
+          "Internet Edge"
+        ],
+        "excludes": [
+          "Browsers"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Client-side Memory Corruption",
+          "RCE · Client-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "ivanti-epmm-auth-bypass",
+    "title": "Ivanti EPMM admin portal authentication bypass stays on the edge",
+    "entry": {
+      "cveId": "CVE-2024-21887",
+      "vendor": "Ivanti",
+      "product": "Endpoint Manager Mobile (EPMM)",
+      "vulnerabilityName": "Ivanti EPMM admin portal authentication bypass",
+      "description": "The Ivanti Endpoint Manager Mobile (EPMM) admin portal allows remote unauthenticated attackers to bypass authentication on the mobile device management gateway.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 9.8,
+      "cvssSeverity": "Critical"
+    },
+    "expect": {
+      "internetExposed": true,
+      "domainCategories": {
+        "includes": [
+          "Security Appliances",
+          "Networking & VPN",
+          "Web Applications",
+          "Internet Edge"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "Auth Bypass · Edge"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory",
+          "RCE · Client-side Memory Corruption"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Authentication Bypass"
+        ]
+      }
+    }
+  },
+  {
+    "id": "cisco-iosxe-lfi",
+    "title": "Cisco IOS XE Web UI LFI drives server-side RCE classification",
+    "entry": {
+      "cveId": "CVE-2023-20198",
+      "vendor": "Cisco",
+      "product": "IOS XE Web UI",
+      "vulnerabilityName": "Cisco IOS XE Web UI local file inclusion",
+      "description": "An unauthenticated attacker can leverage a local file inclusion in the Cisco IOS XE Web UI management portal to execute arbitrary code with root privileges.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 10,
+      "cvssSeverity": "Critical"
+    },
+    "expect": {
+      "internetExposed": true,
+      "domainCategories": {
+        "includes": [
+          "Networking & VPN",
+          "Web Applications",
+          "Security Appliances",
+          "Internet Edge"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  }
+]
