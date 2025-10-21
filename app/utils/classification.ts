@@ -605,7 +605,6 @@ const webIndicatorPatterns: RegExp[] = [
   // File traversal / inclusion / upload
   /\b(directory|path)[-\s]?traversal\b/i,
   /(?:\.\.\/){1,}/i,
-  /\b(remote|local) file inclusion\b|\brfi\b|\blfi\b/i,
   /\b(arbitrary (?:file|code) upload|file (?:upload|download|overwrite|replace))\b/i,
 
   // Redirects / deserialization / misc
@@ -1382,6 +1381,12 @@ const serverFileContextPatterns: RegExp[] = [
   /\bvia\s+(?:an?\s+)?(?:api|http)\s+request\b/i,
 ];
 
+const serverFileInclusionPatterns: RegExp[] = [
+  /\b(?:local|remote) file inclusion\b/i,
+  /\b(?:lfi|rfi)\b/i,
+  /\bfile inclusion (?:vulnerability|flaw|issue)\b/i,
+];
+
 const networkProtocolPatterns: RegExp[] = [
   /\b(?:smb|smbv1|smbv2|smbv3|cifs|nfs|rpc|msrpc|rdp|rdweb|ldap|ldaps|ftp|sftp|smtp|imap|pop3|snmp|telnet|ssh|dcerpc|dce\/?rpc|tcp|udp|nntp|mapi)\b/i,
 ];
@@ -1389,8 +1394,6 @@ const networkProtocolPatterns: RegExp[] = [
 const kernelServerPatterns: RegExp[] = [
   /\b(?:kernel(?:[-\s]?mode)?|kernel[-\s]?space|kernel driver|system driver|device driver|ntoskrnl|win32k)\b/i,
 ];
-
-const localFileInclusionPattern = /\b(?:local file inclusion|lfi|file inclusion)\b/i;
 
 const serverSignalPatterns: RegExp[] = [
   ...networkProtocolPatterns,
@@ -1410,7 +1413,7 @@ const serverSignalPatterns: RegExp[] = [
   /\b(?:gateway|vpn|firewall|router|switch|load[-\s]?balancer)\b/i,
 
   // server-side file inclusion keywords (LFI)
-  localFileInclusionPattern,
+  ...serverFileInclusionPatterns,
 
   // API / REST / SOAP / RPC / management endpoints
   /\b(?:api endpoint|rest(?: API)?|soap|rpc|management endpoint|control plane)\b/i,
@@ -1549,7 +1552,12 @@ export const classifyDomainCategories = (
     categories.has("Web Servers") || matchesAny(source, webServerPatterns);
   const isWebProduct = matchesAny(source, webProductPatterns);
   const isWebDevice = matchesAny(source, webDevicePatterns);
-  const hasWebIndicators = matchesAny(context, webIndicatorPatterns);
+  const hasServerFileInclusionIndicator = matchesAny(
+    context,
+    serverFileInclusionPatterns
+  );
+  const hasWebIndicators =
+    matchesAny(context, webIndicatorPatterns) || hasServerFileInclusionIndicator;
   const hasStrongWebSignal = matchesAny(context, webStrongContextPatterns);
   const deviceHasWebSignal =
     isWebDevice && matchesAny(context, webDeviceContextPatterns);
@@ -1806,9 +1814,12 @@ export const classifyExploitLayers = (
     hasKernelDriverSignal &&
     (hasStrongServerProtocol || hasRemoteContext || hasExplicitRemoteRce);
 
-  const hasLocalFileInclusionSignal = localFileInclusionPattern.test(text);
+  const hasServerFileInclusionSignal = matchesAny(
+    text,
+    serverFileInclusionPatterns
+  );
 
-  if (hasLocalFileInclusionSignal) {
+  if (hasServerFileInclusionSignal) {
     hasServerSignal = true;
     if (hasClientLocalExecutionSignal) {
       hasClientLocalExecutionSignal = false;
