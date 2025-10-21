@@ -15,6 +15,7 @@ import { useKevData } from "~/composables/useKevData";
 import { useTrackedProducts } from "~/composables/useTrackedProducts";
 import { useCatalogPreferences } from "~/composables/useCatalogPreferences";
 import { useDateDisplay } from "~/composables/useDateDisplay";
+import { useMarketMetrics } from "~/composables/useMarketMetrics";
 import { createFilterPresets } from "~/utils/filterPresets";
 import { defaultQuickFilterSummaryConfig, quickFilterSummaryMetricInfo } from "~/utils/quickFilterSummaryConfig";
 import {
@@ -154,12 +155,6 @@ const epssRange = ref<[number, number]>([
   defaultEpssRange[1],
 ]);
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
 const priceRange = ref<[number, number]>([0, 0]);
 let priceRangeInitialised = false;
 let pendingPriceRange: [number, number] | null = null;
@@ -186,52 +181,6 @@ watch(
   },
   { immediate: true }
 );
-
-watch(
-  defaultPriceRange,
-  (next) => {
-    if (!priceSliderReady.value) {
-      return;
-    }
-
-    if (!priceRangeInitialised) {
-      priceRange.value = [next[0], next[1]];
-      priceRangeInitialised = true;
-      pendingPriceRange = null;
-      return;
-    }
-
-    const [currentMin, currentMax] = priceRange.value;
-    let nextMin = currentMin;
-    let nextMax = currentMax;
-
-    if (currentMin < next[0]) {
-      nextMin = next[0];
-    }
-    if (currentMax > next[1]) {
-      nextMax = next[1];
-    }
-
-    if (nextMin > nextMax) {
-      nextMin = next[0];
-      nextMax = next[1];
-    }
-
-    if (nextMin !== currentMin || nextMax !== currentMax) {
-      priceRange.value = [nextMin, nextMax];
-    }
-  },
-  { immediate: true }
-);
-
-watch(priceSliderReady, (ready) => {
-  if (ready) {
-    const target = pendingPriceRange ?? defaultPriceRange.value;
-    priceRange.value = [target[0], target[1]];
-    priceRangeInitialised = true;
-    pendingPriceRange = null;
-  }
-});
 
 onBeforeUnmount(() => {
   if (searchDebounce) {
@@ -882,14 +831,6 @@ const normalizedSearchTerm = computed(() =>
   debouncedSearch.value.trim().toLowerCase()
 );
 
-
-const priceSliderReady = computed(
-  () =>
-    typeof marketPriceBounds.value.minRewardUsd === "number" &&
-    typeof marketPriceBounds.value.maxRewardUsd === "number" &&
-    marketPriceBounds.value.maxRewardUsd > marketPriceBounds.value.minRewardUsd
-);
-
 const {
   entries,
   counts,
@@ -902,25 +843,68 @@ const {
   market: marketOverview,
 } = useKevData(filterParams);
 
-const marketOfferCount = computed(() => marketOverview.value.offerCount ?? 0);
-const marketProgramCounts = computed(() => marketOverview.value.programCounts ?? []);
-const marketCategoryCounts = computed(
-  () => marketOverview.value.categoryCounts ?? []
+const {
+  currencyFormatter,
+  defaultPriceRange,
+  filteredMarketPriceBounds,
+  filteredMarketPriceSummary,
+  marketCategoryCounts,
+  marketOfferCount,
+  marketPriceBounds,
+  marketProgramCounts,
+} = useMarketMetrics(marketOverview);
+
+const priceSliderReady = computed(
+  () =>
+    typeof marketPriceBounds.value.minRewardUsd === "number" &&
+    typeof marketPriceBounds.value.maxRewardUsd === "number" &&
+    marketPriceBounds.value.maxRewardUsd > marketPriceBounds.value.minRewardUsd
 );
-const filteredMarketPriceBounds = computed(
-  () => marketOverview.value.filteredPriceBounds
+
+watch(
+  defaultPriceRange,
+  (next) => {
+    if (!priceSliderReady.value) {
+      return;
+    }
+
+    if (!priceRangeInitialised) {
+      priceRange.value = [next[0], next[1]];
+      priceRangeInitialised = true;
+      pendingPriceRange = null;
+      return;
+    }
+
+    const [currentMin, currentMax] = priceRange.value;
+    let nextMin = currentMin;
+    let nextMax = currentMax;
+
+    if (currentMin < next[0]) {
+      nextMin = next[0];
+    }
+    if (currentMax > next[1]) {
+      nextMax = next[1];
+    }
+
+    if (nextMin > nextMax) {
+      nextMin = next[0];
+      nextMax = next[1];
+    }
+
+    if (nextMin !== currentMin || nextMax !== currentMax) {
+      priceRange.value = [nextMin, nextMax];
+    }
+  },
+  { immediate: true }
 );
-const filteredMarketPriceSummary = computed(() => {
-  const bounds = filteredMarketPriceBounds.value;
-  if (
-    typeof bounds.minRewardUsd === "number" &&
-    typeof bounds.maxRewardUsd === "number" &&
-    Number.isFinite(bounds.minRewardUsd) &&
-    Number.isFinite(bounds.maxRewardUsd)
-  ) {
-    return `${currencyFormatter.format(bounds.minRewardUsd)} – ${currencyFormatter.format(bounds.maxRewardUsd)}`;
+
+watch(priceSliderReady, (ready) => {
+  if (ready) {
+    const target = pendingPriceRange ?? defaultPriceRange.value;
+    priceRange.value = [target[0], target[1]];
+    priceRangeInitialised = true;
+    pendingPriceRange = null;
   }
-  return "No valuation data in current view.";
 });
 
 const filterParamsWithoutYear = computed(() => {
@@ -1338,25 +1322,6 @@ const compareNullableNumbers = (
     ? firstValue - secondValue
     : secondValue - firstValue;
 };
-
-const marketPriceBounds = computed(() => marketOverview.value.priceBounds);
-
-const defaultPriceRange = computed<[number, number]>(() => {
-  const bounds = marketPriceBounds.value;
-  if (
-    typeof bounds.minRewardUsd === "number" &&
-    typeof bounds.maxRewardUsd === "number" &&
-    Number.isFinite(bounds.minRewardUsd) &&
-    Number.isFinite(bounds.maxRewardUsd)
-  ) {
-    const min = Math.floor(bounds.minRewardUsd);
-    const max = Math.ceil(bounds.maxRewardUsd);
-    if (Number.isFinite(min) && Number.isFinite(max)) {
-      return [min, max];
-    }
-  }
-  return [0, 0];
-});
 
 const applySorting = (collection: KevEntrySummary[]) => {
   const sorted = [...collection];

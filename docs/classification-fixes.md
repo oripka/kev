@@ -44,3 +44,4 @@
 - [x] **Scoring rules:** Client +2 now requires multiple cues; server weights boosted.
 - [x] **NLP hints:** Added admin/API HTTP verb patterns to domain detection logic.
 - [x] **Manual review queue:** Flag conflicting signals/overrides as `Mixed/Needs Review`.
+- [ ] 4. **Exposure granularity.** Consider turning the boolean `internetExposed` into a multi-level confidence score or separate flags for "likely edge" vs. "needs validation" to reduce false positives on internal-only services.【F:app/utils/classification.ts†L1774-L1822】

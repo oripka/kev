@@ -55,6 +55,10 @@ See `NUXTUI.md` for Nuxt UI details.
 - [ ] index.vue is huge
     - [ ] put the filter uaccordion in its own component
     - [ ] extract logical functions in composables where it makes sense
+- [ ] The “Reclassify cached data” action never re-runs the classifiers against stored vulnerability entries. The API only rebuilds aggregated catalog tables from whatever classification categories were already saved, so updates to classification.ts or curated hints won’t propagate until a full re-import or database reset occurs.
+- [ ] Fix the reclassify job to pull raw vulnerabilityEntries, rerun enrichEntry, and persist updated categories before rebuilding catalog tables, ensuring new heuristics take effect immediately.
+
+
 
 
 ## Future
