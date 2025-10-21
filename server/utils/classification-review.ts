@@ -692,7 +692,7 @@ export const runClassificationReview = async (
       { role: "user", content: buildUserPrompt(auditEntries, overview, context) },
     ],
     temperature: 0.2,
-    max_tokens: 1200,
+    max_completion_tokens: 1200,
   };
 
   try {
