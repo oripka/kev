@@ -19,7 +19,7 @@ import type {
 const DEFAULT_MAX_ENTRIES = 12;
 const DEFAULT_MODEL = "gpt-5-mini-nano";
 const DEFAULT_API_URL = "https://api.openai.com/v1/chat/completions";
-const DEFAULT_TEMPERATURE = 0.2;
+const DEFAULT_CUSTOM_API_TEMPERATURE = 0.2;
 
 type RuntimeConfig = {
   llmAudit?: {
@@ -68,8 +68,12 @@ const resolveClassificationRuntimeConfig = (): ClassificationRuntimeConfig => {
   const parsedMaxEntries = Number.parseInt(llmAudit.maxEntries || "", 10);
   const apiUrl = llmAudit.apiUrl || DEFAULT_API_URL;
   const parsedTemperature = parseTemperature(llmAudit.temperature);
-  const fallbackTemperature =
-    apiUrl === DEFAULT_API_URL ? DEFAULT_TEMPERATURE : null;
+  const temperature =
+    apiUrl === DEFAULT_API_URL
+      ? // The default OpenAI endpoint (gpt-5-mini-nano) only supports the implicit
+        // temperature of 1. Omitting the parameter avoids unsupported_value errors.
+        null
+      : parsedTemperature ?? DEFAULT_CUSTOM_API_TEMPERATURE;
 
   return {
     apiUrl,
@@ -80,7 +84,7 @@ const resolveClassificationRuntimeConfig = (): ClassificationRuntimeConfig => {
       Number.isFinite(parsedMaxEntries) && parsedMaxEntries > 0
         ? Math.max(1, parsedMaxEntries)
         : DEFAULT_MAX_ENTRIES,
-    temperature: parsedTemperature ?? fallbackTemperature,
+    temperature,
   };
 };
 
