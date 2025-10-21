@@ -27,6 +27,7 @@ import { getDatabase, getMetadata } from '../utils/sqlite'
 import { tables } from '../database/client'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 import { importMetasploitCatalog } from '../utils/metasploit'
+import { importMarketIntel } from '../utils/market'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -94,7 +95,7 @@ const ONE_DAY_MS = 86_400_000
 
 type ImportMode = 'auto' | 'force' | 'cache'
 
-const IMPORT_SOURCE_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit']
+const IMPORT_SOURCE_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'market']
 
 const isImportSourceKey = (value: string): value is ImportTaskKey => {
   return IMPORT_SOURCE_ORDER.includes(value as ImportTaskKey)
@@ -141,6 +142,12 @@ export default defineEventHandler(async event => {
   let historicImported = 0
   let enisaImported = 0
   let metasploitImported = 0
+  let marketImported = 0
+  let marketOfferCount = 0
+  let marketProgramCount = 0
+  let marketProductCount = 0
+  let marketLastCaptureAt: string | null = null
+  let marketLastSnapshotAt: string | null = null
 
   const db = getDatabase()
 
@@ -488,10 +495,35 @@ export default defineEventHandler(async event => {
       markTaskSkipped('metasploit', 'Skipped this run')
     }
 
+    let marketSummary = {
+      imported: 0,
+      offerCount: 0,
+      programCount: 0,
+      productCount: 0,
+      lastCaptureAt: null as string | null,
+      lastSnapshotAt: null as string | null
+    }
+    if (shouldImport('market')) {
+      marketSummary = await importMarketIntel(db)
+      marketImported = marketSummary.imported
+      marketOfferCount = marketSummary.offerCount
+      marketProgramCount = marketSummary.programCount
+      marketProductCount = marketSummary.productCount
+      marketLastCaptureAt = marketSummary.lastCaptureAt
+      marketLastSnapshotAt = marketSummary.lastSnapshotAt
+    } else {
+      markTaskSkipped('market', 'Skipped this run')
+    }
+
     const catalogSummary = rebuildCatalog(db)
     rebuildProductCatalog(db)
 
-    const totalImported = kevImported + historicImported + enisaImported + metasploitImported
+    const totalImported =
+      kevImported +
+      historicImported +
+      enisaImported +
+      metasploitImported +
+      marketImported
 
     const segments: string[] = []
     if (shouldImport('kev')) {
@@ -508,8 +540,27 @@ export default defineEventHandler(async event => {
       const withModules =
         metasploitModules > 0
           ? `${base} across ${metasploitModules.toLocaleString()} modules`
-          : base
+        : base
       segments.push(withModules)
+    }
+    if (shouldImport('market')) {
+      const base = `${marketOfferCount.toLocaleString()} market intelligence offers`
+      const extras: string[] = []
+      if (marketProgramCount > 0) {
+        extras.push(`${marketProgramCount.toLocaleString()} programs`)
+      }
+      if (marketProductCount > 0) {
+        extras.push(`${marketProductCount.toLocaleString()} matched products`)
+      }
+      if (extras.length === 0) {
+        segments.push(base)
+      } else {
+        const scopeLabel =
+          extras.length === 1
+            ? extras[0]
+            : `${extras.slice(0, -1).join(', ')} and ${extras[extras.length - 1]}`
+        segments.push(`${base} across ${scopeLabel}`)
+      }
     }
 
     const progressMessage = segments.length
@@ -526,6 +577,12 @@ export default defineEventHandler(async event => {
       metasploitImported: metasploitSummary.imported,
       metasploitModules: metasploitSummary.modules,
       metasploitCommit: metasploitSummary.commit,
+      marketImported: marketSummary.imported,
+      marketOfferCount: marketSummary.offerCount,
+      marketProgramCount: marketSummary.programCount,
+      marketProductCount: marketSummary.productCount,
+      marketLastCaptureAt: marketSummary.lastCaptureAt,
+      marketLastSnapshotAt: marketSummary.lastSnapshotAt,
       dateReleased,
       catalogVersion,
       enisaLastUpdated,

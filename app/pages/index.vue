@@ -27,6 +27,7 @@ import type {
   KevCountDatum,
   KevEntryDetail,
   KevEntrySummary,
+  MarketOverview,
   TrackedProductQuickFilterTarget,
 } from "~/types";
 import type {
@@ -158,6 +159,25 @@ const epssRange = ref<[number, number]>([
 const priceRange = ref<[number, number]>([0, 0]);
 let priceRangeInitialised = false;
 let pendingPriceRange: [number, number] | null = null;
+
+const marketPriceBounds = ref<MarketOverview["priceBounds"]>({
+  minRewardUsd: null,
+  maxRewardUsd: null,
+});
+
+const defaultPriceRange = ref<[number, number]>([0, 0]);
+
+const priceSliderReady = computed(() => {
+  const bounds = marketPriceBounds.value;
+
+  return (
+    typeof bounds.minRewardUsd === "number" &&
+    typeof bounds.maxRewardUsd === "number" &&
+    Number.isFinite(bounds.minRewardUsd) &&
+    Number.isFinite(bounds.maxRewardUsd) &&
+    bounds.maxRewardUsd > bounds.minRewardUsd
+  );
+});
 
 const selectedSource = ref<"all" | "kev" | "enisa" | "historic" | "metasploit">("all");
 const isFiltering = ref(false);
@@ -845,20 +865,37 @@ const {
 
 const {
   currencyFormatter,
-  defaultPriceRange,
+  defaultPriceRange: marketDefaultPriceRange,
   filteredMarketPriceBounds,
   filteredMarketPriceSummary,
   marketCategoryCounts,
   marketOfferCount,
-  marketPriceBounds,
+  marketPriceBounds: marketMetricsPriceBounds,
   marketProgramCounts,
 } = useMarketMetrics(marketOverview);
 
-const priceSliderReady = computed(
-  () =>
-    typeof marketPriceBounds.value.minRewardUsd === "number" &&
-    typeof marketPriceBounds.value.maxRewardUsd === "number" &&
-    marketPriceBounds.value.maxRewardUsd > marketPriceBounds.value.minRewardUsd
+watch(
+  marketDefaultPriceRange,
+  (next) => {
+    defaultPriceRange.value = [next[0], next[1]];
+  },
+  { immediate: true },
+);
+
+watch(
+  marketMetricsPriceBounds,
+  (next) => {
+    if (!next) {
+      marketPriceBounds.value = { minRewardUsd: null, maxRewardUsd: null };
+      return;
+    }
+
+    marketPriceBounds.value = {
+      minRewardUsd: next.minRewardUsd,
+      maxRewardUsd: next.maxRewardUsd,
+    };
+  },
+  { immediate: true },
 );
 
 watch(

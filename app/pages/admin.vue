@@ -48,6 +48,8 @@ interface ImportSourceStatus {
   lastImportedAt: string | null;
   cachedAt: string | null;
   totalCount: number | null;
+  programCount: number | null;
+  latestCaptureAt: string | null;
 }
 
 interface AdminImportStatusResponse {
@@ -99,6 +101,7 @@ const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
   historic: "historic entries",
   enisa: "ENISA entries",
   metasploit: "Metasploit entries",
+  market: "market intelligence offers",
 };
 
 const { formatDate } = useDateDisplay();
@@ -129,6 +132,12 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
     }
     if (source.dateReleased) {
       versionParts.push(`Released ${formatTimestamp(source.dateReleased)}`);
+    }
+    if (source.latestCaptureAt) {
+      versionParts.push(`Latest capture ${formatTimestamp(source.latestCaptureAt)}`);
+    }
+    if (typeof source.programCount === "number") {
+      versionParts.push(`${numberFormatter.format(source.programCount)} programs tracked`);
     }
 
     const versionLabel = versionParts.length ? versionParts.join(" • ") : null;
@@ -420,10 +429,21 @@ const importProgressPercent = computed(() => {
   if (phase === "enriching") {
     return 80;
   }
-  if (phase === "fetchingEnisa" || phase === "fetchingHistoric" || phase === "fetchingMetasploit") {
+  if (
+    phase === "fetchingEnisa" ||
+    phase === "fetchingHistoric" ||
+    phase === "fetchingMetasploit" ||
+    phase === "fetchingMarket"
+  ) {
     return 60;
   }
-  if (phase === "saving" || phase === "savingEnisa" || phase === "savingHistoric" || phase === "savingMetasploit") {
+  if (
+    phase === "saving" ||
+    phase === "savingEnisa" ||
+    phase === "savingHistoric" ||
+    phase === "savingMetasploit" ||
+    phase === "savingMarket"
+  ) {
     return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));
   }
   return 0;
@@ -522,6 +542,7 @@ const importSummaryMessage = computed(() => {
     historic: summary.historicImported,
     enisa: summary.enisaImported,
     metasploit: summary.metasploitImported,
+    market: summary.marketImported,
   };
 
   const segments = summary.sources
@@ -535,6 +556,24 @@ const importSummaryMessage = computed(() => {
         return summary.metasploitModules > 0
           ? `${base} across ${summary.metasploitModules.toLocaleString()} modules`
           : base;
+      }
+      if (source === "market") {
+        const base = `${counts[source].toLocaleString()} ${label}`;
+        const extras: string[] = [];
+        if (summary.marketProgramCount > 0) {
+          extras.push(`${summary.marketProgramCount.toLocaleString()} programs`);
+        }
+        if (summary.marketProductCount > 0) {
+          extras.push(`${summary.marketProductCount.toLocaleString()} matched products`);
+        }
+        if (!extras.length) {
+          return base;
+        }
+        const scopeLabel =
+          extras.length === 1
+            ? extras[0]
+            : `${extras.slice(0, -1).join(", ")} and ${extras[extras.length - 1]}`;
+        return `${base} across ${scopeLabel}`;
       }
       return `${counts[source].toLocaleString()} ${label}`;
     })
@@ -576,6 +615,19 @@ const importSummaryMessage = computed(() => {
       );
     } else if (summary.metasploitCommit) {
       messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);
+    }
+  }
+
+  if (summary.sources.includes("market")) {
+    const details: string[] = [];
+    if (summary.marketLastCaptureAt) {
+      details.push(`latest offer captured ${formatTimestamp(summary.marketLastCaptureAt)}`);
+    }
+    if (summary.marketLastSnapshotAt) {
+      details.push(`last snapshot ${formatTimestamp(summary.marketLastSnapshotAt)}`);
+    }
+    if (details.length) {
+      messageParts.push(`Market intelligence ${details.join(" • ")}.`);
     }
   }
 

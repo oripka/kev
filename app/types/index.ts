@@ -260,15 +260,17 @@ export type ImportPhase =
   | 'fetchingEnisa'
   | 'fetchingHistoric'
   | 'fetchingMetasploit'
+  | 'fetchingMarket'
   | 'enriching'
   | 'saving'
   | 'savingEnisa'
   | 'savingHistoric'
   | 'savingMetasploit'
+  | 'savingMarket'
   | 'complete'
   | 'error'
 
-export type ImportTaskKey = CatalogSource
+export type ImportTaskKey = CatalogSource | 'market'
 
 export type ImportTaskStatus = 'pending' | 'running' | 'complete' | 'skipped' | 'error'
 

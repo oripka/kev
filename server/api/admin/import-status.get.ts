@@ -11,6 +11,8 @@ type ImportSourceStatus = {
   lastImportedAt: string | null
   cachedAt: string | null
   totalCount: number | null
+  programCount: number | null
+  latestCaptureAt: string | null
 }
 
 type ImportStatusResponse = {
@@ -56,6 +58,11 @@ export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
   ])
 
   const kevEntryCount = parseNumber(getMetadata('entryCount') ?? getMetadata('catalog.entryCount'))
+  const marketLastImportedAt = normaliseString(getMetadata('market.lastImportAt'))
+  const marketCachedAt = normaliseString(getMetadata('market.cachedAt'))
+  const marketOfferCount = parseNumber(getMetadata('market.offerCount'))
+  const marketProgramCount = parseNumber(getMetadata('market.programCount'))
+  const marketLastCaptureAt = normaliseString(getMetadata('market.lastCaptureAt'))
 
   return {
     sources: [
@@ -66,7 +73,9 @@ export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
         dateReleased: normaliseString(getMetadata('dateReleased')),
         lastImportedAt: normaliseString(getMetadata('lastImportAt')),
         cachedAt: kevCachedAt,
-        totalCount: kevEntryCount
+        totalCount: kevEntryCount,
+        programCount: null,
+        latestCaptureAt: null
       },
       {
         key: 'enisa',
@@ -75,7 +84,9 @@ export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
         dateReleased: null,
         lastImportedAt: normaliseString(getMetadata('enisa.lastImportAt')),
         cachedAt: enisaCachedAt,
-        totalCount: parseNumber(getMetadata('enisa.totalCount'))
+        totalCount: parseNumber(getMetadata('enisa.totalCount')),
+        programCount: null,
+        latestCaptureAt: null
       },
       {
         key: 'historic',
@@ -84,7 +95,9 @@ export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
         dateReleased: null,
         lastImportedAt: normaliseString(getMetadata('historic.lastImportAt')),
         cachedAt: null,
-        totalCount: parseNumber(getMetadata('historic.totalCount'))
+        totalCount: parseNumber(getMetadata('historic.totalCount')),
+        programCount: null,
+        latestCaptureAt: null
       },
       {
         key: 'metasploit',
@@ -93,7 +106,20 @@ export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
         dateReleased: null,
         lastImportedAt: normaliseString(getMetadata('metasploit.lastImportAt')),
         cachedAt: null,
-        totalCount: parseNumber(getMetadata('metasploit.totalCount'))
+        totalCount: parseNumber(getMetadata('metasploit.totalCount')),
+        programCount: null,
+        latestCaptureAt: null
+      },
+      {
+        key: 'market',
+        label: 'Market intelligence dataset',
+        catalogVersion: null,
+        dateReleased: null,
+        lastImportedAt: marketLastImportedAt,
+        cachedAt: marketCachedAt ?? marketLastCaptureAt,
+        totalCount: marketOfferCount,
+        programCount: marketProgramCount,
+        latestCaptureAt: marketLastCaptureAt
       }
     ]
   }

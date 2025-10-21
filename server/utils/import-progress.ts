@@ -8,11 +8,13 @@ type ImportPhase =
   | 'fetchingEnisa'
   | 'fetchingHistoric'
   | 'fetchingMetasploit'
+  | 'fetchingMarket'
   | 'enriching'
   | 'saving'
   | 'savingEnisa'
   | 'savingHistoric'
   | 'savingMetasploit'
+  | 'savingMarket'
   | 'complete'
   | 'error'
 
@@ -28,7 +30,7 @@ type ImportProgressState = {
   tasks: ImportTaskProgress[]
 }
 
-const TASK_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit']
+const TASK_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'market']
 
 const createTaskState = (
   key: ImportTaskKey,

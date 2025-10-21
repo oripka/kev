@@ -30,6 +30,12 @@ type ImportSummary = {
   metasploitImported: number
   metasploitModules: number
   metasploitCommit: string | null
+  marketImported: number
+  marketOfferCount: number
+  marketProgramCount: number
+  marketProductCount: number
+  marketLastCaptureAt: string | null
+  marketLastSnapshotAt: string | null
   dateReleased: string
   catalogVersion: string
   enisaLastUpdated: string | null
@@ -173,11 +179,13 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     phase === 'fetchingEnisa' ||
     phase === 'fetchingHistoric' ||
     phase === 'fetchingMetasploit' ||
+    phase === 'fetchingMarket' ||
     phase === 'enriching' ||
     phase === 'saving' ||
     phase === 'savingEnisa' ||
     phase === 'savingHistoric' ||
-    phase === 'savingMetasploit'
+    phase === 'savingMetasploit' ||
+    phase === 'savingMarket'
 
   const stopProgressPolling = () => {
     if (progressTimer) {

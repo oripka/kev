@@ -114,8 +114,8 @@ export default defineEventHandler((): MarketStatsResponse => {
       sourceCaptureDate: offer.sourceCaptureDate,
       programName: program.name,
       programType: program.programType,
-      productNames: sql<string | null>`group_concat(distinct ${productCatalog.productName}, ', ')`,
-      vendorNames: sql<string | null>`group_concat(distinct ${productCatalog.vendorName}, ', ')`
+      productNames: sql<string | null>`group_concat(distinct ${productCatalog.productName})`,
+      vendorNames: sql<string | null>`group_concat(distinct ${productCatalog.vendorName})`
     })
     .from(offer)
     .innerJoin(program, eq(program.id, offer.programId))
