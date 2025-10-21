@@ -11,6 +11,7 @@ export default defineNuxtConfig({
       orgId: process.env.LLM_AUDIT_ORG_ID ?? '',
       model: process.env.LLM_AUDIT_MODEL ?? '',
       maxEntries: process.env.LLM_AUDIT_MAX_ENTRIES ?? '',
+      temperature: process.env.LLM_AUDIT_TEMPERATURE ?? '',
     },
     openai: {
       apiKey: process.env.OPENAI_API_KEY ?? '',

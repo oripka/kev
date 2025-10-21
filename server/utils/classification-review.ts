@@ -19,6 +19,7 @@ import type {
 const DEFAULT_MAX_ENTRIES = 12;
 const DEFAULT_MODEL = "gpt-5-mini-nano";
 const DEFAULT_API_URL = "https://api.openai.com/v1/chat/completions";
+const DEFAULT_TEMPERATURE = 0.2;
 
 type RuntimeConfig = {
   llmAudit?: {
@@ -27,13 +28,33 @@ type RuntimeConfig = {
     orgId: string;
     model: string;
     maxEntries: string;
+    temperature?: string;
   };
   openai?: {
     apiKey: string;
   };
 };
 
-const resolveClassificationRuntimeConfig = () => {
+type ClassificationRuntimeConfig = {
+  apiUrl: string;
+  apiKey: string;
+  organisationId?: string;
+  model: string;
+  maxEntries: number;
+  temperature: number | null;
+};
+
+const parseTemperature = (value: string | undefined): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveClassificationRuntimeConfig = (): ClassificationRuntimeConfig => {
   const config = useRuntimeConfig<RuntimeConfig>();
   const llmAudit = config.llmAudit ?? {
     apiUrl: "",
@@ -41,12 +62,17 @@ const resolveClassificationRuntimeConfig = () => {
     orgId: "",
     model: "",
     maxEntries: "",
+    temperature: "",
   };
 
   const parsedMaxEntries = Number.parseInt(llmAudit.maxEntries || "", 10);
+  const apiUrl = llmAudit.apiUrl || DEFAULT_API_URL;
+  const parsedTemperature = parseTemperature(llmAudit.temperature);
+  const fallbackTemperature =
+    apiUrl === DEFAULT_API_URL ? DEFAULT_TEMPERATURE : null;
 
   return {
-    apiUrl: llmAudit.apiUrl || DEFAULT_API_URL,
+    apiUrl,
     apiKey: llmAudit.apiKey || config.openai?.apiKey || "",
     organisationId: llmAudit.orgId || undefined,
     model: llmAudit.model || DEFAULT_MODEL,
@@ -54,6 +80,7 @@ const resolveClassificationRuntimeConfig = () => {
       Number.isFinite(parsedMaxEntries) && parsedMaxEntries > 0
         ? Math.max(1, parsedMaxEntries)
         : DEFAULT_MAX_ENTRIES,
+    temperature: parsedTemperature ?? fallbackTemperature,
   };
 };
 
@@ -660,7 +687,14 @@ export const runClassificationReview = async (
   context?: ClassificationReviewRequestContext,
   options?: { signal?: AbortSignal },
 ): Promise<ClassificationReviewResponse> => {
-  const { apiKey, apiUrl, organisationId, model, maxEntries } =
+  const {
+    apiKey,
+    apiUrl,
+    organisationId,
+    model,
+    maxEntries,
+    temperature,
+  } =
     resolveClassificationRuntimeConfig();
 
   if (!apiKey) {
@@ -685,15 +719,18 @@ export const runClassificationReview = async (
   const auditEntries = trimmed.map(toAuditEntry);
   const overview = buildOverview(auditEntries);
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     model,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: buildUserPrompt(auditEntries, overview, context) },
     ],
-    temperature: 0.2,
     max_completion_tokens: 1200,
   };
+
+  if (typeof temperature === "number") {
+    payload.temperature = temperature;
+  }
 
   try {
     const response = await fetch(apiUrl, {
