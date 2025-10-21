@@ -1050,12 +1050,28 @@ const webApplicationProductPatterns: RegExp[] = [
   /\bintranet portal\b/i,
 ];
 
+const appleIosContextPatterns: RegExp[] = [
+  /\bapple\b/i,
+  /\biphone\b/i,
+  /\bipad\b/i,
+  /\bipod\b/i,
+  /\bipados\b/i,
+  /\bios\s+(?:app|application|device|devices|platform|version|versions)\b/i,
+  /\bios[,\/\s]+ipad(?:os)?\b/i,
+  /\bios\s+(?:and|&)\s+ipad(?:os)?\b/i,
+];
+
+const ciscoIosContextPatterns: RegExp[] = [
+  /\bcisco(?:['’]s)?(?:\s+|[:\/-]\s*)ios\b/i,
+  /\bios\s+(?:xe|xr)(?:\s+(?:web[-\s]?ui|software|system|platform|release|image|train|controller|sd[-\s]?wan))?\b/i,
+  /\bcisco[^.\n]{0,20}\bios\s+software\b/i,
+];
+
 const operatingSystemPatterns: RegExp[] = [
   // --- Client / Desktop Operating Systems ---
   /\bwindows (?:xp|vista|7|8(?:\.1)?|10|11)\b/i,
   /\bmac ?os(?: x)?\b/i,
   /\bmacos\b/i,
-  /\bios\b/i,
   /\bipad ?os\b/i,
   /\bipados\b/i,
   /\bandroid\b/i,
@@ -1709,6 +1725,8 @@ export const classifyDomainCategories = (
     `${entry.vulnerabilityName ?? ""} ${entry.description ?? ""}`
   );
   const text = `${source} ${context}`;
+  const vendorKey = makeVendorKey(entry.vendor);
+  const productKey = makeProductKey(entry.product);
   const categories = new Set(matchCategory(text, domainRules, "Other"));
   const curatedHint = resolveCuratedHint(entry.vendor, entry.product);
 
@@ -1722,6 +1740,34 @@ export const classifyDomainCategories = (
   if (curatedHint?.addCategories?.length) {
     for (const category of curatedHint.addCategories) {
       categories.add(category);
+    }
+  }
+
+  const iosMentioned = /\bios\b/.test(text);
+  const curatedProvidesOperatingSystems = Boolean(
+    curatedHint?.categories?.includes("Operating Systems") ||
+      curatedHint?.addCategories?.includes("Operating Systems")
+  );
+  const ciscoProductFamily =
+    vendorKey === "cisco" && /\bios\b/.test(productKey);
+  const hasCiscoIosContext =
+    iosMentioned &&
+    (ciscoProductFamily || matchesAny(text, ciscoIosContextPatterns));
+  const appleProductContext = /\b(?:ipad(?:os)?|iphone|ipod)\b/.test(
+    productKey
+  );
+  const hasAppleIosContext =
+    iosMentioned &&
+    !hasCiscoIosContext &&
+    (vendorKey === "apple" ||
+      appleProductContext ||
+      matchesAny(text, appleIosContextPatterns));
+
+  if (iosMentioned) {
+    if (hasAppleIosContext) {
+      categories.add("Operating Systems");
+    } else if (!curatedProvidesOperatingSystems) {
+      categories.delete("Operating Systems");
     }
   }
 
@@ -1918,6 +1964,8 @@ export const classifyExploitLayers = (
   const layers = new Set<KevExploitLayer>();
 
   const cvssTraits = parseCvssVector(entry.cvssVector);
+  const vendorKey = makeVendorKey(entry.vendor);
+  const productKey = makeProductKey(entry.product);
   const cvssSuggestsLocal =
     cvssTraits?.attackVector === "L" || cvssTraits?.attackVector === "P";
   const cvssSuggestsRemote =
@@ -2021,9 +2069,10 @@ export const classifyExploitLayers = (
     hasServerSignal = true;
   }
 
-  const networkOperatingSystemSignal = /\bcisco(?:'s)?\s+ios(?:\s+(?:xe|xr))?\b/i.test(
-    text
-  ) || /\bios\s+(?:xe|xr)\b/i.test(text);
+  const ciscoProductFamily =
+    vendorKey === "cisco" && /\bios\b/.test(productKey);
+  const networkOperatingSystemSignal =
+    ciscoProductFamily || matchesAny(text, ciscoIosContextPatterns);
   const mobileManagementSignal =
     /\b(?:mobileiron|endpoint manager mobile|ivanti (?:epmm|endpoint manager mobile)|mobileiron (?:core|sentry))\b/i.test(
       text

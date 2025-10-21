@@ -3,8 +3,7 @@
 > Short log of verified fixes and remaining actions to avoid repeating prior misclassifications.
 
 ## Findings Summary
-- [x] **Cisco IOS misclassified as client:**  
-  `ios` token matched Cisco network OS; now replaced with contextual Apple-only patterns and negative guards for `Cisco IOS` / `IOS XE` / `IOS XR`.
+- [x] **Cisco IOS misclassified as client:** Guarded the iOS heuristics so only Apple contexts add OS tags; Cisco IOS / IOS XE / IOS XR are ignored.
 
 - [x] **Mobile MDM servers misclassified as clients:**  
   `mobile` token required context (`mobile app`, `mobile device`) or handled by product taxonomy (MobileIron/EPMM).
@@ -13,8 +12,8 @@
   LFI tokens removed from client rules and routed into server-side exploit detection.
 
 ## Fixes Implemented
-- [x] Replaced bare `ios` token with contextual Apple-only expressions.  
-- [x] Added explicit negative matches for Cisco IOS variants.  
+- [x] Replaced bare `ios` token with Apple-only matching plus Cisco guards.
+- [x] Added explicit negative matches for Cisco IOS variants.
 - [x] Guarded `mobile` keyword; treat MDM platforms as server-side.  
 - [x] Removed LFI from client patterns and added server LFI list.  
 - [x] Fixed catch-all `clientApplicationPatterns` regex to require actual tokens.  
