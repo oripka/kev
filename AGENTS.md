@@ -40,16 +40,25 @@ See `NUXTUI.md` for Nuxt UI details.
 - Do **not** include internal inventory integrations in the initial release — leave as an opt-in feature.
 
 
-## Roadmap
-
+## Fixed
 
 
 - [x] make a helper to render the dates and render the conssitently in all the app make a configuration siwthc for european/american format ing. in general dont render the hours. make a switch for that but off by default
 - [x] make sure that thecurrent state of filterin and sorting is reflected in the url so a config is linkable. and reloadable a wbesite withthee same filters
 - [x] the search needs to sarch in descripzion and also well known vulenrabiltis %%
-- x ] rename kevmodal and other components that are not kev only anymore.
+- [x] rename kevmodal and other components that are not kev only anymore.
 - [x] make all the badged from domain, exploit dynamics, vulnerbailtiy mix, date (just fitler for that year), cisa kev, , enisa , vendor, produ ct and so on clickable so it goes tothe catalog with that filter active, add to exisitng filters. have an otpion in the settings to have it clear the filtrers nad apply it a snew. but default to or .   
 - [x] Add a dedicated poage for the vulns of the last two weeks. show as a list or cards in a grid 1 col or 2 cols. with a fancy card that has some detials about all the vulns.
+
+## Small Todos
+
+- [ ] index.vue is huge
+    - [ ] put the filter uaccordion in its own component
+    - [ ] extract logical functions in composables where it makes sense
+
+
+## Future
+
 - [ ] Add auth and persist my software to database per user
 - [ ] Alerting (Slack / Email) when a new "in the wild" CVE matches saved filters.
 - [ ] Make badge colors more consisten (enisa stands out from the source and has differnet color i the filter panel than int he vuln display
