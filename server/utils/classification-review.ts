@@ -124,16 +124,94 @@ type AuditEntry = {
   curatedHints: SanitisedHint[];
 };
 
+type ChatCompletionMessageContent =
+  | string
+  | Array<
+      | string
+      | {
+          type?: string;
+          text?: string;
+          [key: string]: unknown;
+        }
+    >;
+
+type ChatCompletionMessage = {
+  role?: string;
+  content?: ChatCompletionMessageContent;
+  [key: string]: unknown;
+};
+
 type ChatCompletionResponse = {
   model?: string;
   choices?: Array<{
-    message?: { content?: string };
+    message?: ChatCompletionMessage;
   }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
   };
+};
+
+const serialiseForDebug = (
+  value: unknown,
+  limit = 800,
+): string | undefined => {
+  try {
+    const serialised = JSON.stringify(value);
+    if (!serialised) {
+      return undefined;
+    }
+    return serialised.length > limit
+      ? `${serialised.slice(0, Math.max(0, limit - 1))}…`
+      : serialised;
+  } catch {
+    return undefined;
+  }
+};
+
+const normaliseMessageContent = (
+  content: ChatCompletionMessageContent | undefined,
+): { text: string | null; debug?: string } => {
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return { text: trimmed || null };
+  }
+
+  if (Array.isArray(content)) {
+    const textSegments: string[] = [];
+
+    for (const part of content) {
+      if (typeof part === "string") {
+        const trimmed = part.trim();
+        if (trimmed) {
+          textSegments.push(trimmed);
+        }
+        continue;
+      }
+
+      if (part && typeof part === "object") {
+        const segment =
+          typeof part.text === "string"
+            ? part.text.trim()
+            : typeof (part as { content?: string }).content === "string"
+              ? (part as { content?: string }).content.trim()
+              : "";
+
+        if (segment) {
+          textSegments.push(segment);
+        }
+      }
+    }
+
+    const combined = textSegments.join("\n").trim();
+    return {
+      text: combined || null,
+      debug: serialiseForDebug(content, 1000),
+    };
+  }
+
+  return { text: null };
 };
 
 const vendorProductHintMap = new Map<string, SanitisedHint[]>();
@@ -759,13 +837,21 @@ export const runClassificationReview = async (
     }
 
     const completion = (await response.json()) as ChatCompletionResponse;
-    const content = completion.choices?.[0]?.message?.content;
+    const message = completion.choices?.[0]?.message;
+    const { text: content, debug: contentDebug } = normaliseMessageContent(
+      message?.content,
+    );
 
-    if (!content || typeof content !== "string") {
+    if (!content) {
+      const debugSnippet =
+        contentDebug ??
+        serialiseForDebug(message, 1000) ??
+        serialiseForDebug(completion, 1000);
       return {
         status: "error",
         message: "LLM response did not include textual content.",
         code: "empty-response",
+        ...(debugSnippet ? { details: debugSnippet } : {}),
       };
     }
 
