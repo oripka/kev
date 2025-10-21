@@ -17,6 +17,7 @@ const sourceLabels: Record<CatalogSource, string> = {
   enisa: "ENISA",
   historic: "Historic dataset",
   metasploit: "Metasploit",
+  market: "Market intelligence",
 };
 
 const searchTerm = ref("");

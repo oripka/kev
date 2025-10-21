@@ -6,6 +6,7 @@ export const catalogSourceLabels: Record<CatalogSource, string> = {
   enisa: "ENISA",
   historic: "Historic dataset",
   metasploit: "Metasploit",
+  market: "Market intelligence",
 };
 
 export const catalogSourceBadgeMap: SourceBadgeMap = {
@@ -13,4 +14,5 @@ export const catalogSourceBadgeMap: SourceBadgeMap = {
   enisa: { label: catalogSourceLabels.enisa, color: "secondary" },
   historic: { label: catalogSourceLabels.historic, color: "warning" },
   metasploit: { label: catalogSourceLabels.metasploit, color: "info" },
+  market: { label: catalogSourceLabels.market, color: "neutral" },
 };

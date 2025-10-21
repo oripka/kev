@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { CatalogSource } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
@@ -54,6 +54,18 @@ const collectProducts = (rows: ProductRow[], source: CatalogSource, target: Map<
 }
 
 export const rebuildProductCatalog = (db: DrizzleDatabase) => {
+  const marketRows = db
+    .select({
+      vendor: tables.productCatalog.vendorName,
+      product: tables.productCatalog.productName,
+      vendorKey: tables.productCatalog.vendorKey,
+      productKey: tables.productCatalog.productKey,
+      sources: tables.productCatalog.sources
+    })
+    .from(tables.productCatalog)
+    .where(sql`${tables.productCatalog.sources} LIKE '%"market"%'`)
+    .all()
+
   const kevRows = db
     .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
     .from(tables.vulnerabilityEntries)
@@ -88,6 +100,29 @@ export const rebuildProductCatalog = (db: DrizzleDatabase) => {
   collectProducts(enisaRows, 'enisa', catalog)
   collectProducts(historicRows, 'historic', catalog)
   collectProducts(metasploitRows, 'metasploit', catalog)
+
+  for (const row of marketRows) {
+    const vendorName = row.vendor ?? ''
+    const productName = row.product ?? ''
+    const normalised = normaliseVendorProduct({ vendor: vendorName, product: productName })
+    const { key: productKey, label: normalisedProduct } = normalised.product
+    const { key: vendorKey, label: normalisedVendor } = normalised.vendor
+
+    const existing = catalog.get(productKey)
+    if (existing) {
+      existing.sources.add('market')
+      updateRecord(existing, vendorName || normalisedVendor, productName || normalisedProduct)
+      continue
+    }
+
+    catalog.set(productKey, {
+      productKey,
+      productName: productName || normalisedProduct,
+      vendorKey,
+      vendorName: vendorName || normalisedVendor,
+      sources: new Set<CatalogSource>(['market'])
+    })
+  }
 
   db.transaction(tx => {
     tx.delete(tables.productCatalog).run()

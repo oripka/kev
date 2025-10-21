@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { tables } from '../database/client'
+import { runMarketImport } from '../market/importer'
+import { marketPrograms } from '../market/programs'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
 import {
@@ -25,12 +27,33 @@ const toCount = (value: unknown): number =>
 export const importMarketIntel = async (db: DrizzleDatabase): Promise<ImportMarketSummary> => {
   try {
     markTaskRunning('market', 'Refreshing market intelligence metadata')
+    const totalPrograms = marketPrograms.length
     setImportPhase('fetchingMarket', {
-      message: 'Gathering latest market intelligence metrics',
+      message: 'Fetching market intelligence sources',
       completed: 0,
-      total: 0
+      total: totalPrograms
     })
-    markTaskProgress('market', 0, 0, 'Gathering latest market intelligence metrics')
+    markTaskProgress('market', 0, totalPrograms, 'Fetching market intelligence sources')
+
+    let completedPrograms = 0
+    const importResult = await runMarketImport(db, {
+      onProgramStart: ({ program, index, total }) => {
+        markTaskProgress('market', index, total, `Fetching ${program.name}`)
+      },
+      onProgramComplete: ({ program, total, offersProcessed }) => {
+        completedPrograms += 1
+        const label = offersProcessed
+          ? `${program.name}: ${offersProcessed.toLocaleString()} offers processed`
+          : `${program.name}: No offers found`
+        markTaskProgress('market', completedPrograms, total, label)
+      },
+      onProgramError: ({ program, total, error }) => {
+        completedPrograms += 1
+        const message = error instanceof Error ? error.message : 'Import failed'
+        console.error('Market program import failed', program.slug, error)
+        markTaskProgress('market', completedPrograms, total, `${program.name}: ${message}`)
+      }
+    })
 
     const offer = tables.marketOffers
     const program = tables.marketPrograms
@@ -75,7 +98,7 @@ export const importMarketIntel = async (db: DrizzleDatabase): Promise<ImportMark
       completed: 0,
       total: 0
     })
-    markTaskProgress('market', 0, 0, 'Recording market intelligence summary')
+    markTaskProgress('market', completedPrograms, totalPrograms, 'Recording market intelligence summary')
 
     const importedAt = new Date().toISOString()
 
@@ -106,7 +129,7 @@ export const importMarketIntel = async (db: DrizzleDatabase): Promise<ImportMark
     markTaskComplete('market', completionLabel)
 
     return {
-      imported: offerCount,
+      imported: importResult.offersProcessed,
       offerCount,
       programCount,
       productCount,

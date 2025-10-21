@@ -19,13 +19,14 @@ interface MatchCountRow {
   count: number
 }
 
+const allowedSources: CatalogSource[] = ['kev', 'enisa', 'historic', 'metasploit', 'market']
+
 const toSources = (value: string): CatalogSource[] => {
   try {
     const parsed = JSON.parse(value) as unknown
     if (Array.isArray(parsed)) {
-      const items = parsed.filter(
-        (entry): entry is CatalogSource =>
-          entry === 'kev' || entry === 'enisa' || entry === 'historic' || entry === 'metasploit'
+      const items = parsed.filter((entry): entry is CatalogSource =>
+        typeof entry === 'string' && allowedSources.includes(entry as CatalogSource)
       )
       return items.length ? items : ['kev']
     }

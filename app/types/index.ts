@@ -7,7 +7,7 @@ export type Range = {
 
 export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 
-export type CatalogSource = 'kev' | 'enisa' | 'historic' | 'metasploit'
+export type CatalogSource = 'kev' | 'enisa' | 'historic' | 'metasploit' | 'market'
 
 export type MarketProgramType = 'exploit-broker' | 'bug-bounty' | 'other'
 
