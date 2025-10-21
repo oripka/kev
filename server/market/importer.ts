@@ -81,7 +81,17 @@ const lookupProductForCve = (tx: DrizzleDatabase, cveId: string | null | undefin
     .where(eq(tables.vulnerabilityEntries.cveId, normalised))
     .get()
 
-  const result = row?.vendor && row?.product ? { vendor: row.vendor, product: row.product } : null
+  let result: { vendor: string; product: string } | null = null
+  if (row?.vendor && row?.product) {
+    const normalisedVendorProduct = normaliseVendorProduct({
+      vendor: row.vendor,
+      product: row.product
+    })
+    result = {
+      vendor: normalisedVendorProduct.vendor.label,
+      product: normalisedVendorProduct.product.label
+    }
+  }
   cveProductCache.set(normalised, result)
   return result
 }

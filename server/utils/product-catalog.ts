@@ -124,10 +124,28 @@ export const rebuildProductCatalog = (db: DrizzleDatabase) => {
     })
   }
 
-  db.transaction(tx => {
-    tx.delete(tables.productCatalog).run()
+  const records = Array.from(catalog.values())
 
-    for (const record of catalog.values()) {
+  db.transaction(tx => {
+    const existingRows = tx
+      .select({ productKey: tables.productCatalog.productKey })
+      .from(tables.productCatalog)
+      .all()
+
+    const existingKeys = new Set(
+      existingRows
+        .map(row => row.productKey)
+        .filter((key): key is string => typeof key === 'string' && key.length > 0)
+    )
+
+    const nextKeys = new Set<string>()
+
+    for (const record of records) {
+      const sourcesJson = JSON.stringify(Array.from(record.sources))
+      const searchTerms = toSearchTerms(record.vendorName, record.productName)
+
+      nextKeys.add(record.productKey)
+
       tx
         .insert(tables.productCatalog)
         .values({
@@ -135,10 +153,26 @@ export const rebuildProductCatalog = (db: DrizzleDatabase) => {
           productName: record.productName,
           vendorKey: record.vendorKey,
           vendorName: record.vendorName,
-          sources: JSON.stringify(Array.from(record.sources)),
-          searchTerms: toSearchTerms(record.vendorName, record.productName)
+          sources: sourcesJson,
+          searchTerms
+        })
+        .onConflictDoUpdate({
+          target: tables.productCatalog.productKey,
+          set: {
+            productName: record.productName,
+            vendorKey: record.vendorKey,
+            vendorName: record.vendorName,
+            sources: sourcesJson,
+            searchTerms
+          }
         })
         .run()
+    }
+
+    for (const key of existingKeys) {
+      if (!nextKeys.has(key)) {
+        tx.delete(tables.productCatalog).where(eq(tables.productCatalog.productKey, key)).run()
+      }
     }
   })
 }
