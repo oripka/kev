@@ -1,10 +1,13 @@
 import { getQuery } from 'h3'
-import { and, asc, eq, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import type {
+  CvssSeverity,
   MarketOffersResponse,
   MarketOfferCategoryTag,
   MarketOfferTarget,
+  MarketOfferTargetMatch,
+  MarketOfferTargetMatchMethod,
   MarketProgramType
 } from '~/types'
 import { tables } from '../../database/client'
@@ -104,6 +107,77 @@ const parseListParam = (value: unknown): string[] => {
   return []
 }
 
+const clampConfidence = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(100, Math.max(0, Math.round(value)))
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value.trim())
+    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+      return Math.min(100, Math.max(0, Math.round(parsed)))
+    }
+  }
+
+  return null
+}
+
+const normaliseMatchMethod = (value: unknown): MarketOfferTargetMatchMethod => {
+  if (typeof value !== 'string') {
+    return 'unknown'
+  }
+
+  const normalised = value.trim().toLowerCase()
+
+  if (normalised === 'exact' || normalised === 'fuzzy' || normalised === 'manual-review') {
+    return normalised
+  }
+
+  return 'unknown'
+}
+
+const parseStringArrayField = (value: unknown): string[] => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value)
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(entry => (typeof entry === 'string' ? entry.trim() : ''))
+        .filter(Boolean)
+    }
+  } catch {
+    // ignore parse errors and fall through to empty array
+  }
+
+  return []
+}
+
+const normaliseCvssSeverity = (value: unknown): CvssSeverity | null => {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalised = value.trim().toLowerCase()
+
+  switch (normalised) {
+    case 'none':
+      return 'None'
+    case 'low':
+      return 'Low'
+    case 'medium':
+      return 'Medium'
+    case 'high':
+      return 'High'
+    case 'critical':
+      return 'Critical'
+    default:
+      return null
+  }
+}
+
 const combineConditions = (conditions: Condition[]): Condition | undefined => {
   if (!conditions.length) {
     return undefined
@@ -141,6 +215,31 @@ type OfferRow = {
   categoryData: string | null
   targetCveIds: string | null
   kevMatchIds: string | null
+}
+
+type CatalogEntryRow = {
+  cveId: string
+  productKey: string
+  productName: string
+  vendorKey: string
+  vendorName: string
+  vulnerabilityName: string
+  domainCategories: string | null
+  exploitLayers: string | null
+  vulnerabilityCategories: string | null
+  cvssScore: number | null
+  cvssSeverity: string | null
+  cvssVector: string | null
+}
+
+type TargetEntryRow = {
+  productKey?: string
+  productName?: string
+  vendorKey?: string
+  vendorName?: string
+  cveId?: string | null
+  confidence?: number | string | null
+  matchMethod?: string | null
 }
 
 export default defineEventHandler(async event => {
@@ -274,7 +373,9 @@ export default defineEventHandler(async event => {
     'productName', ${product.productName},
     'vendorKey', ${product.vendorKey},
     'vendorName', ${product.vendorName},
-    'cveId', ${target.cveId}
+    'cveId', ${target.cveId},
+    'confidence', ${target.confidence},
+    'matchMethod', ${target.matchMethod}
   ))`
 
   const categorySelect = sql<string | null>`json_group_array(distinct json_object(
@@ -349,7 +450,27 @@ export default defineEventHandler(async event => {
 
   const rows = dataQuery.all() as OfferRow[]
 
-  const items = rows.map<MarketOffersResponse['items'][number]>(row => {
+  type IntermediateOffer = {
+    id: string
+    title: string
+    description: string | null
+    programName: string
+    programType: MarketProgramType
+    minRewardUsd: number | null
+    maxRewardUsd: number | null
+    averageRewardUsd: number | null
+    sourceUrl: string
+    sourceCaptureDate: string
+    exclusivity: string | null
+    targets: MarketOfferTarget[]
+    categories: MarketOfferCategoryTag[]
+    matchedCveIds: string[]
+    matchedKevCveIds: string[]
+  }
+
+  const matchedCveAccumulator = new Set<string>()
+
+  const intermediateItems = rows.map<IntermediateOffer>(row => {
     const minRewardValue = normaliseReward(row.minRewardUsd)
     const maxRewardValue = normaliseReward(row.maxRewardUsd)
 
@@ -358,7 +479,7 @@ export default defineEventHandler(async event => {
         ? ((minRewardValue ?? maxRewardValue ?? 0) + (maxRewardValue ?? minRewardValue ?? 0)) / 2
         : null
 
-    const parsedTargets = parseJsonArray<Partial<MarketOfferTarget>>(row.targetData)
+    const parsedTargets = parseJsonArray<Partial<TargetEntryRow>>(row.targetData)
     const targets: MarketOfferTarget[] = []
 
     for (const targetEntry of parsedTargets) {
@@ -375,12 +496,22 @@ export default defineEventHandler(async event => {
         ? targetEntry.cveId.trim()
         : null
 
+      if (cveId) {
+        matchedCveAccumulator.add(cveId)
+      }
+
+      const confidence = clampConfidence(targetEntry.confidence ?? null)
+      const matchMethod = normaliseMatchMethod(targetEntry.matchMethod)
+
       targets.push({
         productKey,
         productName,
         vendorKey,
         vendorName,
-        cveId
+        cveId,
+        confidence,
+        matchMethod,
+        matches: []
       })
     }
 
@@ -416,6 +547,10 @@ export default defineEventHandler(async event => {
     const matchedKevCveIds = Array.from(new Set(kevCves))
     const matchedCveIds = Array.from(new Set([...directCves, ...matchedKevCveIds]))
 
+    for (const cveId of matchedCveIds) {
+      matchedCveAccumulator.add(cveId)
+    }
+
     return {
       id: row.id,
       title: row.title,
@@ -432,6 +567,112 @@ export default defineEventHandler(async event => {
       categories,
       matchedCveIds,
       matchedKevCveIds
+    }
+  })
+
+  const catalogMatchesByCveId = new Map<string, MarketOfferTargetMatch>()
+  const catalogMatchesByProductKey = new Map<string, MarketOfferTargetMatch[]>()
+
+  if (matchedCveAccumulator.size) {
+    const catalogRows = db
+      .select({
+        cveId: catalog.cveId,
+        productKey: catalog.productKey,
+        productName: catalog.product,
+        vendorKey: catalog.vendorKey,
+        vendorName: catalog.vendor,
+        vulnerabilityName: catalog.vulnerabilityName,
+        domainCategories: catalog.domainCategories,
+        exploitLayers: catalog.exploitLayers,
+        vulnerabilityCategories: catalog.vulnerabilityCategories,
+        cvssScore: catalog.cvssScore,
+        cvssSeverity: catalog.cvssSeverity,
+        cvssVector: catalog.cvssVector
+      })
+      .from(catalog)
+      .where(inArray(catalog.cveId, Array.from(matchedCveAccumulator)))
+      .all() as CatalogEntryRow[]
+
+    for (const entry of catalogRows) {
+      const domainCategories = parseStringArrayField(entry.domainCategories) as MarketOfferTargetMatch['domainCategories']
+      const exploitLayers = parseStringArrayField(entry.exploitLayers) as MarketOfferTargetMatch['exploitLayers']
+      const vulnerabilityCategories = parseStringArrayField(entry.vulnerabilityCategories) as MarketOfferTargetMatch['vulnerabilityCategories']
+
+      const cvssScoreValue =
+        typeof entry.cvssScore === 'number' && Number.isFinite(entry.cvssScore)
+          ? entry.cvssScore
+          : null
+
+      const cvssVectorValue =
+        typeof entry.cvssVector === 'string' && entry.cvssVector.trim()
+          ? entry.cvssVector.trim()
+          : null
+
+      const match: MarketOfferTargetMatch = {
+        cveId: entry.cveId,
+        vulnerabilityName: entry.vulnerabilityName,
+        vendorName: entry.vendorName,
+        vendorKey: entry.vendorKey,
+        productName: entry.productName,
+        productKey: entry.productKey,
+        domainCategories,
+        exploitLayers,
+        vulnerabilityCategories,
+        cvssScore: cvssScoreValue,
+        cvssSeverity: normaliseCvssSeverity(entry.cvssSeverity),
+        cvssVector: cvssVectorValue
+      }
+
+      catalogMatchesByCveId.set(match.cveId, match)
+
+      const existing = catalogMatchesByProductKey.get(match.productKey)
+      if (existing) {
+        if (!existing.some(candidate => candidate.cveId === match.cveId)) {
+          existing.push(match)
+        }
+      } else {
+        catalogMatchesByProductKey.set(match.productKey, [match])
+      }
+    }
+  }
+
+  const items = intermediateItems.map<MarketOffersResponse['items'][number]>(item => {
+    const enrichedTargets = item.targets.map(target => {
+      const matches: MarketOfferTargetMatch[] = []
+
+      if (target.cveId) {
+        const directMatch = catalogMatchesByCveId.get(target.cveId)
+        if (directMatch) {
+          matches.push(directMatch)
+        }
+      }
+
+      const relatedMatches = catalogMatchesByProductKey.get(target.productKey) ?? []
+      for (const candidate of relatedMatches) {
+        if (!matches.some(existing => existing.cveId === candidate.cveId)) {
+          matches.push(candidate)
+        }
+      }
+
+      return { ...target, matches }
+    })
+
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      programName: item.programName,
+      programType: item.programType,
+      minRewardUsd: item.minRewardUsd,
+      maxRewardUsd: item.maxRewardUsd,
+      averageRewardUsd: item.averageRewardUsd,
+      sourceUrl: item.sourceUrl,
+      sourceCaptureDate: item.sourceCaptureDate,
+      exclusivity: item.exclusivity,
+      targets: enrichedTargets,
+      categories: item.categories,
+      matchedCveIds: item.matchedCveIds,
+      matchedKevCveIds: item.matchedKevCveIds
     }
   })
 

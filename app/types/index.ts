@@ -240,12 +240,32 @@ export type MarketOfferSummary = {
   targetSummaries: string[]
 }
 
+export type MarketOfferTargetMatchMethod = 'exact' | 'fuzzy' | 'manual-review' | 'unknown'
+
+export type MarketOfferTargetMatch = {
+  cveId: string
+  vulnerabilityName: string
+  vendorName: string
+  vendorKey: string
+  productName: string
+  productKey: string
+  domainCategories: KevDomainCategory[]
+  exploitLayers: KevExploitLayer[]
+  vulnerabilityCategories: KevVulnerabilityCategory[]
+  cvssScore: number | null
+  cvssSeverity: CvssSeverity | null
+  cvssVector: string | null
+}
+
 export type MarketOfferTarget = {
   productKey: string
   productName: string
   vendorKey: string
   vendorName: string
   cveId: string | null
+  confidence: number | null
+  matchMethod: MarketOfferTargetMatchMethod
+  matches: MarketOfferTargetMatch[]
 }
 
 export type MarketOfferCategoryTag = {

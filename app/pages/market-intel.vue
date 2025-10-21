@@ -5,9 +5,11 @@ import type { TableColumn } from "@nuxt/ui";
 import StatCard from "~/components/StatCard.vue";
 import { useDateDisplay } from "~/composables/useDateDisplay";
 import type {
+  CvssSeverity,
   MarketOfferListItem,
   MarketOffersResponse,
   MarketProgramType,
+  MarketOfferTargetMatchMethod,
   MarketStatsResponse,
 } from "~/types";
 
@@ -38,6 +40,58 @@ const formatCategoryTypeLabel = (value: string) =>
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+
+const cvssSeverityColors: Record<CvssSeverity, string> = {
+  None: "success",
+  Low: "primary",
+  Medium: "warning",
+  High: "error",
+  Critical: "error",
+};
+
+const formatCvssScore = (score: number | null) =>
+  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;
+
+const buildCvssLabel = (
+  severity: MarketOfferListItem["targets"][number]["matches"][number]["cvssSeverity"],
+  score: number | null,
+) => {
+  const parts: string[] = [];
+
+  if (severity) {
+    parts.push(severity);
+  }
+
+  const formattedScore = formatCvssScore(score);
+  if (formattedScore) {
+    parts.push(formattedScore);
+  }
+
+  if (!parts.length) {
+    parts.push("Unknown");
+  }
+
+  return parts.join(" ");
+};
+
+const matchMethodLabels: Record<MarketOfferTargetMatchMethod, string> = {
+  exact: "Exact catalog match",
+  fuzzy: "Fuzzy catalog match",
+  "manual-review": "Manual review mapping",
+  unknown: "Match method unknown",
+};
+
+const matchMethodColors: Record<MarketOfferTargetMatchMethod, string> = {
+  exact: "success",
+  fuzzy: "warning",
+  "manual-review": "neutral",
+  unknown: "neutral",
+};
+
+const classificationLabelClass =
+  "text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400";
+
+const classificationBadgeClass = "text-[11px] font-semibold";
 
 const { data, pending, error } = await useFetch<MarketStatsResponse>(
   "/api/market/stats",
@@ -548,6 +602,31 @@ const UBadge = resolveComponent("UBadge");
 const ULink = resolveComponent("ULink");
 const UIcon = resolveComponent("UIcon");
 
+const renderClassificationGroup = (label: string, values: string[], color: string) => {
+  if (!values.length) {
+    return null;
+  }
+
+  return h("div", { class: "space-y-1" }, [
+    h("p", { class: classificationLabelClass }, label),
+    h(
+      "div",
+      { class: "flex flex-wrap gap-1" },
+      values.map((value) =>
+        h(
+          UBadge,
+          {
+            color,
+            variant: "soft",
+            class: classificationBadgeClass,
+          },
+          () => value,
+        ),
+      ),
+    ),
+  ]);
+};
+
 const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
   {
     id: "program",
@@ -685,7 +764,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
   },
   {
     id: "targets",
-    header: "Targets",
+    header: "Targets & KEV alignment",
     cell: ({ row }) => {
       const offer = row.original;
       if (!offer.targets.length) {
@@ -698,18 +777,198 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
 
       return h(
         "div",
-        { class: "flex flex-col gap-2" },
-        offer.targets.map((target) =>
-          h(
-            ULink,
+        { class: "space-y-3" },
+        offer.targets.map((target) => {
+          const metadataBadges: Array<ReturnType<typeof h>> = [];
+          const methodLabel = matchMethodLabels[target.matchMethod];
+          if (methodLabel) {
+            metadataBadges.push(
+              h(
+                UBadge,
+                {
+                  color: matchMethodColors[target.matchMethod],
+                  variant: "soft",
+                  class: "text-[11px] font-semibold",
+                },
+                () => methodLabel,
+              ),
+            );
+          }
+
+          if (typeof target.confidence === "number") {
+            metadataBadges.push(
+              h(
+                UBadge,
+                {
+                  color: "neutral",
+                  variant: "soft",
+                  class: "text-[11px] font-semibold",
+                },
+                () => `Confidence ${target.confidence}%`,
+              ),
+            );
+          }
+
+          const matchNodes = target.matches.map((match) => {
+            const headerItems: Array<ReturnType<typeof h>> = [
+              h(
+                ULink,
+                {
+                  to: { path: "/", query: { search: match.cveId } },
+                  class: "inline-flex items-center justify-center",
+                  "aria-label": `Open catalog with ${match.cveId}`,
+                },
+                () =>
+                  h(
+                    UBadge,
+                    {
+                      color: "error",
+                      variant: "soft",
+                      class: "text-xs font-semibold",
+                    },
+                    () => match.cveId,
+                  ),
+              ),
+              h(
+                "span",
+                { class: "text-xs font-medium text-neutral-700 dark:text-neutral-200" },
+                match.vulnerabilityName,
+              ),
+            ];
+
+            const hasCvss =
+              typeof match.cvssScore === "number" || Boolean(match.cvssSeverity);
+            if (hasCvss) {
+              const cvssColor = match.cvssSeverity
+                ? cvssSeverityColors[match.cvssSeverity]
+                : "neutral";
+              const cvssLabel = buildCvssLabel(match.cvssSeverity, match.cvssScore);
+              headerItems.push(
+                h(
+                  UBadge,
+                  {
+                    color: cvssColor,
+                    variant: "soft",
+                    class: "text-[11px] font-semibold",
+                  },
+                  () => cvssLabel,
+                ),
+              );
+            }
+
+            const alignmentNote =
+              match.vendorKey !== target.vendorKey || match.productKey !== target.productKey
+                ? h(
+                    "p",
+                    { class: "text-[11px] text-neutral-500 dark:text-neutral-400" },
+                    `Catalog entry: ${match.vendorName} · ${match.productName}`,
+                  )
+                : null;
+
+            const vectorNode = match.cvssVector
+              ? h(
+                  "code",
+                  {
+                    class:
+                      "block max-w-full overflow-x-auto rounded bg-neutral-100 px-2 py-1 text-[11px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300",
+                  },
+                  match.cvssVector,
+                )
+              : null;
+
+            const classificationSections = [
+              renderClassificationGroup("Domain", match.domainCategories, "primary"),
+              renderClassificationGroup("Exploit dynamics", match.exploitLayers, "warning"),
+              renderClassificationGroup("Vulnerability mix", match.vulnerabilityCategories, "secondary"),
+            ].filter(Boolean);
+
+            return h(
+              "div",
+              { class: "space-y-2 rounded-md bg-neutral-50 p-3 dark:bg-neutral-800/60" },
+              [
+                h("div", { class: "flex flex-wrap items-center gap-2" }, headerItems),
+                alignmentNote,
+                vectorNode,
+                ...classificationSections,
+              ].filter(Boolean),
+            );
+          });
+
+          const fallbackNode = target.matches.length
+            ? null
+            : h(
+                "div",
+                { class: "space-y-2 rounded-md bg-neutral-50 p-3 dark:bg-neutral-800/60" },
+                [
+                  target.cveId
+                    ? h(
+                        "div",
+                        { class: "flex flex-wrap items-center gap-2" },
+                        [
+                          h(
+                            ULink,
+                            {
+                              to: { path: "/", query: { search: target.cveId } },
+                              class: "inline-flex items-center justify-center",
+                              "aria-label": `Open catalog search for ${target.cveId}`,
+                            },
+                            () =>
+                              h(
+                                UBadge,
+                                {
+                                  color: "neutral",
+                                  variant: "soft",
+                                  class: "text-xs font-semibold",
+                                },
+                                () => target.cveId,
+                              ),
+                          ),
+                          h(
+                            "span",
+                            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+                            "No Known Exploited Vulnerability alignment found.",
+                          ),
+                        ],
+                      )
+                    : h(
+                        "p",
+                        { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+                        "No Known Exploited Vulnerability alignment found.",
+                      ),
+                ],
+              );
+
+          return h(
+            "div",
             {
-              to: { path: "/", query: { product: target.productKey } },
               class:
-                "inline-flex w-fit items-center gap-2 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 transition hover:border-primary-300 hover:text-primary-600 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-primary-500/40 dark:hover:text-primary-200",
+                "space-y-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-700",
             },
-            () => `${target.vendorName} · ${target.productName}`,
-          ),
-        ),
+            [
+              h(
+                "div",
+                { class: "flex flex-col gap-2" },
+                [
+                  h(
+                    ULink,
+                    {
+                      to: { path: "/", query: { product: target.productKey } },
+                      class:
+                        "inline-flex w-fit items-center gap-2 text-sm font-semibold text-neutral-900 transition hover:text-primary-600 dark:text-neutral-50 dark:hover:text-primary-200",
+                    },
+                    () => `${target.vendorName} · ${target.productName}`,
+                  ),
+                  metadataBadges.length
+                    ? h("div", { class: "flex flex-wrap gap-1" }, metadataBadges)
+                    : null,
+                ].filter(Boolean),
+              ),
+              target.matches.length
+                ? h("div", { class: "space-y-3" }, matchNodes)
+                : fallbackNode,
+            ].filter(Boolean),
+          );
+        }),
       );
     },
   },
