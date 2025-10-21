@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { lookupCveName } from '~/utils/cveToNameMap'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type {
@@ -822,7 +822,8 @@ const createEmptyMarketSignal = (): MarketSignal => ({
 
 export const getMarketSignalsForProducts = (
   db: DrizzleDatabase,
-  productKeys: string[]
+  productKeys: string[],
+  options: { programTypes?: MarketProgramType[] } = {}
 ): Map<string, MarketSignal> => {
   const keys = Array.from(new Set(productKeys.filter(key => Boolean(key))))
   const signals = new Map<string, MarketSignal>()
@@ -835,6 +836,19 @@ export const getMarketSignalsForProducts = (
   const offer = tables.marketOffers
   const program = tables.marketPrograms
   const category = tables.marketOfferCategories
+
+  const programTypeFilter = Array.from(
+    new Set(
+      (options.programTypes ?? []).filter(
+        (type): type is MarketProgramType =>
+          type === 'exploit-broker' || type === 'bug-bounty' || type === 'other'
+      )
+    )
+  )
+
+  const productCondition = inArray(target.productKey, keys)
+  const programCondition =
+    programTypeFilter.length > 0 ? inArray(program.programType, programTypeFilter) : null
 
   const priceRows = db
     .select({
@@ -849,7 +863,7 @@ export const getMarketSignalsForProducts = (
     .from(target)
     .innerJoin(offer, eq(offer.id, target.offerId))
     .innerJoin(program, eq(program.id, offer.programId))
-    .where(inArray(target.productKey, keys))
+    .where(programCondition ? and(productCondition, programCondition) : productCondition)
     .groupBy(target.productKey)
     .all()
 
@@ -889,8 +903,10 @@ export const getMarketSignalsForProducts = (
       categoryName: category.categoryName
     })
     .from(target)
-    .innerJoin(category, eq(category.offerId, target.offerId))
-    .where(inArray(target.productKey, keys))
+    .innerJoin(offer, eq(offer.id, target.offerId))
+    .innerJoin(category, eq(category.offerId, offer.id))
+    .innerJoin(program, eq(program.id, offer.programId))
+    .where(programCondition ? and(productCondition, programCondition) : productCondition)
     .groupBy(
       target.productKey,
       category.categoryType,

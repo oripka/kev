@@ -1,4 +1,4 @@
-import type { CatalogSource, KevEntrySummary } from "~/types";
+import type { CatalogSource, KevEntrySummary, MarketProgramType } from "~/types";
 
 export type FilterKey = "domain" | "exploit" | "vulnerability" | "vendor" | "product";
 
@@ -24,6 +24,7 @@ export type QuickFilterUpdate = {
   epssRange?: [number, number];
   priceRange?: [number, number];
   showAllResults?: boolean;
+  marketProgramType?: MarketProgramType | null;
 };
 
 export type ActiveFilterKey =
@@ -37,7 +38,8 @@ export type ActiveFilterKey =
   | "cvssRange"
   | "epssRange"
   | "priceRange"
-  | "owned";
+  | "owned"
+  | "marketProgramType";
 
 export type ActiveFilter = {
   key: ActiveFilterKey;

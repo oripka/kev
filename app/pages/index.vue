@@ -28,6 +28,7 @@ import type {
   KevEntryDetail,
   KevEntrySummary,
   MarketOverview,
+  MarketProgramType,
   TrackedProductQuickFilterTarget,
 } from "~/types";
 import type {
@@ -51,6 +52,16 @@ const { formatDate } = useDateDisplay();
 
 const formatTimestamp = (value: string) =>
   formatDate(value, { fallback: value, preserveInputOnError: true });
+
+const formatMarketProgramTypeLabel = (type: MarketProgramType) => {
+  if (type === "exploit-broker") {
+    return "Exploit brokers";
+  }
+  if (type === "bug-bounty") {
+    return "Bug bounty";
+  }
+  return "Other programs";
+};
 
 const sliderMinYear = 2021;
 const sliderMaxYear = new Date().getFullYear();
@@ -181,6 +192,7 @@ const priceSliderReady = computed(() => {
 });
 
 const selectedSource = ref<"all" | "kev" | "enisa" | "historic" | "metasploit">("all");
+const selectedMarketProgramType = ref<MarketProgramType | null>(null);
 const isFiltering = ref(false);
 
 const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => {
@@ -477,6 +489,18 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
     selectedSource.value = resolvedSource;
   }
 
+  const marketProgramTypeParam = extractQueryString(getValue("marketProgramType"));
+  const resolvedMarketProgramType: MarketProgramType | null =
+    marketProgramTypeParam === "exploit-broker" ||
+    marketProgramTypeParam === "bug-bounty" ||
+    marketProgramTypeParam === "other"
+      ? marketProgramTypeParam
+      : null;
+
+  if (selectedMarketProgramType.value !== resolvedMarketProgramType) {
+    selectedMarketProgramType.value = resolvedMarketProgramType;
+  }
+
   const updateBooleanFlag = (
     target: { value: boolean },
     key: string,
@@ -646,6 +670,10 @@ const routeQueryState = computed<Record<string, string>>(() => {
 
   if (selectedSource.value !== "all") {
     query.source = selectedSource.value;
+  }
+
+  if (selectedMarketProgramType.value) {
+    query.marketProgramType = selectedMarketProgramType.value;
   }
 
   if (showWellKnownOnly.value) {
@@ -819,6 +847,10 @@ const filterParams = computed(() => {
     params.source = selectedSource.value;
   }
 
+  if (selectedMarketProgramType.value) {
+    params.marketProgramType = selectedMarketProgramType.value;
+  }
+
   if (cvssStart > defaultCvssRange[0] || cvssEnd < defaultCvssRange[1]) {
     params.cvssMin = cvssStart;
     params.cvssMax = cvssEnd;
@@ -971,6 +1003,10 @@ const filterParamsWithoutYear = computed(() => {
     params.source = selectedSource.value;
   }
 
+  if (selectedMarketProgramType.value) {
+    params.marketProgramType = selectedMarketProgramType.value;
+  }
+
   if (cvssStart > defaultCvssRange[0] || cvssEnd < defaultCvssRange[1]) {
     params.cvssMin = cvssStart;
     params.cvssMax = cvssEnd;
@@ -1100,6 +1136,7 @@ const hasActiveFilters = computed(() => {
     epssRange.value[1] < defaultEpssRange[1];
   const hasSourceFilter = selectedSource.value !== "all";
   const hasTrackedFilter = showOwnedOnlyEffective.value;
+  const hasMarketProgramFilter = Boolean(selectedMarketProgramType.value);
 
   return Boolean(
     hasSearch ||
@@ -1110,7 +1147,8 @@ const hasActiveFilters = computed(() => {
       hasCustomYearRange.value ||
       hasCvssFilter ||
       hasEpssFilter ||
-      hasSourceFilter
+      hasSourceFilter ||
+      hasMarketProgramFilter
   );
 });
 
@@ -1535,6 +1573,7 @@ const resetFilters = () => {
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
   selectedSource.value = "all";
+  selectedMarketProgramType.value = null;
   resetYearRange();
   if (priceSliderReady.value) {
     const [min, max] = defaultPriceRange.value;
@@ -2559,6 +2598,14 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     items.push({ key: "source", label: "Source", value: label });
   }
 
+  if (selectedMarketProgramType.value) {
+    items.push({
+      key: "marketProgramType",
+      label: "Market coverage",
+      value: formatMarketProgramTypeLabel(selectedMarketProgramType.value),
+    });
+  }
+
   if (
     cvssRange.value[0] > defaultCvssRange[0] ||
     cvssRange.value[1] < defaultCvssRange[1]
@@ -2727,6 +2774,16 @@ const openAccordionSections = (...sections: string[]) => {
   asideAccordionValue.value = Array.from(next);
 };
 
+const toggleMarketProgramTypeFilter = (value: MarketProgramType) => {
+  if (selectedMarketProgramType.value === value) {
+    selectedMarketProgramType.value = null;
+    return;
+  }
+
+  selectedMarketProgramType.value = value;
+  openAccordionSections("market");
+};
+
 const applyQuickFilters = (update: QuickFilterUpdate) => {
   const {
     filters: filterUpdates,
@@ -2742,6 +2799,7 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     epssRange: nextEpssRange,
     priceRange: nextPriceRange,
     showAllResults: nextShowAllResults,
+    marketProgramType,
   } = update;
 
   if (replaceFiltersOnQuickApply.value) {
@@ -2809,6 +2867,18 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     showOwnedOnly.value = nextOwnedOnly;
   }
 
+  if (marketProgramType !== undefined) {
+    if (
+      marketProgramType === "exploit-broker" ||
+      marketProgramType === "bug-bounty" ||
+      marketProgramType === "other"
+    ) {
+      selectedMarketProgramType.value = marketProgramType;
+    } else {
+      selectedMarketProgramType.value = null;
+    }
+  }
+
   const sectionsToOpen = new Set<string>(["filters"]);
 
   if (filterUpdates?.domain) {
@@ -2819,6 +2889,15 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
   }
   if (filterUpdates?.vulnerability) {
     sectionsToOpen.add("vulnerability");
+  }
+
+  if (
+    marketProgramType &&
+    (marketProgramType === "exploit-broker" ||
+      marketProgramType === "bug-bounty" ||
+      marketProgramType === "other")
+  ) {
+    sectionsToOpen.add("market");
   }
   if (filterUpdates?.vendor) {
     sectionsToOpen.add("top-vendors");
@@ -2973,6 +3052,11 @@ const clearFilter = (
 
   if (key === "owned") {
     showOwnedOnly.value = false;
+    return;
+  }
+
+  if (key === "marketProgramType") {
+    selectedMarketProgramType.value = null;
     return;
   }
 
@@ -3309,30 +3393,51 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         );
 
         if (signal.programTypes.length) {
-          const typeLabel = signal.programTypes
-            .map((type) => {
-              if (type === "exploit-broker") {
-                return "Exploit brokers";
-              }
-              if (type === "bug-bounty") {
-                return "Bug bounty";
-              }
-              return type;
-            })
-            .join(" · ");
+          const badges = signal.programTypes.map((type) =>
+            h(
+              UBadge,
+              {
+                color:
+                  type === "exploit-broker"
+                    ? "error"
+                    : type === "bug-bounty"
+                      ? "primary"
+                      : "neutral",
+                variant: "soft",
+                class: "text-[10px] font-semibold sm:text-xs",
+              },
+              () => formatMarketProgramTypeLabel(type),
+            ),
+          );
 
-          if (typeLabel) {
+          if (badges.length) {
             children.push(
-              h(
-                "p",
-                { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-                typeLabel
-              )
+              h("div", { class: "flex flex-wrap gap-2" }, badges),
             );
           }
         }
 
-        return h("div", { class: "flex flex-col gap-1" }, children);
+        if (signal.categories.length) {
+          const categoryBadges = signal.categories.slice(0, 4).map((category) =>
+            h(
+              UBadge,
+              {
+                color: "neutral",
+                variant: "outline",
+                class: "text-[10px] font-medium dark:border-neutral-700 sm:text-xs",
+              },
+              () => category.name,
+            ),
+          );
+
+          if (categoryBadges.length) {
+            children.push(
+              h("div", { class: "flex flex-wrap gap-2" }, categoryBadges),
+            );
+          }
+        }
+
+        return h("div", { class: "flex flex-col gap-2" }, children);
       },
     },
     {
@@ -3560,6 +3665,42 @@ const tableMeta = {
                       >
                         {{ option === "all" ? "All sources" : catalogSourceLabels[option as CatalogSource] }}
                       </UButton>
+                    </div>
+                  </UFormField>
+
+                  <UFormField label="Market programs">
+                    <div class="space-y-2">
+                      <div class="flex flex-wrap gap-2">
+                        <UButton
+                          size="sm"
+                          :color="
+                            selectedMarketProgramType === 'exploit-broker'
+                              ? 'primary'
+                              : 'neutral'
+                          "
+                          :variant="
+                            selectedMarketProgramType === 'exploit-broker'
+                              ? 'solid'
+                              : 'outline'
+                          "
+                          :aria-pressed="selectedMarketProgramType === 'exploit-broker'"
+                          @click="toggleMarketProgramTypeFilter('exploit-broker')"
+                        >
+                          <span class="flex items-center gap-2">
+                            Exploit brokers
+                            <UBadge
+                              color="error"
+                              variant="soft"
+                              class="text-[10px] font-semibold"
+                            >
+                              Market
+                            </UBadge>
+                          </span>
+                        </UButton>
+                      </div>
+                      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                        Highlight CVEs with exploit broker payouts.
+                      </p>
                     </div>
                   </UFormField>
                 </div>

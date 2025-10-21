@@ -1074,7 +1074,18 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
                   </p>
                 </div>
               </div>
-              <div class="mt-3 flex flex-wrap gap-2">
+              <div v-if="offer.targetSummaries.length" class="mt-3 flex flex-wrap gap-2">
+                <UBadge
+                  v-for="summary in offer.targetSummaries"
+                  :key="`target-${offer.id}-${summary}`"
+                  color="primary"
+                  variant="soft"
+                  class="text-xs font-medium"
+                >
+                  {{ summary }}
+                </UBadge>
+              </div>
+              <div v-else class="mt-3 flex flex-wrap gap-2">
                 <UBadge
                   v-for="name in offer.productNames"
                   :key="`product-${offer.id}-${name}`"

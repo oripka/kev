@@ -237,6 +237,7 @@ export type MarketOfferSummary = {
   sourceCaptureDate: string | null
   productNames: string[]
   vendorNames: string[]
+  targetSummaries: string[]
 }
 
 export type MarketOfferTarget = {

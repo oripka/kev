@@ -8,7 +8,8 @@ import type {
   KevEntrySummary,
   KevExploitLayer,
   KevResponse,
-  KevVulnerabilityCategory
+  KevVulnerabilityCategory,
+  MarketProgramType
 } from '~/types'
 import { tables } from '../database/client'
 import {
@@ -46,6 +47,7 @@ type CatalogQuery = {
   ransomwareOnly?: boolean
   internetExposedOnly?: boolean
   limit?: number
+  marketProgramType?: MarketProgramType
 }
 
 type Condition = SQL<unknown>
@@ -192,6 +194,15 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const source = getString('source')
   if (source === 'kev' || source === 'enisa' || source === 'historic' || source === 'metasploit') {
     filters.source = source
+  }
+
+  const marketProgramType = getString('marketProgramType') as MarketProgramType | undefined
+  if (
+    marketProgramType === 'exploit-broker' ||
+    marketProgramType === 'bug-bounty' ||
+    marketProgramType === 'other'
+  ) {
+    filters.marketProgramType = marketProgramType
   }
 
   const cvssMin = getFloat('cvssMin')
@@ -417,6 +428,19 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
     )
   }
 
+  if (filters.marketProgramType) {
+    conditions.push(
+      sql`exists (
+        select 1
+        from market_offer_targets target
+        inner join market_offers offer on offer.id = target.offer_id
+        inner join market_programs program on program.id = offer.program_id
+        where target.product_key = ${ce.productKey}
+          and program.program_type = ${filters.marketProgramType}
+      )`
+    )
+  }
+
   return conditions
 }
 
@@ -483,7 +507,13 @@ const queryEntries = (
   const productKeys = Array.from(
     new Set(rows.map(row => row.product_key).filter((key): key is string => typeof key === 'string' && key.length > 0))
   )
-  const marketSignals = getMarketSignalsForProducts(db, productKeys)
+  const marketSignals = getMarketSignalsForProducts(
+    db,
+    productKeys,
+    filters.marketProgramType
+      ? { programTypes: [filters.marketProgramType] }
+      : undefined
+  )
 
   return rows.map(row => catalogRowToSummary(row, { marketSignals }))
 }
@@ -702,7 +732,8 @@ const createEmptyMarketOverview = (): KevResponse['market'] => ({
 
 const computeMarketOverview = (
   db: DrizzleDatabase,
-  productKeys: string[]
+  productKeys: string[],
+  options?: { programType?: MarketProgramType }
 ): KevResponse['market'] => {
   const offer = tables.marketOffers
   const target = tables.marketOfferTargets
@@ -720,6 +751,13 @@ const computeMarketOverview = (
 
   const uniqueKeys = Array.from(new Set(productKeys.filter(key => Boolean(key))))
 
+  const programTypeFilter =
+    options?.programType === 'exploit-broker' ||
+    options?.programType === 'bug-bounty' ||
+    options?.programType === 'other'
+      ? options.programType
+      : null
+
   if (!uniqueKeys.length) {
     return {
       ...createEmptyMarketOverview(),
@@ -730,6 +768,13 @@ const computeMarketOverview = (
     }
   }
 
+  const productCondition = inArray(target.productKey, uniqueKeys)
+  const programCondition =
+    programTypeFilter !== null ? eq(program.programType, programTypeFilter) : null
+  const combinedCondition = programCondition
+    ? and(productCondition, programCondition)
+    : productCondition
+
   const filteredRow = db
     .select({
       count: sql<number>`count(distinct ${offer.id})`,
@@ -738,7 +783,8 @@ const computeMarketOverview = (
     })
     .from(target)
     .innerJoin(offer, eq(offer.id, target.offerId))
-    .where(inArray(target.productKey, uniqueKeys))
+    .innerJoin(program, eq(program.id, offer.programId))
+    .where(combinedCondition)
     .get()
 
   const programCountRows = db
@@ -749,7 +795,7 @@ const computeMarketOverview = (
     .from(target)
     .innerJoin(offer, eq(offer.id, target.offerId))
     .innerJoin(program, eq(program.id, offer.programId))
-    .where(inArray(target.productKey, uniqueKeys))
+    .where(combinedCondition)
     .groupBy(program.programType)
     .all()
 
@@ -770,8 +816,9 @@ const computeMarketOverview = (
     })
     .from(target)
     .innerJoin(offer, eq(offer.id, target.offerId))
-    .innerJoin(category, eq(category.offerId, target.offerId))
-    .where(inArray(target.productKey, uniqueKeys))
+    .innerJoin(category, eq(category.offerId, offer.id))
+    .innerJoin(program, eq(program.id, offer.programId))
+    .where(combinedCondition)
     .groupBy(
       category.categoryType,
       category.categoryKey,
@@ -874,7 +921,10 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
   const updatedAt = computeUpdatedAt(db)
   const market = computeMarketOverview(
     db,
-    entries.map(entry => entry.productKey).filter((key): key is string => typeof key === 'string' && key.length > 0)
+    entries
+      .map(entry => entry.productKey)
+      .filter((key): key is string => typeof key === 'string' && key.length > 0),
+    filters.marketProgramType ? { programType: filters.marketProgramType } : undefined
   )
 
   return {

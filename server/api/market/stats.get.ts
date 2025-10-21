@@ -112,7 +112,8 @@ export default defineEventHandler((): MarketStatsResponse => {
       programName: program.name,
       programType: program.programType,
       productNames: sql<string | null>`group_concat(distinct ${productCatalog.productName})`,
-      vendorNames: sql<string | null>`group_concat(distinct ${productCatalog.vendorName})`
+      vendorNames: sql<string | null>`group_concat(distinct ${productCatalog.vendorName})`,
+      targetSummaries: sql<string | null>`group_concat(distinct ${productCatalog.vendorName} || ' · ' || ${productCatalog.productName})`
     })
     .from(offer)
     .innerJoin(program, eq(program.id, offer.programId))
@@ -150,7 +151,8 @@ export default defineEventHandler((): MarketStatsResponse => {
       sourceUrl: row.sourceUrl,
       sourceCaptureDate: row.sourceCaptureDate,
       productNames: splitValues(row.productNames),
-      vendorNames: splitValues(row.vendorNames)
+      vendorNames: splitValues(row.vendorNames),
+      targetSummaries: splitValues(row.targetSummaries)
     }
   })
 

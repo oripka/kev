@@ -1,3 +1,4 @@
+import { useRuntimeConfig } from "#imports";
 import { curatedProductTaxonomy } from "~/utils/classification";
 import type {
   CatalogSource,
@@ -16,16 +17,45 @@ import type {
 } from "~/types";
 
 const DEFAULT_MAX_ENTRIES = 12;
-const MAX_ENTRIES = Math.max(
-  1,
-  Number.parseInt(process.env.LLM_AUDIT_MAX_ENTRIES ?? "", 10) || DEFAULT_MAX_ENTRIES,
-);
-const MODEL = process.env.LLM_AUDIT_MODEL ?? "gpt-5-mini-nano";
-const API_URL =
-  process.env.LLM_AUDIT_API_URL ?? "https://api.openai.com/v1/chat/completions";
-const API_KEY =
-  process.env.LLM_AUDIT_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-const ORGANISATION_ID = process.env.LLM_AUDIT_ORG_ID;
+const DEFAULT_MODEL = "gpt-5-mini-nano";
+const DEFAULT_API_URL = "https://api.openai.com/v1/chat/completions";
+
+type RuntimeConfig = {
+  llmAudit?: {
+    apiUrl: string;
+    apiKey: string;
+    orgId: string;
+    model: string;
+    maxEntries: string;
+  };
+  openai?: {
+    apiKey: string;
+  };
+};
+
+const resolveClassificationRuntimeConfig = () => {
+  const config = useRuntimeConfig<RuntimeConfig>();
+  const llmAudit = config.llmAudit ?? {
+    apiUrl: "",
+    apiKey: "",
+    orgId: "",
+    model: "",
+    maxEntries: "",
+  };
+
+  const parsedMaxEntries = Number.parseInt(llmAudit.maxEntries || "", 10);
+
+  return {
+    apiUrl: llmAudit.apiUrl || DEFAULT_API_URL,
+    apiKey: llmAudit.apiKey || config.openai?.apiKey || "",
+    organisationId: llmAudit.orgId || undefined,
+    model: llmAudit.model || DEFAULT_MODEL,
+    maxEntries:
+      Number.isFinite(parsedMaxEntries) && parsedMaxEntries > 0
+        ? Math.max(1, parsedMaxEntries)
+        : DEFAULT_MAX_ENTRIES,
+  };
+};
 
 const CLASSIFICATION_HEURISTICS_OVERVIEW = `
 - Domain classification normalises vendor and product names, applies curated overrides, and analyses vulnerability text for web, networking, mail, ICS, and operating-system signals. CVSS network vectors plus remote execution context influence the Internet Edge flag.
@@ -630,7 +660,10 @@ export const runClassificationReview = async (
   context?: ClassificationReviewRequestContext,
   options?: { signal?: AbortSignal },
 ): Promise<ClassificationReviewResponse> => {
-  if (!API_KEY) {
+  const { apiKey, apiUrl, organisationId, model, maxEntries } =
+    resolveClassificationRuntimeConfig();
+
+  if (!apiKey) {
     return {
       status: "error",
       message:
@@ -639,7 +672,7 @@ export const runClassificationReview = async (
     };
   }
 
-  const trimmed = entries.slice(0, Math.min(entries.length, MAX_ENTRIES));
+  const trimmed = entries.slice(0, Math.min(entries.length, maxEntries));
 
   if (!trimmed.length) {
     return {
@@ -653,7 +686,7 @@ export const runClassificationReview = async (
   const overview = buildOverview(auditEntries);
 
   const payload = {
-    model: MODEL,
+    model,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: buildUserPrompt(auditEntries, overview, context) },
@@ -663,12 +696,12 @@ export const runClassificationReview = async (
   };
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-        ...(ORGANISATION_ID ? { "OpenAI-Organization": ORGANISATION_ID } : {}),
+        Authorization: `Bearer ${apiKey}`,
+        ...(organisationId ? { "OpenAI-Organization": organisationId } : {}),
       },
       body: JSON.stringify(payload),
       signal: options?.signal,
@@ -713,7 +746,7 @@ export const runClassificationReview = async (
 
     const success: ClassificationReviewSuccess = {
       status: "ok",
-      model: completion.model ?? MODEL,
+      model: completion.model ?? model,
       usedEntryIds: auditEntries.map((entry) => entry.id),
       issues: normalised.issues,
       taxonomySuggestions: normalised.taxonomySuggestions,
