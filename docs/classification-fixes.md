@@ -33,7 +33,7 @@
 ## TODO 
 
 - [ ] **Evaluation suite:** Build hand-labeled CVE test set (edge gateways, MDM, LFI, etc.) and fail CI on regressions. build this in -> use vitests implement somethign where i can easyl generate more testcases by adding more vuln definiton to a json or something
-- [ ] **Product taxonomy:** Finalize and publish normalized vendor/product → domain mapping.  
-- [ ] **Scoring rules:** Lock +2 client bonus behind combined cues; boost domain/server weights.  
-- [ ] **NLP hints:** Add lightweight layer (API/admin terms, HTTP verbs, CVSS AV/PR).  
-- [ ] **Manual review queue:** Populate `Mixed / Needs Review` entries for human verification.  
+- [x] **Product taxonomy:** Exported normalized curated vendor/product map for reuse.
+- [x] **Scoring rules:** Client +2 now requires multiple cues; server weights boosted.
+- [x] **NLP hints:** Added admin/API HTTP verb patterns to domain detection logic.
+- [x] **Manual review queue:** Flag conflicting signals/overrides as `Mixed/Needs Review`.

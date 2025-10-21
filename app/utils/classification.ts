@@ -25,6 +25,9 @@ const internetEdgeDomainHints: KevDomainCategory[] = [
 const matchesAny = (value: string, patterns: RegExp[]) =>
   patterns.some((pattern) => pattern.test(value));
 
+const countTrue = (...values: Array<boolean | undefined>): number =>
+  values.reduce((total, current) => (current ? total + 1 : total), 0);
+
 type CvssVectorTraits = {
   attackVector?: "P" | "L" | "A" | "N";
   privilegesRequired?: "N" | "L" | "H";
@@ -88,12 +91,69 @@ const makeVendorProductKey = (vendor?: string | null, product?: string | null) =
   return `${vendorKey}::${productKey}`.trim();
 };
 
+const splitVendorProductKey = (value: string) => {
+  const [vendorKey = "", productKey = ""] = value.split("::");
+  return { vendorKey, productKey };
+};
+
 type CuratedProductHint = {
   categories?: KevDomainCategory[];
   addCategories?: KevDomainCategory[];
   internetExposed?: boolean;
   serverBias?: boolean;
   clientBias?: boolean;
+};
+
+export type CuratedProductTaxonomyEntry = {
+  vendorKey: string | null;
+  productKey: string;
+  categories?: KevDomainCategory[];
+  addCategories?: KevDomainCategory[];
+  internetExposed?: boolean;
+  serverBias?: boolean;
+  clientBias?: boolean;
+};
+
+const cloneCuratedHint = (hint: CuratedProductHint): CuratedProductHint => ({
+  categories: hint.categories ? [...hint.categories] : undefined,
+  addCategories: hint.addCategories ? [...hint.addCategories] : undefined,
+  internetExposed: hint.internetExposed,
+  serverBias: hint.serverBias,
+  clientBias: hint.clientBias,
+});
+
+const toTaxonomyEntry = (
+  vendorKey: string | null,
+  productKey: string,
+  hint: CuratedProductHint
+): CuratedProductTaxonomyEntry => {
+  const cloned = cloneCuratedHint(hint);
+  const entry: CuratedProductTaxonomyEntry = {
+    vendorKey,
+    productKey,
+  };
+
+  if (cloned.categories?.length) {
+    entry.categories = cloned.categories;
+  }
+
+  if (cloned.addCategories?.length) {
+    entry.addCategories = cloned.addCategories;
+  }
+
+  if (cloned.internetExposed !== undefined) {
+    entry.internetExposed = cloned.internetExposed;
+  }
+
+  if (cloned.serverBias !== undefined) {
+    entry.serverBias = cloned.serverBias;
+  }
+
+  if (cloned.clientBias !== undefined) {
+    entry.clientBias = cloned.clientBias;
+  }
+
+  return entry;
 };
 
 const curatedVendorProductHints: Record<string, CuratedProductHint> = {
@@ -258,6 +318,37 @@ const curatedProductHints: Record<string, CuratedProductHint> = {
     serverBias: true,
   },
 };
+
+const curatedTaxonomyEntries = () => {
+  const entries = new Map<string, CuratedProductTaxonomyEntry>();
+
+  for (const [key, hint] of Object.entries(curatedVendorProductHints)) {
+    if (!key) {
+      continue;
+    }
+
+    const { vendorKey, productKey } = splitVendorProductKey(key);
+    if (!vendorKey && !productKey) {
+      continue;
+    }
+
+    const taxonomyKey = `vendor::${vendorKey}::${productKey}`;
+    entries.set(taxonomyKey, toTaxonomyEntry(vendorKey || null, productKey, hint));
+  }
+
+  for (const [productKey, hint] of Object.entries(curatedProductHints)) {
+    if (!productKey) {
+      continue;
+    }
+
+    const taxonomyKey = `product::${productKey}`;
+    entries.set(taxonomyKey, toTaxonomyEntry(null, productKey, hint));
+  }
+
+  return Array.from(entries.values());
+};
+
+export const curatedProductTaxonomy = curatedTaxonomyEntries();
 
 const mergeCuratedHints = (
   base: CuratedProductHint | undefined,
@@ -669,6 +760,18 @@ const webDeviceContextPatterns: RegExp[] = [
   /\bweb[-\s]?ui\b/i,
   /\brouter web interface\b/i,
   /\bdevice (?:web|browser) portal\b/i
+];
+
+const adminApiNlpPatterns: RegExp[] = [
+  /\badmin(?:istrator)?\s+(?:api|rest api|soap api|endpoint|service|interface)\b/i,
+  /\bmanagement\s+(?:api|endpoint|service)\b/i,
+  /\b(?:tenant|system|organization)\s+admin(?:istrator)?\s+api\b/i,
+];
+
+const httpVerbContextPatterns: RegExp[] = [
+  /\b(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+\/[\w./-]*\s+HTTP\/[0-9.]+\b/i,
+  /\bHTTP\s+(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\b/i,
+  /\b(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+(?:request|requests|call|calls|method|methods)\b/i,
 ];
 
 // --- Admin / management panel context ---
@@ -1561,8 +1664,14 @@ export const classifyDomainCategories = (
   const hasStrongWebSignal = matchesAny(context, webStrongContextPatterns);
   const deviceHasWebSignal =
     isWebDevice && matchesAny(context, webDeviceContextPatterns);
-  const hasManagementSignal = matchesAny(context, webManagementPatterns);
-  const hasApiSignal = matchesAny(context, webApiPatterns);
+  const hasNlpAdminSignal = matchesAny(context, adminApiNlpPatterns);
+  const hasNlpHttpVerbSignal = matchesAny(context, httpVerbContextPatterns);
+  const hasManagementSignal =
+    matchesAny(context, webManagementPatterns) || hasNlpAdminSignal;
+  const hasApiSignal =
+    matchesAny(context, webApiPatterns) ||
+    hasNlpHttpVerbSignal ||
+    hasNlpAdminSignal;
   const hasNonWebProductSignal =
     matchesAny(source, nonWebProductPatterns) ||
     matchesAny(context, nonWebProductPatterns);
@@ -1941,25 +2050,27 @@ export const classifyExploitLayers = (
     curatedServerBias ||
     cvssStrongServer;
 
-  const clientArtifactSupport =
-    hasClientFileSignal ||
-    hasClientUserInteractionSignal ||
-    hasClientLocalExecutionSignal ||
-    domainSuggestsClient;
+  const clientArtifactSupportCount = countTrue(
+    hasClientFileSignal,
+    hasClientUserInteractionSignal,
+    hasClientLocalExecutionSignal,
+    domainSuggestsClient
+  );
 
   const clientApplicationScore = hasClientApplicationSignal
-    ? clientArtifactSupport
+    ? clientArtifactSupportCount >= 2
       ? 2
       : 1
     : 0;
 
-  const clientFileSupport =
-    hasClientApplicationSignal ||
-    hasExplicitFileUserAction ||
-    hasClientUserInteractionSignal;
+  const clientFileSupportCount = countTrue(
+    hasClientApplicationSignal,
+    hasExplicitFileUserAction,
+    hasClientUserInteractionSignal
+  );
 
   const clientFileScore = hasClientFileSignal
-    ? clientFileSupport
+    ? clientFileSupportCount >= 2
       ? 2
       : 1
     : 0;
@@ -1986,10 +2097,10 @@ export const classifyExploitLayers = (
 
   let serverScoreBase =
     (hasServerSignal ? 2 : 0) +
-    (domainSuggestsServer ? 2 : 0) +
+    (domainSuggestsServer ? 3 : 0) +
     (hasStrongServerProtocol ? 3 : 0) +
     (hasKernelServerSignal ? 2 : 0) +
-    (curatedServerBias ? 2 : 0);
+    (curatedServerBias ? 3 : 0);
 
   if (hasRemoteContext && !strongClientIndicators) {
     serverScoreBase += 1;
@@ -2023,17 +2134,36 @@ export const classifyExploitLayers = (
     }
   }
 
+  let forcedServerOverride = false;
+
   if (
     serverHardConstraint &&
     !(cvssSuggestsLocal && hasClientLocalExecutionSignal && !hasRemoteContext) &&
     serverScore <= clientScore
   ) {
     serverScore = clientScore + 1;
+    forcedServerOverride = true;
   }
 
   const scoreDelta = Math.abs(clientScore - serverScore);
   let hasMixedContext =
     scoreDelta <= 1 && clientPrimaryEvidence && serverPrimaryEvidence;
+
+  const conflictingDomainHints = domainSuggestsClient && domainSuggestsServer;
+  const conflictingCuratedBias = curatedClientBias && curatedServerBias;
+  const strongSignalsBothSides = strongClientIndicators && strongServerIndicators;
+
+  if (
+    !hasMixedContext &&
+    (strongSignalsBothSides || conflictingDomainHints || conflictingCuratedBias) &&
+    scoreDelta <= 2
+  ) {
+    hasMixedContext = true;
+  }
+
+  if (!hasMixedContext && forcedServerOverride && clientPrimaryEvidence) {
+    hasMixedContext = true;
+  }
 
   const determineSide = (): "Client-side" | "Server-side" => {
     if (clientScore > serverScore) {
