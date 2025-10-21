@@ -239,6 +239,38 @@ export type MarketOfferSummary = {
   vendorNames: string[]
 }
 
+export type MarketOfferTarget = {
+  productKey: string
+  productName: string
+  vendorKey: string
+  vendorName: string
+  cveId: string | null
+}
+
+export type MarketOfferCategoryTag = {
+  type: string
+  key: string
+  name: string
+}
+
+export type MarketOfferListItem = {
+  id: string
+  title: string
+  description: string | null
+  programName: string
+  programType: MarketProgramType
+  minRewardUsd: number | null
+  maxRewardUsd: number | null
+  averageRewardUsd: number | null
+  sourceUrl: string
+  sourceCaptureDate: string
+  exclusivity: string | null
+  targets: MarketOfferTarget[]
+  categories: MarketOfferCategoryTag[]
+  matchedCveIds: string[]
+  matchedKevCveIds: string[]
+}
+
 export type MarketStatsResponse = {
   totals: {
     offerCount: number
@@ -251,6 +283,13 @@ export type MarketStatsResponse = {
   programCounts: KevCountDatum[]
   categoryCounts: MarketCategoryDatum[]
   topOffers: MarketOfferSummary[]
+}
+
+export type MarketOffersResponse = {
+  items: MarketOfferListItem[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export type ImportPhase =
