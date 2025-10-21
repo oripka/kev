@@ -1333,6 +1333,12 @@ const privilegePatterns: RegExp[] = [
   /\b(privilege escalation|elevation of privilege|gain(?:s|ed)? (?:administrative|root|system|kernel|user|superuser) privileges?|eop|lpe)\b/i
 ];
 
+const privilegeRequirementPatterns: RegExp[] = [
+  /\bwith (?:local|high|root|system|administrator|admin|superuser|kernel) (?:privileges?|permissions|access)\b/i,
+  /\brequir(?:es|ing) (?:local|high|root|system|administrator|admin|superuser|kernel) (?:privileges?|permissions|access)\b/i,
+  /\bwith (?:root|system|administrator|admin|superuser) level (?:access|privileges?|permissions)\b/i,
+];
+
 const remoteExecutionPatterns: RegExp[] = [
   /\b(remote code execution|rce)\b/i,
   /\b(execute code remotely|remote execution|arbitrary remote code)\b/i,
@@ -1342,6 +1348,11 @@ const remoteExecutionPatterns: RegExp[] = [
 const codeExecutionPatterns: RegExp[] = [
   /\b(execute arbitrary code|arbitrary code execution|run arbitrary code|code[-\s]?execution|execute injected code)\b/i,
   /\b(arbitrary command execution|command injection)\b/i
+];
+
+const crossSiteScriptingPatterns: RegExp[] = [
+  /\bcross[-\s]?site scripting\b/i,
+  /\bxss\b/i,
 ];
 
 const remoteContextPatterns: RegExp[] = [
@@ -1979,6 +1990,10 @@ export const classifyExploitLayers = (
   const hasPrivilegeSignal = privilegePatterns.some((pattern) =>
     pattern.test(text)
   );
+  const hasPrivilegeRequirementSignal = matchesAny(
+    text,
+    privilegeRequirementPatterns
+  );
 
   if (hasPrivilegeSignal) {
     layers.add("Privilege Escalation");
@@ -1986,6 +2001,7 @@ export const classifyExploitLayers = (
 
   const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns);
   const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns);
+  const hasCrossSiteScripting = matchesAny(text, crossSiteScriptingPatterns);
   const hasRemoteContext =
     hasExplicitRemoteRce ||
     matchesAny(text, remoteContextPatterns) ||
@@ -2004,6 +2020,9 @@ export const classifyExploitLayers = (
     configurationAbusePatterns
   );
   let hasClientSignal = matchesAny(text, clientSignalPatterns);
+  if (hasCrossSiteScripting) {
+    hasClientSignal = true;
+  }
   const curatedHint = resolveCuratedHint(entry.vendor, entry.product);
   const curatedServerBias = curatedHint?.serverBias ?? false;
   const curatedClientBias = curatedHint?.clientBias ?? false;
@@ -2146,11 +2165,33 @@ export const classifyExploitLayers = (
     hasClientSignal = false;
   }
 
+  const hasClientArtifactSignals =
+    hasClientApplicationSignal ||
+    hasClientFileSignal ||
+    hasClientUserInteractionSignal ||
+    hasCrossSiteScripting;
+
+  const clientLocalCounts =
+    hasClientLocalExecutionSignal &&
+    (!domainSuggestsServer ||
+      domainSuggestsClient ||
+      curatedClientBias ||
+      hasClientArtifactSignals);
+
+  const hasUsefulClientSignal =
+    hasClientSignal &&
+    (!domainSuggestsServer ||
+      hasClientArtifactSignals ||
+      clientLocalCounts ||
+      domainSuggestsClient ||
+      curatedClientBias);
+
   const strongClientIndicators =
     hasClientApplicationSignal ||
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
-    hasClientLocalExecutionSignal ||
+    clientLocalCounts ||
+    hasCrossSiteScripting ||
     domainSuggestsClient ||
     curatedClientBias;
 
@@ -2167,8 +2208,9 @@ export const classifyExploitLayers = (
     hasClientApplicationSignal ||
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
-    hasClientLocalExecutionSignal ||
-    hasClientSignal ||
+    clientLocalCounts ||
+    hasUsefulClientSignal ||
+    hasCrossSiteScripting ||
     domainSuggestsClient ||
     curatedClientBias;
 
@@ -2186,7 +2228,7 @@ export const classifyExploitLayers = (
   const clientArtifactSupportCount = countTrue(
     hasClientFileSignal,
     hasClientUserInteractionSignal,
-    hasClientLocalExecutionSignal,
+    clientLocalCounts,
     domainSuggestsClient
   );
 
@@ -2209,11 +2251,11 @@ export const classifyExploitLayers = (
     : 0;
 
   const clientScoreBase =
-    (hasClientSignal ? 1 : 0) +
+    (hasUsefulClientSignal ? 1 : 0) +
     clientApplicationScore +
     clientFileScore +
     (hasClientUserInteractionSignal ? 1 : 0) +
-    (hasClientLocalExecutionSignal ? 1 : 0) +
+    (clientLocalCounts ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0) +
     (curatedClientBias ? 1 : 0);
 
@@ -2226,6 +2268,10 @@ export const classifyExploitLayers = (
     if (cvssRequiresUserInteraction) {
       clientScore += 1;
     }
+  }
+
+  if (hasCrossSiteScripting) {
+    clientScore += 2;
   }
 
   let serverScoreBase =
@@ -2267,6 +2313,10 @@ export const classifyExploitLayers = (
     }
   }
 
+  if (hasCrossSiteScripting && serverScore > 0 && !hasStrongServerProtocol) {
+    serverScore = Math.max(0, serverScore - 1);
+  }
+
   let forcedServerOverride = false;
 
   if (
@@ -2299,9 +2349,26 @@ export const classifyExploitLayers = (
   }
 
   const localPrivilegeContext =
-    hasPrivilegeSignal && hasClientLocalExecutionSignal && !hasRemoteContext;
+    (hasPrivilegeSignal || hasPrivilegeRequirementSignal) &&
+    hasClientLocalExecutionSignal &&
+    !hasRemoteContext;
 
   if (hasMixedContext && localPrivilegeContext) {
+    hasMixedContext = false;
+  }
+
+  const localClientOnlyConflict =
+    clientLocalCounts &&
+    !hasClientArtifactSignals &&
+    !domainSuggestsClient &&
+    !curatedClientBias &&
+    !hasRemoteContext;
+
+  if (hasMixedContext && localClientOnlyConflict && serverPrimaryEvidence) {
+    hasMixedContext = false;
+  }
+
+  if (hasMixedContext && hasCrossSiteScripting) {
     hasMixedContext = false;
   }
 
@@ -2319,13 +2386,13 @@ export const classifyExploitLayers = (
       hasStrongServerProtocol ||
       hasKernelServerSignal ||
       (domainSuggestsServer && !domainSuggestsClient) ||
-      (hasServerSignal && !hasClientSignal) ||
+      (hasServerSignal && !hasUsefulClientSignal) ||
       cvssStrongServer;
 
     const clientDominant =
       strongClientIndicators ||
       (domainSuggestsClient && !domainSuggestsServer) ||
-      (hasClientSignal && !hasServerSignal) ||
+      (hasUsefulClientSignal && !hasServerSignal) ||
       curatedClientBias;
 
     if (serverDominant && !clientDominant) {
@@ -2337,6 +2404,16 @@ export const classifyExploitLayers = (
     }
 
     if (serverDominant && clientDominant) {
+      if (hasCrossSiteScripting) {
+        hasMixedContext = false;
+        return "Client-side";
+      }
+
+      if (localClientOnlyConflict && serverPrimaryEvidence) {
+        hasMixedContext = false;
+        return "Server-side";
+      }
+
       hasMixedContext = true;
       if (hasStrongServerProtocol || hasKernelServerSignal) {
         return "Server-side";
@@ -2364,7 +2441,7 @@ export const classifyExploitLayers = (
       return "Server-side";
     }
 
-    if (strongClientIndicators || domainSuggestsClient || hasClientSignal) {
+    if (strongClientIndicators || domainSuggestsClient || hasUsefulClientSignal) {
       if (serverPrimaryEvidence) {
         hasMixedContext = true;
       }

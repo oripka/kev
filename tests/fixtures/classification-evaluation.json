@@ -204,5 +204,201 @@
         ]
       }
     }
+  },
+  {
+    "id": "juniper-junos-local-isolation",
+    "title": "Local Junos OS isolation bug stays server-side without mixed flag",
+    "entry": {
+      "cveId": "CVE-2025-00001",
+      "vendor": "Juniper",
+      "product": "Junos OS",
+      "vulnerabilityName": "Junos OS improper isolation allows local code injection",
+      "description": "Juniper Junos OS contains an improper isolation or compartmentalization vulnerability that allows a local attacker with high privileges to inject arbitrary code.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:L/I:L/A:L",
+      "cvssVersion": "3.1",
+      "cvssScore": 4.4,
+      "cvssSeverity": "Medium"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Networking & VPN",
+          "Non-Web Applications"
+        ]
+      },
+      "exploitLayers": {
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Logic Flaw"
+        ]
+      }
+    }
+  },
+  {
+    "id": "zimbra-ics-client-rce",
+    "title": "Zimbra ICS XSS is treated as client-side code execution",
+    "entry": {
+      "cveId": "CVE-2025-24055",
+      "vendor": "Synacor",
+      "product": "Zimbra Collaboration Suite",
+      "vulnerabilityName": "ZCS Classic Web Client ICS cross-site scripting",
+      "description": "Synacor Zimbra Collaboration Suite (ZCS) contains a cross-site scripting vulnerability in the Classic Web Client where a malicious ICS attachment can execute embedded JavaScript when viewed.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+      "cvssVersion": "3.1",
+      "cvssScore": 5.4,
+      "cvssSeverity": "Medium"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Mail Servers"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Non-memory"
+        ],
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Cross-Site Scripting"
+        ]
+      }
+    }
+  },
+  {
+    "id": "cisco-nxos-cli-command-injection",
+    "title": "Cisco NX-OS CLI injection keeps server bias without mixed context",
+    "entry": {
+      "cveId": "CVE-2024-00002",
+      "vendor": "Cisco",
+      "product": "NX-OS",
+      "vulnerabilityName": "Cisco NX-OS CLI command injection",
+      "description": "Cisco NX-OS contains a command injection vulnerability in the CLI that allows an authenticated, local attacker to execute commands as root on the underlying operating system of an affected device.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 6.0,
+      "cvssSeverity": "Medium"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Networking & VPN"
+        ]
+      },
+      "exploitLayers": {
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Command Injection"
+        ]
+      }
+    }
+  },
+  {
+    "id": "javs-viewer-sideload-backdoor",
+    "title": "JAVS Viewer installer supply chain issue avoids mixed flag",
+    "entry": {
+      "cveId": "CVE-2024-00003",
+      "vendor": "Justice AV Solutions",
+      "product": "Viewer",
+      "vulnerabilityName": "JAVS Viewer installer ships malicious ffmpeg",
+      "description": "Justice AV Solutions (JAVS) Viewer installer contains a malicious version of ffmpeg.exe that establishes a backdoor connection to a malicious C2 server when executed.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 8.4,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Non-Web Applications"
+        ]
+      },
+      "exploitLayers": {
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "android-pixel-notification-disclosure",
+    "title": "Android Pixel notification spoof stays client-side without mixed flag",
+    "entry": {
+      "cveId": "CVE-2024-00004",
+      "vendor": "Android",
+      "product": "Pixel",
+      "vulnerabilityName": "Pixel foreground service notification information disclosure",
+      "description": "Android Pixel contains a Framework vulnerability where a misleading foreground service notification can be hidden, enabling a local attacker to disclose sensitive information.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N",
+      "cvssVersion": "3.1",
+      "cvssScore": 6.2,
+      "cvssSeverity": "Medium"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Operating Systems"
+        ]
+      },
+      "exploitLayers": {
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Information Disclosure"
+        ]
+      }
+    }
+  },
+  {
+    "id": "dante-discovery-mdns-dll-sideload",
+    "title": "Dante Discovery DLL sideload stays ICS without mixed flag",
+    "entry": {
+      "cveId": "CVE-2025-00005",
+      "vendor": "Audinate",
+      "product": "Dante Discovery",
+      "vulnerabilityName": "Dante Discovery mDNSResponder DLL sideloading",
+      "description": "Dante Discovery contains a process control vulnerability in mDNSResponder.exe that allows a local attacker to execute arbitrary code through a DLL sideloading attack in the Dante Application Library.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 7.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Industrial Control Systems"
+        ]
+      },
+      "exploitLayers": {
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
   }
 ]
