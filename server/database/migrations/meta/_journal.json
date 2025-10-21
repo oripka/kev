@@ -15,6 +15,13 @@
       "when": 1760978244920,
       "tag": "0001_closed_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1761026865533,
+      "tag": "0002_eminent_eternity",
+      "breakpoints": true
     }
   ]
 }
