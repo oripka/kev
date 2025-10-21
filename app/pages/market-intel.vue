@@ -83,7 +83,7 @@ const lastCaptureLabel = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-8 py-6">
+  <div class="space-y-8 py-6 max-w-7xl mx-auto">
     <div class="space-y-1">
       <h1 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
         Market intelligence

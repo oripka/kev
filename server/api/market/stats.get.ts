@@ -60,7 +60,6 @@ export default defineEventHandler((): MarketStatsResponse => {
       lastSeenAt: sql<string | null>`max(${offer.sourceCaptureDate})`
     })
     .from(offer)
-    .innerJoin(target, eq(target.offerId, offer.id))
     .get()
 
   const programCountRows = db
@@ -69,7 +68,6 @@ export default defineEventHandler((): MarketStatsResponse => {
       count: sql<number>`count(distinct ${offer.id})`
     })
     .from(offer)
-    .innerJoin(target, eq(target.offerId, offer.id))
     .innerJoin(program, eq(program.id, offer.programId))
     .groupBy(program.programType)
     .all()
@@ -90,7 +88,6 @@ export default defineEventHandler((): MarketStatsResponse => {
       count: sql<number>`count(distinct ${offer.id})`
     })
     .from(offer)
-    .innerJoin(target, eq(target.offerId, offer.id))
     .innerJoin(category, eq(category.offerId, offer.id))
     .groupBy(category.categoryType, category.categoryKey, category.categoryName)
     .all()
@@ -119,8 +116,8 @@ export default defineEventHandler((): MarketStatsResponse => {
     })
     .from(offer)
     .innerJoin(program, eq(program.id, offer.programId))
-    .innerJoin(target, eq(target.offerId, offer.id))
-    .innerJoin(productCatalog, eq(productCatalog.productKey, target.productKey))
+    .leftJoin(target, eq(target.offerId, offer.id))
+    .leftJoin(productCatalog, eq(productCatalog.productKey, target.productKey))
     .groupBy(offer.id)
     .orderBy(sql`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd})) DESC`)
     .limit(10)
