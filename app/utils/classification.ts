@@ -1526,6 +1526,17 @@ const clientApplicationPatterns: RegExp[] = [
 
   // Generic document container / compound formats (OLE compound, compound file binary format)
   /\b(?:ole(?:\s+compound)?|compound file|cfb|com)\b/i,
+  // Windows application installers and packages abused in endpoint exploits
+  /\b(?:windows|microsoft)\s+(?:appx\s+installer|app\s+installer)\b/i,
+  /(?:^|[^a-z0-9])(?:appx\s+installer|appinstaller(?:\.exe)?|msix(?:bundle)?)(?:[^a-z0-9]|$)/i,
+];
+
+const strongClientApplicationPatterns: RegExp[] = [
+  /\b(?:microsoft\s+)?(?:word|excel|powerpoint|outlook|project|visio|onenote)\b/i,
+  /(?:^|[^a-z0-9])(?:msdt|ms-msdt|mshta|mshtml)(?:[^a-z0-9]|$)/i,
+  /\b(?:windows|microsoft)\s+(?:appx\s+installer|app\s+installer)\b/i,
+  /(?:^|[^a-z0-9])(?:appx\s+installer|appinstaller(?:\.exe)?|msix(?:bundle)?)(?:[^a-z0-9]|$)/i,
+  /\bgoogle\s+chrome\b/i,
 ];
 
 const clientFileInteractionPatterns: RegExp[] = [
@@ -2034,10 +2045,17 @@ export const classifyExploitLayers = (
     hasClientSignal = true;
   }
 
-  let hasClientApplicationSignal = matchesAny(
+  const hasStrongClientApplicationSignal = matchesAny(
     text,
-    clientApplicationPatterns
+    strongClientApplicationPatterns
   );
+  let hasClientApplicationSignal =
+    hasStrongClientApplicationSignal ||
+    matchesAny(text, clientApplicationPatterns);
+
+  if (hasStrongClientApplicationSignal) {
+    hasClientSignal = true;
+  }
   let hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns);
   const rawClientUserInteractionSignal = matchesAny(
     text,
@@ -2122,7 +2140,8 @@ export const classifyExploitLayers = (
       hasClientFileSignal ||
       hasClientUserInteractionSignal ||
       hasExplicitFileUserAction ||
-      domainSuggestsClient;
+      domainSuggestsClient ||
+      hasStrongClientApplicationSignal;
     const serverDominantContext =
       domainSuggestsServer ||
       hasStrongServerProtocol ||
@@ -2167,6 +2186,7 @@ export const classifyExploitLayers = (
 
   const hasClientArtifactSignals =
     hasClientApplicationSignal ||
+    hasStrongClientApplicationSignal ||
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
     hasCrossSiteScripting;
@@ -2188,6 +2208,7 @@ export const classifyExploitLayers = (
 
   const strongClientIndicators =
     hasClientApplicationSignal ||
+    hasStrongClientApplicationSignal ||
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
     clientLocalCounts ||
@@ -2206,6 +2227,7 @@ export const classifyExploitLayers = (
 
   const clientPrimaryEvidence =
     hasClientApplicationSignal ||
+    hasStrongClientApplicationSignal ||
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
     clientLocalCounts ||

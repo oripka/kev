@@ -400,5 +400,116 @@
         ]
       }
     }
+  },
+  {
+    "id": "msdt-follina-client-rce",
+    "title": "Follina MSDT exploit is treated as client-side non-memory RCE",
+    "entry": {
+      "cveId": "CVE-2022-30190",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft Windows MSDT Follina remote code execution",
+      "description": "A remote code execution vulnerability exists when MSDT is invoked via the ms-msdt protocol from a Microsoft Office application such as Word, allowing code execution with the application's privileges.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "RCE · Server-side Memory Corruption"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "appx-installer-client-domain",
+    "title": "Windows AppX Installer spoofing remains a non-web client issue",
+    "entry": {
+      "cveId": "CVE-2021-43890",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft Windows AppX Installer spoofing vulnerability",
+      "description": "Microsoft Windows AppX Installer contains a spoofing vulnerability that enables attackers to trick users into installing malicious packages through the desktop installer experience.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:H/A:H"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Non-Web Applications"
+        ],
+        "excludes": [
+          "Web Applications"
+        ]
+      },
+      "exploitLayers": {
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      }
+    }
+  },
+  {
+    "id": "chrome-simplified-lowering-client-memory",
+    "title": "Chrome SimplifiedLowering overflow is tagged as client-side memory corruption",
+    "entry": {
+      "cveId": "CVE-2020-16040",
+      "vendor": "Google",
+      "product": "Chrome",
+      "vulnerabilityName": "Google Chrome SimplifiedLowering integer overflow",
+      "description": "Google Chrome before 87.0.4280.88 contains an integer overflow in the V8 SimplifiedLowering phase that enables attackers to achieve arbitrary code execution inside the browser renderer.",
+      "cvssVector": null
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Memory Corruption",
+          "RCE · Server-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "maracms-upload-server-rce",
+    "title": "MaraCMS arbitrary file upload is server-side non-memory RCE",
+    "entry": {
+      "cveId": "CVE-2020-25042",
+      "vendor": "MaraCMS",
+      "product": "MaraCMS",
+      "vulnerabilityName": "MaraCMS arbitrary PHP file upload remote code execution",
+      "description": "MaraCMS 7.5 and prior allow authenticated administrators to upload arbitrary PHP files via handler.php and execute them via HTTP requests, enabling remote command execution on the server.",
+      "cvssVector": null
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
   }
 ]
