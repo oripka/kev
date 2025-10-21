@@ -26,8 +26,15 @@
 - [x] Stopped `/api/fetchKev` from caching incorrect client labels.  
 - [x] Normalized RCE labelling (memory vs non-memory not duplicated).  
 - [x] Adjusted `management console` regex to avoid mislabelling desktop MMC.  
-- [x] Added server-side LFI regex feeding domain + exploit scoring.  
+- [x] Added server-side LFI regex feeding domain + exploit scoring.
 - [x] Dataset whitelist/blacklist now used to override raw regex signals.
+- [x] CVSSv2 `Au` authentication metric now maps into privilege scoring so pre-auth server bugs stay weighted correctly.
+- [x] Adjacent (`AV:A`) attack vectors add a partial remote signal when estimating internet exposure.
+- [x] Adjusted `management console` regex to avoid mislabelling desktop MMC.
+- [x] Added server-side LFI regex feeding domain + exploit scoring.
+- [x] Dataset whitelist/blacklist now used to override raw regex signals.
+- [x] Vendor key normalization trims corporate suffixes (e.g. "Cisco Systems, Inc.") so curated hints still match.
+- [x] Prevented browser entries from re-adding the "Web Applications" tag when only attack context mentions web exploits.
 
 
 ## TODO 

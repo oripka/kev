@@ -34,6 +34,21 @@ type CvssVectorTraits = {
   userInteraction?: "N" | "R";
 };
 
+const mapCvssV2AuthenticationToPrivileges = (
+  value: string
+): CvssVectorTraits["privilegesRequired"] | undefined => {
+  switch (value) {
+    case "N":
+      return "N";
+    case "S":
+      return "L";
+    case "M":
+      return "H";
+    default:
+      return undefined;
+  }
+};
+
 const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
   if (!vector) {
     return null;
@@ -49,8 +64,18 @@ const parseCvssVector = (vector?: string | null): CvssVectorTraits | null => {
     }
 
     const upperMetric = metric.toUpperCase();
+    const upperValue = value.toUpperCase();
+
     if (upperMetric === "AV" || upperMetric === "PR" || upperMetric === "UI") {
-      metrics[upperMetric] = value.toUpperCase();
+      metrics[upperMetric] = upperValue;
+      continue;
+    }
+
+    if (upperMetric === "AU" && !metrics.PR) {
+      const mappedPrivileges = mapCvssV2AuthenticationToPrivileges(upperValue);
+      if (mappedPrivileges) {
+        metrics.PR = mappedPrivileges;
+      }
     }
   }
 
@@ -78,7 +103,58 @@ const normaliseKeySegment = (value: string) =>
     .trim()
     .replace(/\s+/g, " ");
 
-const makeVendorKey = (value?: string | null) => normaliseKeySegment(value ?? "");
+const vendorNoiseTokens = new Set([
+  // Common corporate designators we strip so vendor/product hints match
+  // "Cisco Systems, Inc." style variants.
+  "inc",
+  "incorporated",
+  "corporation",
+  "corp",
+  "company",
+  "co",
+  "llc",
+  "ltd",
+  "limited",
+  "plc",
+  "gmbh",
+  "ag",
+  "sa",
+  "sarl",
+  "srl",
+  "bv",
+  "nv",
+  "oy",
+  "oyj",
+  "kg",
+  "kk",
+  "pte",
+  "pty",
+  "spa",
+  "llp",
+  "lp",
+  "holdings",
+  "holding",
+  "group",
+  "systems",
+  "the",
+]);
+
+const makeVendorKey = (value?: string | null) => {
+  const normalized = normaliseKeySegment(value ?? "");
+
+  if (!normalized) {
+    return "";
+  }
+
+  const tokens = normalized.split(" ");
+  const filtered = tokens.filter((token) => !vendorNoiseTokens.has(token));
+
+  if (!filtered.length) {
+    return normalized;
+  }
+
+  return filtered.join(" ");
+};
 const makeProductKey = (value?: string | null) => normaliseKeySegment(value ?? "");
 const makeVendorProductKey = (vendor?: string | null, product?: string | null) => {
   const vendorKey = makeVendorKey(vendor);
@@ -1696,7 +1772,12 @@ export const classifyDomainCategories = (
     matchesAny(context, remoteExecutionPatterns) ||
     matchesAny(context, codeExecutionPatterns);
   const cvssTraits = parseCvssVector(entry.cvssVector);
-  const networkAttackVector = cvssTraits?.attackVector === "N";
+  const networkAttackVectorScore =
+    cvssTraits?.attackVector === "N"
+      ? 1
+      : cvssTraits?.attackVector === "A"
+        ? 0.5
+        : 0;
   const lowPrivileges =
     !cvssTraits?.privilegesRequired || cvssTraits.privilegesRequired === "N";
   const noUserInteraction =
@@ -1730,7 +1811,8 @@ export const classifyDomainCategories = (
         hasApiSignal));
 
   const shouldTagWeb =
-    (!isBrowser && !isWebServer && baseWebSignals) || hasCombinedWebIndicator;
+    !isBrowser &&
+    ((!isWebServer && baseWebSignals) || hasCombinedWebIndicator);
 
   const shouldPreferNonWeb =
     hasNonWebProductSignal ||
@@ -1783,7 +1865,7 @@ export const classifyDomainCategories = (
     (edgePortalSignal ? 1 : 0) +
     (edgeMailSignal ? 1 : 0);
   const remoteConfidence =
-    (networkAttackVector ? 1 : 0) +
+    networkAttackVectorScore +
     (remoteContextSignal ? 1 : 0) +
     (remoteExecutionSignal ? 0.5 : 0) +
     (lowPrivileges ? 0.5 : 0) +
@@ -1794,7 +1876,7 @@ export const classifyDomainCategories = (
     edgePortalSignal ||
     edgeMailSignal ||
     remoteContextSignal ||
-    networkAttackVector;
+    networkAttackVectorScore > 0;
   const strongProductBackers =
     edgeStrongProduct ||
     (edgeSupportingProduct && hasExposureContext) ||
