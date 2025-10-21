@@ -119,5 +119,90 @@
         ]
       }
     }
+  },
+  {
+    "id": "zimbra-ics-files-not-industrial-control",
+    "title": "Zimbra ICS attachments do not trigger industrial control classifications",
+    "entry": {
+      "cveId": "CVE-2025-24055",
+      "vendor": "Synacor",
+      "product": "Zimbra Collaboration Suite",
+      "vulnerabilityName": "ZCS Classic Web Client ICS cross-site scripting",
+      "description": "Synacor Zimbra Collaboration Suite (ZCS) contains a cross-site scripting vulnerability that exists in the Classic Web Client due to insufficient sanitization of HTML content in ICS files.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+      "cvssVersion": "3.1",
+      "cvssScore": 6.1,
+      "cvssSeverity": "Medium"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Mail Servers"
+        ],
+        "excludes": [
+          "Industrial Control Systems"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Cross-Site Scripting"
+        ]
+      }
+    }
+  },
+  {
+    "id": "hyperv-local-priv-esc-no-mixed",
+    "title": "Local Hyper-V privilege escalation drops the mixed context flag",
+    "entry": {
+      "cveId": "CVE-2025-21251",
+      "vendor": "Microsoft",
+      "product": "Windows Hyper-V",
+      "vulnerabilityName": "Hyper-V Integration VSP use-after-free privilege escalation",
+      "description": "Microsoft Windows Hyper-V NT Kernel Integration VSP contains a use-after-free vulnerability that allows a local attacker to gain SYSTEM privileges.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 7.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "Privilege Escalation"
+        ],
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      }
+    }
+  },
+  {
+    "id": "improper-privilege-management-logic-flaw",
+    "title": "Improper privilege management issues map to logic flaws",
+    "entry": {
+      "cveId": "CVE-2025-21312",
+      "vendor": "Microsoft",
+      "product": "Windows Error Reporting Service",
+      "vulnerabilityName": "Windows Error Reporting Service improper privilege management",
+      "description": "Microsoft Windows Error Reporting Service contains an improper privilege management vulnerability that allows a local attacker with user permissions to gain SYSTEM privileges.",
+      "cvssVector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 7.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "vulnerabilityCategories": {
+        "includes": [
+          "Logic Flaw"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "Privilege Escalation"
+        ],
+        "excludes": [
+          "Mixed/Needs Review"
+        ]
+      }
+    }
   }
 ]

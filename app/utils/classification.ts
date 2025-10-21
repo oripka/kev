@@ -1128,7 +1128,7 @@ const operatingSystemPatterns: RegExp[] = [
 ];
 
 const icsPatterns: RegExp[] = [
-  /\bics\b/i,
+  /\bics\b(?!\s*(?:file|files|calendar|format|attachment|event|entry|component|invite|invitation|payload|message|schedule)s?\b)/i,
   /\bscada\b/i,
   /\bplc\b/i,
   /\brtu\b/i,
@@ -1688,6 +1688,8 @@ const vulnerabilityRules: Array<{
     category: "Logic Flaw",
     patterns: [
       /(logic flaw|business logic|improper validation|improper access control)/i,
+      /(improper privilege management|improper privilege separation|privilege management vulnerability)/i,
+      /(improper isolation|improper compartmentalization|compartmentalization vulnerability|isolation vulnerability)/i,
     ],
   },
 ];
@@ -2294,6 +2296,13 @@ export const classifyExploitLayers = (
 
   if (!hasMixedContext && forcedServerOverride && clientPrimaryEvidence) {
     hasMixedContext = true;
+  }
+
+  const localPrivilegeContext =
+    hasPrivilegeSignal && hasClientLocalExecutionSignal && !hasRemoteContext;
+
+  if (hasMixedContext && localPrivilegeContext) {
+    hasMixedContext = false;
   }
 
   const determineSide = (): "Client-side" | "Server-side" => {
