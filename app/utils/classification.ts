@@ -1996,7 +1996,7 @@ export const classifyExploitLayers = (
     cvssTraits?.attackVector === "N" || cvssTraits?.attackVector === "A";
   const cvssRequiresUserInteraction = cvssTraits?.userInteraction === "R";
   const cvssPreAuth = cvssTraits?.privilegesRequired === "N";
-  const cvssStrongServer = cvssSuggestsRemote && cvssPreAuth;
+  let cvssStrongServer = cvssSuggestsRemote && cvssPreAuth;
 
   const hasPrivilegeSignal = privilegePatterns.some((pattern) =>
     pattern.test(text)
@@ -2013,9 +2013,10 @@ export const classifyExploitLayers = (
   const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns);
   const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns);
   const hasCrossSiteScripting = matchesAny(text, crossSiteScriptingPatterns);
+  const remoteContextFromText = matchesAny(text, remoteContextPatterns);
   const hasRemoteContext =
     hasExplicitRemoteRce ||
-    matchesAny(text, remoteContextPatterns) ||
+    remoteContextFromText ||
     Boolean(cvssSuggestsRemote);
 
   const qualifiesForRce =
@@ -2169,7 +2170,8 @@ export const classifyExploitLayers = (
       networkOperatingSystemSignal ||
       mobileManagementSignal ||
       mobileDeviceManagementContext ||
-      hasRemoteContext)
+      remoteContextFromText ||
+      hasExplicitRemoteRce)
   ) {
     hasServerSignal = true;
   }
@@ -2215,6 +2217,29 @@ export const classifyExploitLayers = (
     hasCrossSiteScripting ||
     domainSuggestsClient ||
     curatedClientBias;
+
+  if (cvssStrongServer) {
+    const lacksServerAnchors =
+      !domainSuggestsServer &&
+      !curatedServerBias &&
+      !hasStrongServerProtocol &&
+      !networkOperatingSystemSignal &&
+      !mobileManagementSignal &&
+      !mobileDeviceManagementContext;
+
+    const hasClientDominantSignals =
+      strongClientIndicators &&
+      (cvssRequiresUserInteraction ||
+        hasClientUserInteractionSignal ||
+        hasClientFileSignal ||
+        hasExplicitFileUserAction ||
+        hasClientApplicationSignal ||
+        clientLocalCounts);
+
+    if (lacksServerAnchors && hasClientDominantSignals) {
+      cvssStrongServer = false;
+    }
+  }
 
   const strongServerIndicators =
     hasServerSignal ||
