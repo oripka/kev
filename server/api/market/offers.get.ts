@@ -278,9 +278,6 @@ export default defineEventHandler(async event => {
   const category = tables.marketOfferCategories
   const catalog = tables.catalogEntries
 
-  const kevTarget = alias(target, 'kev_target')
-  const kevCatalog = alias(catalog, 'kev_catalog')
-
   const conditions: Condition[] = []
 
   if (searchTerm) {
@@ -341,9 +338,9 @@ export default defineEventHandler(async event => {
     conditions.push(
       sql`exists (
         select 1
-        from ${kevTarget}
-        inner join ${kevCatalog} on ${kevCatalog.productKey} = ${kevTarget.productKey}
-        where ${kevTarget.offerId} = ${offer.id}
+        from market_offer_targets kev_target
+        inner join catalog_entries kev_catalog on kev_catalog.product_key = kev_target.product_key
+        where kev_target.offer_id = ${offer.id}
       )`
     )
   }

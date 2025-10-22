@@ -594,7 +594,8 @@ const offersErrorMessage = computed(() => offersError.value?.message ?? "");
 
 const offerTableUi = {
   class: {
-    td: "align-top",
+    th: "align-top whitespace-normal",
+    td: "align-top whitespace-normal",
   },
 };
 
@@ -777,7 +778,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
 
       return h(
         "div",
-        { class: "space-y-3" },
+        { class: "space-y-3 max-w-3xl break-words" },
         offer.targets.map((target) => {
           const metadataBadges: Array<ReturnType<typeof h>> = [];
           const methodLabel = matchMethodLabels[target.matchMethod];

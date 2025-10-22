@@ -214,6 +214,60 @@ const normaliseMessageContent = (
   return { text: null };
 };
 
+const extractToolCallArguments = (
+  message: ChatCompletionMessage | undefined,
+): { text: string | null; debug?: string } => {
+  if (!message || typeof message !== "object") {
+    return { text: null };
+  }
+
+  const toolCalls = (message as { tool_calls?: unknown }).tool_calls;
+  if (!Array.isArray(toolCalls)) {
+    return { text: null };
+  }
+
+  for (const call of toolCalls) {
+    if (!call || typeof call !== "object") {
+      continue;
+    }
+
+    const functionCall = (call as { function?: unknown }).function;
+    if (!functionCall || typeof functionCall !== "object") {
+      continue;
+    }
+
+    const argumentsValue = (functionCall as { arguments?: unknown }).arguments;
+
+    if (typeof argumentsValue === "string") {
+      const trimmed = argumentsValue.trim();
+      if (trimmed) {
+        return {
+          text: trimmed,
+          debug: serialiseForDebug(call, 1000),
+        };
+      }
+      continue;
+    }
+
+    if (argumentsValue && typeof argumentsValue === "object") {
+      try {
+        const serialised = JSON.stringify(argumentsValue);
+        const trimmed = serialised.trim();
+        if (trimmed) {
+          return {
+            text: trimmed,
+            debug: serialiseForDebug(call, 1000),
+          };
+        }
+      } catch {
+        // Ignore JSON serialization errors and continue searching other tool calls.
+      }
+    }
+  }
+
+  return { text: null };
+};
+
 const vendorProductHintMap = new Map<string, SanitisedHint[]>();
 const productHintMap = new Map<string, SanitisedHint[]>();
 
@@ -838,9 +892,19 @@ export const runClassificationReview = async (
 
     const completion = (await response.json()) as ChatCompletionResponse;
     const message = completion.choices?.[0]?.message;
-    const { text: content, debug: contentDebug } = normaliseMessageContent(
-      message?.content,
-    );
+    const normalisedContent = normaliseMessageContent(message?.content);
+    let content = normalisedContent.text;
+    let contentDebug = normalisedContent.debug;
+
+    if (!content) {
+      const toolArguments = extractToolCallArguments(message);
+      if (toolArguments.text) {
+        content = toolArguments.text;
+      }
+      if (toolArguments.debug && !contentDebug) {
+        contentDebug = toolArguments.debug;
+      }
+    }
 
     if (!content) {
       const debugSnippet =
