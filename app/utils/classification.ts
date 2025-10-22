@@ -1347,7 +1347,8 @@ const remoteExecutionPatterns: RegExp[] = [
 
 const codeExecutionPatterns: RegExp[] = [
   /\b(execute arbitrary code|arbitrary code execution|run arbitrary code|code[-\s]?execution|execute injected code)\b/i,
-  /\b(arbitrary command execution|command injection)\b/i
+  /\b(arbitrary command execution|command injection)\b/i,
+  /(?:malicious|trojan(?:ized)?)\b[\s\S]{0,120}?(?:backdoor|c2|command(?:[-\s]?and[-\s]?control)|c&c)\b/i,
 ];
 
 const crossSiteScriptingPatterns: RegExp[] = [
@@ -1473,6 +1474,7 @@ const clientSignalPatterns: RegExp[] = [
   /\bworkstation (?:application|app|client)\b/i,
   /\bendpoint (?:agent|client)\b/i,
   /\b(?:viewer|reader|player|media player)\b/i,
+  /\b(?:web|mail|email)\s+client\b/i,
   /\bmobile\s+(?:app(?:lication)?|client|browser|device|endpoint|platform)\b/i,
   /\b(?:android\s+(?:app(?:lication)?|client|browser|device|endpoint|platform)|google\s+android)\b/i,
   /\b(?:apple\s+ios|ios[,/\s]+ipad(?:os)?|ios\s+(?:app(?:lication)?|client|device|devices|platform|version|versions|and\s+ipad(?:os)?|and\s+iphone)|ipad(?:os)?|iphone|ipod\s+touch)\b/i,
@@ -1517,6 +1519,9 @@ const clientApplicationPatterns: RegExp[] = [
   // Media players / Windows Media Center hints
   /\b(?:windows media(?: player| center)?|media player|wmplayer)\b/i,
   /\b(?:mp3|mp4|mkv|media(?: file| container))\b/i,
+
+  // Web / mail client applications (browser-hosted user agents)
+  /\b(?:web|mail|email)\s+client\b/i,
 
   // Fonts / font engines (truetype, opentype)
   /\b(?:truetype|opentype|ttf|otf|font(?: parsing| engine| library)?)\b/i,
