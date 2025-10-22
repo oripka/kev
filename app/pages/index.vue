@@ -3404,23 +3404,6 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         return h("div", { class: "flex flex-col gap-3" }, sectionNodes);
       },
     },
-    {
-      id: "actions",
-      header: "",
-      enableSorting: false,
-      cell: ({ row }) =>
-        h(
-          "div",
-          { class: "flex justify-end" },
-          h(UButton, {
-            icon: "i-lucide-eye",
-            color: "neutral",
-            variant: "ghost",
-            "aria-label": `View ${row.original.cveId} details`,
-            onClick: () => void openDetails(row.original),
-          })
-        ),
-    },
   ];
 });
 
