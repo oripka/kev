@@ -111,6 +111,13 @@ const showTimestamps = computed({
   },
 });
 
+const showRelativeDates = computed({
+  get: () => displayPreferences.value.relativeDates,
+  set: (value: boolean) => {
+    displayPreferences.value.relativeDates = value;
+  },
+});
+
 const dateFormatOptions = [
   {
     label: "Month / day / year",
@@ -422,6 +429,21 @@ const columns = computed<
                 <p class="text-xs text-neutral-500 dark:text-neutral-400">
                   Times are hidden by default to keep the interface focused on trends.
                 </p>
+                <div class="flex items-center justify-between gap-3">
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                      Show relative catalog dates
+                    </p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                      Display "Date added" values as durations (for example, 4mo 3d ago).
+                    </p>
+                  </div>
+                  <USwitch
+                    :model-value="showRelativeDates"
+                    aria-label="Toggle relative date display for catalog tables"
+                    @update:model-value="(value) => (showRelativeDates = value)"
+                  />
+                </div>
               </div>
 
               <div

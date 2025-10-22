@@ -630,40 +630,40 @@ const renderClassificationGroup = (label: string, values: string[], color: strin
 
 const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
   {
-    id: "program",
-    header: "Program",
-    cell: ({ row }) =>
-      h("div", { class: "flex flex-col gap-1" }, [
-        h(
-          "p",
-          { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
-          row.original.programName,
-        ),
-        h(
-          "p",
-          { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-          formatProgramTypeLabel(row.original.programType),
-        ),
-      ]),
-  },
-  {
-    id: "offer",
-    header: "Offer",
+    id: "summary",
+    header: "Program & offer",
     cell: ({ row }) => {
       const offer = row.original;
-      const nodes: Array<ReturnType<typeof h>> = [
+      const nodes: Array<ReturnType<typeof h>> = [];
+
+      nodes.push(
+        h("div", { class: "space-y-1" }, [
+          h(
+            "p",
+            { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
+            offer.programName,
+          ),
+          h(
+            "p",
+            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+            formatProgramTypeLabel(offer.programType),
+          ),
+        ]),
+      );
+
+      const offerDetails: Array<ReturnType<typeof h>> = [
         h(
           "p",
-          { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
+          { class: "text-sm text-neutral-700 dark:text-neutral-200" },
           offer.title,
         ),
       ];
 
       if (offer.categories.length) {
-        nodes.push(
+        offerDetails.push(
           h(
             "div",
-            { class: "flex flex-wrap gap-2 pt-1" },
+            { class: "flex flex-wrap gap-2" },
             offer.categories.map((category) =>
               h(
                 UBadge,
@@ -679,6 +679,8 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
         );
       }
 
+      nodes.push(h("div", { class: "space-y-1" }, offerDetails));
+
       if (offer.sourceUrl) {
         nodes.push(
           h(
@@ -688,7 +690,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
               target: "_blank",
               rel: "noopener noreferrer",
               class:
-                "mt-2 inline-flex items-center gap-2 text-xs font-medium text-primary-600 transition hover:text-primary-500 dark:text-primary-300 dark:hover:text-primary-200",
+                "inline-flex items-center gap-2 text-xs font-medium text-primary-600 transition hover:text-primary-500 dark:text-primary-300 dark:hover:text-primary-200",
             },
             () => [
               "View source",
@@ -698,7 +700,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
         );
       }
 
-      return h("div", { class: "flex flex-col" }, nodes);
+      return h("div", { class: "space-y-3 max-w-xs md:max-w-sm" }, nodes);
     },
   },
   {
@@ -760,7 +762,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
         );
       }
 
-      return h("div", { class: "flex flex-col gap-1" }, items);
+      return h("div", { class: "space-y-1 min-w-[150px]" }, items);
     },
   },
   {
@@ -778,7 +780,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
 
       return h(
         "div",
-        { class: "space-y-3 max-w-3xl break-words" },
+        { class: "space-y-3 max-w-2xl break-words" },
         offer.targets.map((target) => {
           const metadataBadges: Array<ReturnType<typeof h>> = [];
           const methodLabel = matchMethodLabels[target.matchMethod];
@@ -975,55 +977,65 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
   },
   {
     id: "coverage",
-    header: "KEV coverage",
+    header: "Coverage & capture",
     cell: ({ row }) => {
       const offer = row.original;
-      if (!offer.matchedCveIds.length) {
-        return h(
-          "span",
-          { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-          "—",
+      const children: Array<ReturnType<typeof h>> = [];
+
+      if (offer.matchedCveIds.length) {
+        const kevSet = new Set(offer.matchedKevCveIds);
+        children.push(
+          h(
+            "div",
+            { class: "flex flex-wrap gap-2" },
+            offer.matchedCveIds.map((cveId) =>
+              h(
+                ULink,
+                {
+                  to: { path: "/", query: { search: cveId } },
+                  class: "inline-flex items-center justify-center",
+                  "aria-label": `Open catalog with ${cveId}`,
+                },
+                () =>
+                  h(
+                    UBadge,
+                    {
+                      color: kevSet.has(cveId) ? "error" : "neutral",
+                      variant: "soft",
+                      class: "text-xs font-semibold",
+                    },
+                    () => cveId,
+                  ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        children.push(
+          h(
+            "span",
+            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
+            "—",
+          ),
         );
       }
 
-      const kevSet = new Set(offer.matchedKevCveIds);
-
-      return h(
-        "div",
-        { class: "flex flex-wrap gap-2" },
-        offer.matchedCveIds.map((cveId) =>
+      if (offer.sourceCaptureDate) {
+        const capturedLabel = formatDate(offer.sourceCaptureDate, {
+          fallback: offer.sourceCaptureDate,
+          preserveInputOnError: true,
+        });
+        children.push(
           h(
-            ULink,
-            {
-              to: { path: "/", query: { search: cveId } },
-              class: "inline-flex items-center justify-center",
-              "aria-label": `Open catalog with ${cveId}`,
-            },
-            () =>
-              h(
-                UBadge,
-                {
-                  color: kevSet.has(cveId) ? "error" : "neutral",
-                  variant: "soft",
-                  class: "text-xs font-semibold",
-                },
-                () => cveId,
-              ),
+            "p",
+            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+            `Captured ${capturedLabel}`,
           ),
-        ),
-      );
+        );
+      }
+
+      return h("div", { class: "space-y-2 min-w-[160px]" }, children);
     },
-  },
-  {
-    id: "captured",
-    header: "Last captured",
-    cell: ({ row }) =>
-      row.original.sourceCaptureDate
-        ? formatDate(row.original.sourceCaptureDate, {
-            fallback: row.original.sourceCaptureDate,
-            preserveInputOnError: true,
-          })
-        : "—",
   },
 ]);
 </script>

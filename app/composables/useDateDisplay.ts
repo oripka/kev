@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import { format, isValid, parseISO } from "date-fns";
+import { format, intervalToDuration, isValid, parseISO } from "date-fns";
 import { useDisplayPreferences } from "~/composables/useDisplayPreferences";
 
 type DateInput = string | number | Date | null | undefined;
@@ -8,6 +8,12 @@ type FormatOptions = {
   fallback?: string;
   withTime?: boolean;
   preserveInputOnError?: boolean;
+};
+
+type RelativeFormatOptions = {
+  fallback?: string;
+  preserveInputOnError?: boolean;
+  maxUnits?: number;
 };
 
 const parseDateInput = (value: DateInput): Date | null => {
@@ -118,10 +124,79 @@ export const useDateDisplay = () => {
     return `${format(parsedStart, startPattern)} – ${format(parsedEnd, endPattern)}`;
   };
 
+  const formatRelativeDate = (
+    value: DateInput,
+    options: RelativeFormatOptions = {}
+  ) => {
+    const {
+      fallback = "—",
+      preserveInputOnError = true,
+      maxUnits = 2,
+    } = options;
+
+    if (value == null) {
+      return fallback;
+    }
+
+    const parsed = parseDateInput(value);
+    if (!parsed) {
+      if (preserveInputOnError && typeof value === "string") {
+        return value;
+      }
+      return fallback;
+    }
+
+    const now = new Date();
+    const isFuture = parsed.getTime() > now.getTime();
+    const [start, end] = isFuture ? [now, parsed] : [parsed, now];
+
+    const duration = intervalToDuration({ start, end });
+    const parts: Array<{ value: number; unit: string }> = [];
+
+    const pushPart = (value: number | undefined, unit: string) => {
+      if (typeof value === "number" && value > 0) {
+        parts.push({ value, unit });
+      }
+    };
+
+    pushPart(duration.years, "y");
+    pushPart(duration.months, "mo");
+
+    let remainingDays = duration.days ?? 0;
+    const weeks = Math.floor(remainingDays / 7);
+    if (weeks > 0) {
+      parts.push({ value: weeks, unit: "w" });
+      remainingDays -= weeks * 7;
+    }
+    if (remainingDays > 0) {
+      parts.push({ value: remainingDays, unit: "d" });
+    }
+
+    pushPart(duration.hours, "h");
+    pushPart(duration.minutes, "m");
+
+    if (!parts.length) {
+      const seconds = duration.seconds ?? 0;
+      if (seconds >= 30) {
+        parts.push({ value: seconds, unit: "s" });
+      }
+    }
+
+    if (!parts.length) {
+      return "just now";
+    }
+
+    const selected = parts.slice(0, Math.max(1, maxUnits));
+    const label = selected.map((part) => `${part.value}${part.unit}`).join(" ");
+
+    return isFuture ? `in ${label}` : `${label} ago`;
+  };
+
   return {
     preferences,
     formatDate,
     formatDateOrNull,
     formatDateRange,
+    formatRelativeDate,
   };
 };

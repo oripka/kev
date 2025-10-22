@@ -48,7 +48,11 @@ import type {
   QuickFilterUpdate,
 } from "~/types/dashboard";
 
-const { formatDate } = useDateDisplay();
+const {
+  formatDate,
+  formatRelativeDate,
+  preferences: displayPreferences,
+} = useDateDisplay();
 
 const formatTimestamp = (value: string) =>
   formatDate(value, { fallback: value, preserveInputOnError: true });
@@ -95,6 +99,13 @@ const showRiskDetails = ref(false);
 const showAllResults = ref(true);
 const showMySoftwareSlideover = ref(false);
 const showClassificationReviewSlideover = ref(false);
+
+const showRelativeDates = computed({
+  get: () => displayPreferences.value.relativeDates,
+  set: (value: boolean) => {
+    displayPreferences.value.relativeDates = value;
+  },
+});
 
 const latestAdditionWindowDays = 14;
 const latestAdditionWindowMs = latestAdditionWindowDays * 24 * 60 * 60 * 1000;
@@ -3260,13 +3271,30 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           return row.original.dateAdded;
         }
 
-        const label = formatDate(parsed, {
+        const absoluteLabel = formatDate(parsed, {
           fallback: row.original.dateAdded,
           preserveInputOnError: true,
         });
+        const relativeLabel = formatRelativeDate(parsed, {
+          fallback: absoluteLabel,
+          maxUnits: 2,
+        });
+        const displayLabel = showRelativeDates.value
+          ? relativeLabel
+          : absoluteLabel;
+        const alternateLabel = showRelativeDates.value
+          ? absoluteLabel
+          : relativeLabel;
+        const titleLabel =
+          alternateLabel && alternateLabel !== displayLabel
+            ? alternateLabel
+            : undefined;
         const year = parsed.getFullYear();
         const isActive =
           yearRange.value[0] === year && yearRange.value[1] === year;
+        const ariaLabel = showRelativeDates.value
+          ? `Filter catalog by year ${year}. Added ${absoluteLabel}.`
+          : `Filter catalog by year ${year}`;
 
         return h(
           "button",
@@ -3279,10 +3307,11 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               .filter(Boolean)
               .join(" "),
             onClick: () => applyQuickFilters({ year }),
-            "aria-label": `Filter catalog by year ${year}`,
+            title: titleLabel,
+            "aria-label": ariaLabel,
             "aria-pressed": isActive,
           },
-          label
+          displayLabel
         );
       },
     },
@@ -4224,6 +4253,19 @@ const tableMeta = {
                   </p>
                 </div>
                 <USwitch v-model="showTrendLines" />
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Show relative dates
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Display catalog dates as durations (for example, 4mo 3d ago).
+                  </p>
+                </div>
+                <USwitch v-model="showRelativeDates" />
               </div>
             </div>
 
