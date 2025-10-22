@@ -2268,6 +2268,10 @@ export const classifyExploitLayers = (
     }
   }
 
+  if (hasCrossSiteScripting) {
+    cvssStrongServer = false;
+  }
+
   const strongServerIndicators =
     hasServerSignal ||
     domainSuggestsServer ||
@@ -2364,7 +2368,8 @@ export const classifyExploitLayers = (
   }
 
   const serverHardConstraint =
-    (domainSuggestsServer &&
+    (!hasCrossSiteScripting &&
+      domainSuggestsServer &&
       (hasStrongServerProtocol ||
         hasServerSignal ||
         networkOperatingSystemSignal ||
