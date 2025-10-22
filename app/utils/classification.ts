@@ -1128,7 +1128,7 @@ const operatingSystemPatterns: RegExp[] = [
 ];
 
 const icsPatterns: RegExp[] = [
-  /\bics\b(?!\s*(?:file|files|calendar|format|attachment|event|entry|component|invite|invitation|payload|message|schedule)s?\b)/i,
+  /(?<!\.)\bics\b(?!\s*(?:(?:file|calendar|format|attachment|event|entry|component|invite|invitation|payload|message|schedule)s?\b|cross[-\s]?site\b|xss\b|html\b|javascript\b|script\b|web\b|client\b|mail\b|email\b))/i,
   /\bscada\b/i,
   /\bplc\b/i,
   /\brtu\b/i,
@@ -2019,7 +2019,7 @@ export const classifyExploitLayers = (
     remoteContextFromText ||
     Boolean(cvssSuggestsRemote);
 
-  const qualifiesForRce =
+  let qualifiesForRce =
     hasExplicitRemoteRce || (hasCodeExecutionSignal && hasRemoteContext);
 
   const hasMemoryCorruption = memoryCorruptionPatterns.some((pattern) =>
@@ -2136,6 +2136,27 @@ export const classifyExploitLayers = (
     domainCategories.some((category) => serverDomainHints.has(category)) ||
     curatedServerBias;
 
+  if (
+    !qualifiesForRce &&
+    hasCrossSiteScripting &&
+    (hasRemoteContext || domainHasEdgeExposure || hasClientSignal)
+  ) {
+    qualifiesForRce = true;
+  }
+
+  if (
+    !qualifiesForRce &&
+    hasCodeExecutionSignal &&
+    hasClientSignal &&
+    (domainSuggestsClient ||
+      curatedClientBias ||
+      hasClientApplicationSignal ||
+      hasStrongClientApplicationSignal) &&
+    !cvssSuggestsLocal
+  ) {
+    qualifiesForRce = true;
+  }
+
   if (hasClientApplicationSignal) {
     const hasClientArtifactContext =
       hasClientFileSignal ||
@@ -2164,14 +2185,15 @@ export const classifyExploitLayers = (
 
   if (
     hasGenericServerToken &&
-    (!hostileServerContext ||
-      domainSuggestsServer ||
+    !hostileServerContext &&
+    (domainSuggestsServer ||
       hasStrongServerProtocol ||
       networkOperatingSystemSignal ||
       mobileManagementSignal ||
       mobileDeviceManagementContext ||
       remoteContextFromText ||
-      hasExplicitRemoteRce)
+      hasExplicitRemoteRce ||
+      curatedServerBias)
   ) {
     hasServerSignal = true;
   }
