@@ -915,6 +915,183 @@ const PLATFORM_VENDOR_MAP: Record<string, { vendor: string; product: string }> =
   junos: { vendor: 'Juniper Networks', product: 'Junos' }
 }
 
+const NAME_SUFFIX_PATTERNS = [
+  ' remote code execution vulnerability',
+  ' remote command execution vulnerability',
+  ' remote command injection vulnerability',
+  ' privilege escalation vulnerability',
+  ' server-side request forgery',
+  ' server-side template injection',
+  ' client-side template injection',
+  ' remote code execution',
+  ' remote command execution',
+  ' remote command injection',
+  ' arbitrary code execution',
+  ' code execution',
+  ' command injection',
+  ' command execution',
+  ' sql injection',
+  ' template injection',
+  ' ssti',
+  ' ssrf',
+  ' csrf',
+  ' xss',
+  ' xxe',
+  ' authentication bypass',
+  ' authorization bypass',
+  ' sandbox escape',
+  ' sandbox bypass',
+  ' sandbox breakout',
+  ' sandbox evasion',
+  ' bypass',
+  ' privilege escalation',
+  ' local privilege escalation',
+  ' information disclosure',
+  ' data exposure',
+  ' data leak',
+  ' data exfiltration',
+  ' credential leak',
+  ' credential disclosure',
+  ' arbitrary file upload',
+  ' arbitrary file download',
+  ' arbitrary file read',
+  ' arbitrary file write',
+  ' file upload',
+  ' file download',
+  ' file read',
+  ' file write',
+  ' file deletion',
+  ' directory traversal',
+  ' path traversal',
+  ' remote file inclusion',
+  ' local file inclusion',
+  ' rfi',
+  ' lfi',
+  ' memory corruption',
+  ' buffer overflow',
+  ' stack overflow',
+  ' heap overflow',
+  ' heap out-of-bounds',
+  ' stack out-of-bounds',
+  ' out-of-bounds access',
+  ' out of bounds access',
+  ' out-of-bounds read',
+  ' out of bounds read',
+  ' out-of-bounds write',
+  ' out of bounds write',
+  ' use-after-free',
+  ' use after free',
+  ' double free',
+  ' race condition',
+  ' race-condition',
+  ' denial of service',
+  ' dos',
+  ' ddos',
+  ' service disruption',
+  ' vulnerability',
+  ' exploit'
+]
+
+const stripTrailingDescriptors = (value: string): string => {
+  if (!value) {
+    return value
+  }
+
+  const lower = value.toLowerCase()
+  let cutoff = value.length
+
+  for (const pattern of NAME_SUFFIX_PATTERNS) {
+    const index = lower.indexOf(pattern)
+    if (index === -1) {
+      continue
+    }
+    const boundary = lower[index + pattern.length] ?? ''
+    if (index < cutoff && (!boundary || /[\s,.;:()[\]{}-]/.test(boundary))) {
+      cutoff = index
+    }
+  }
+
+  let candidate = value.slice(0, cutoff).trim()
+  if (!candidate) {
+    return ''
+  }
+
+  candidate = candidate.replace(/\bCVE-\d{4}-\d{4,}\b.*$/i, '').trim()
+
+  candidate = candidate.replace(/\s+(?:via|with|through|allowing|allowing for|allowing arbitrary|leading to)\s+.*$/i, '')
+
+  candidate = candidate.replace(/\s*[-–—,:;]+$/g, '').trim()
+
+  candidate = candidate.replace(/\s*\(([^)]*)\)\s*$/g, (match, inner) => {
+    const trimmedInner = typeof inner === 'string' ? inner.trim() : ''
+    if (!trimmedInner) {
+      return ''
+    }
+    if (/\b(?:cve|cwe|rce|lpe|dos|xss|sql|ssrf|ssti|xxe|rfi|lfi|aka|aka\b)/i.test(trimmedInner)) {
+      return ''
+    }
+    if (/^\d{1,4}$/i.test(trimmedInner)) {
+      return ''
+    }
+    return match
+  })
+
+  const colonIndex = candidate.lastIndexOf(':')
+  if (colonIndex !== -1) {
+    const afterColon = candidate.slice(colonIndex + 1).trim()
+    if (afterColon && /[a-z]/i.test(afterColon)) {
+      candidate = afterColon
+    }
+  }
+
+  const hyphenIndex = candidate.indexOf(' - ')
+  if (hyphenIndex !== -1) {
+    candidate = candidate.slice(0, hyphenIndex).trim()
+  }
+
+  return candidate.replace(/\s+/g, ' ').trim()
+}
+
+const deriveVendorProductFromName = (
+  name: string | null | undefined
+): { vendor: string; product: string } | null => {
+  if (!name) {
+    return null
+  }
+
+  let cleaned = stripTrailingDescriptors(name.trim())
+  if (!cleaned || cleaned.length < 2 || !/[a-z]/i.test(cleaned)) {
+    return null
+  }
+
+  if (/^CVE-\d{4}-\d{4,}$/i.test(cleaned)) {
+    return null
+  }
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean)
+  if (!tokens.length) {
+    return null
+  }
+
+  let vendorToken = tokens[0]
+  if (/^(?:the|a|an)$/i.test(vendorToken) && tokens.length > 1) {
+    vendorToken = tokens[1]
+  }
+
+  vendorToken = vendorToken.replace(/^[^a-z0-9]+/i, '').replace(/[^a-z0-9]+$/i, '')
+  if (!vendorToken) {
+    vendorToken = tokens[0]
+  }
+
+  if (!vendorToken || !/[a-z]/i.test(vendorToken)) {
+    return null
+  }
+
+  cleaned = cleaned.replace(/\s+/g, ' ').trim()
+
+  return { vendor: vendorToken, product: cleaned }
+}
+
 const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; product: string | null } => {
   const referenceText = metadata.references.map(record => record.value).join(' ')
   const contextText = [
@@ -941,6 +1118,18 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
   const hinted = matchExploitProduct(contextText)
   if (hinted) {
     return hinted
+  }
+
+  const nameDerived = deriveVendorProductFromName(metadata.name)
+  if (nameDerived) {
+    return nameDerived
+  }
+
+  for (const alias of metadata.aliases) {
+    const aliasDerived = deriveVendorProductFromName(alias)
+    if (aliasDerived) {
+      return aliasDerived
+    }
   }
 
   const findMapping = (token: string | undefined): { vendor: string; product: string } | null => {
