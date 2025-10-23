@@ -275,6 +275,24 @@ const curatedVendorProductHints: Record<string, CuratedProductHint> = {
     internetExposed: true,
     serverBias: true,
   },
+  [makeVendorProductKey("Citrix", "NetScaler")]: {
+    categories: ["Security Appliances", "Networking & VPN"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Citrix", "NetScaler ADC")]: {
+    categories: ["Security Appliances", "Networking & VPN"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeVendorProductKey("Citrix", "NetScaler Gateway")]: {
+    categories: ["Security Appliances", "Networking & VPN"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
   [makeVendorProductKey("Ivanti", "Endpoint Manager Mobile (EPMM)")]: {
     addCategories: [
       "Security Appliances",
@@ -390,6 +408,24 @@ const curatedProductHints: Record<string, CuratedProductHint> = {
   },
   [makeProductKey("mobileiron multiple products")]: {
     addCategories: ["Security Appliances", "Networking & VPN", "Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("netscaler")]: {
+    categories: ["Security Appliances", "Networking & VPN"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("netscaler adc")]: {
+    categories: ["Security Appliances", "Networking & VPN"],
+    addCategories: ["Internet Edge"],
+    internetExposed: true,
+    serverBias: true,
+  },
+  [makeProductKey("netscaler gateway")]: {
+    categories: ["Security Appliances", "Networking & VPN"],
+    addCategories: ["Internet Edge"],
     internetExposed: true,
     serverBias: true,
   },
@@ -1036,6 +1072,7 @@ const webApplicationProductPatterns: RegExp[] = [
   /\bmattermost\b/i,
   /\brocket\.chat\b/i,
   /\bzulip\b/i,
+  /\bpg[-\s]?admin\b/i,
   /\bgoanywhere\b/i,
   /\bcrushftp\b/i,
   /\bfilezilla server\b/i,
@@ -1254,6 +1291,7 @@ const databaseStoragePatterns: RegExp[] = [
   /\bmysql\b/i,
   /\bmariadb\b/i,
   /\bpostgres(?:ql)?\b/i,
+  /\bpg[-\s]?admin\b/i,
   /\boracle database\b/i,
   /\bdb2\b/i,
   /\bsqlite\b/i,
@@ -1807,6 +1845,7 @@ export const classifyDomainCategories = (
     (vendorKey === "apple" ||
       appleProductContext ||
       matchesAny(text, appleIosContextPatterns));
+  const hasPgAdminSignal = /\bpg[-\s]?admin\b/i.test(text);
 
   if (iosMentioned) {
     if (hasAppleIosContext) {
@@ -1814,6 +1853,12 @@ export const classifyDomainCategories = (
     } else if (!curatedProvidesOperatingSystems) {
       categories.delete("Operating Systems");
     }
+  }
+
+  if (hasPgAdminSignal) {
+    categories.add("Database & Storage");
+    categories.add("Web Applications");
+    categories.delete("Operating Systems");
   }
 
   const isBrowser =
@@ -2115,7 +2160,7 @@ export const classifyExploitLayers = (
     pattern.test(text)
   );
   const hasKernelDriverSignal = matchesAny(text, kernelServerPatterns);
-  const hasKernelServerSignal =
+  let hasKernelServerSignal =
     hasKernelDriverSignal &&
     (hasStrongServerProtocol || hasRemoteContext || hasExplicitRemoteRce);
 
@@ -2240,6 +2285,29 @@ export const classifyExploitLayers = (
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
     hasCrossSiteScripting;
+
+  if (hasKernelServerSignal) {
+    const kernelClientAnchors =
+      cvssRequiresUserInteraction ||
+      hasClientUserInteractionSignal ||
+      hasClientFileSignal ||
+      hasExplicitFileUserAction ||
+      hasClientApplicationSignal ||
+      hasStrongClientApplicationSignal ||
+      hasCrossSiteScripting ||
+      curatedClientBias;
+    const kernelLacksServerAnchors =
+      !hasStrongServerProtocol &&
+      !domainSuggestsServer &&
+      !curatedServerBias &&
+      !networkOperatingSystemSignal &&
+      !mobileManagementSignal &&
+      !mobileDeviceManagementContext;
+
+    if (kernelClientAnchors && kernelLacksServerAnchors) {
+      hasKernelServerSignal = false;
+    }
+  }
 
   const clientLocalCounts =
     hasClientLocalExecutionSignal &&

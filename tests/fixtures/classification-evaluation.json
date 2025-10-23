@@ -594,5 +594,116 @@
         ]
       }
     }
+  },
+  {
+    "id": "citrix-netscaler-memory-overflow",
+    "title": "Citrix NetScaler memory overflow stays on the edge as server-side RCE",
+    "entry": {
+      "cveId": "CVE-2025-7775",
+      "vendor": "Citrix",
+      "product": "NetScaler",
+      "vulnerabilityName": "Citrix NetScaler memory overflow",
+      "description": "Citrix NetScaler ADC and NetScaler Gateway contain a memory overflow vulnerability that could allow for remote code execution and/or denial of service.",
+      "cvssVector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:L/SI:L/SA:L",
+      "cvssVersion": "4.0",
+      "cvssScore": 9.2,
+      "cvssSeverity": "Critical"
+    },
+    "expect": {
+      "internetExposed": true,
+      "domainCategories": {
+        "includes": [
+          "Security Appliances",
+          "Networking & VPN",
+          "Internet Edge"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Memory Corruption",
+          "DoS · Server-side"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory",
+          "RCE · Client-side Memory Corruption"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution",
+          "Denial of Service"
+        ]
+      }
+    }
+  },
+  {
+    "id": "pgadmin-binary-path-api-rce",
+    "title": "pgAdmin validate binary path API RCE is treated as a database web app issue",
+    "entry": {
+      "cveId": "CVE-2024-3116",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "pgAdmin validate binary path API remote code execution",
+      "description": "pgAdmin up to 8.4 allows remote code execution through the validate binary path API, enabling attackers to execute arbitrary code on the pgAdmin server.",
+      "cvssVector": null
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Web Applications",
+          "Database & Storage"
+        ],
+        "excludes": [
+          "Operating Systems"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory",
+          "RCE · Client-side Memory Corruption"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "microsoft-windows-truetype-client-rce",
+    "title": "Windows TrueType font RCE is classified as client-side memory corruption",
+    "entry": {
+      "cveId": "CVE-2011-3402",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft Windows TrueType font remote code execution",
+      "description": "Microsoft Windows Kernel win32k TrueType font parsing allows remote attackers to execute arbitrary code via crafted font data in a Word document or web page.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 8.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "RCE · Server-side Memory Corruption",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution",
+          "Memory Corruption"
+        ]
+      }
+    }
   }
 ]
