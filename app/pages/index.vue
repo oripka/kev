@@ -1569,6 +1569,19 @@ const resetYearRange = () => {
   yearRange.value = [start, end];
 };
 
+const clearYearRange = () => {
+  const [min, max] = yearBounds.value;
+  yearRange.value = [min, max];
+};
+
+const handleQuickYearRangeUpdate = (value: [number, number]) => {
+  yearRange.value = [value[0], value[1]];
+};
+
+const handleQuickSearchUpdate = (value: string) => {
+  searchInput.value = value;
+};
+
 const resetFilters = () => {
   Object.assign(filters, defaultFilters);
   if (searchDebounce) {
@@ -2714,18 +2727,18 @@ const asideAccordionItems = computed<AsideAccordionItem[]>(() => [
     badgeText: productTotalCount.value.toLocaleString(),
   },
   {
-    value: "presets",
-    label: "Filter presets",
-    slot: "presets",
-    badgeColor: "info",
-    badgeText: filterPresets.value.length.toString(),
-  },
-  {
     value: "filters",
     label: "Filters",
     slot: "filters",
     badgeColor: "warning",
     badgeText: activeFilterCount.value.toString(),
+  },
+  {
+    value: "presets",
+    label: "Filter presets",
+    slot: "presets",
+    badgeColor: "info",
+    badgeText: filterPresets.value.length.toString(),
   },
   {
     value: "market",
@@ -3020,7 +3033,7 @@ const clearFilter = (
   }
 
   if (key === "yearRange") {
-    resetYearRange();
+    clearYearRange();
     return;
   }
 
@@ -4293,8 +4306,18 @@ const tableMeta = {
           :has-active-filter-chips="hasActiveFilterChips"
           :show-filter-chips="showQuickFilterChips"
           :show-reset-button="showQuickFilterResetButton"
+          :year-range="yearRange"
+          :year-bounds="yearBounds"
+          :has-custom-year-range="hasCustomYearRange"
+          :is-year-range-limited="isYearRangeLimited"
+          :search-input="searchInput"
+          search-placeholder="Filter catalog"
           @reset="resetFilters"
           @clear-filter="clearFilter"
+          @update:year-range="handleQuickYearRangeUpdate"
+          @reset-year-range="resetYearRange"
+          @clear-year-range="clearYearRange"
+          @update:search-input="handleQuickSearchUpdate"
         />
       </div>
 

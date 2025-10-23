@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { useDebounceFn } from "@vueuse/core";
-import { computed, h, ref, resolveComponent, watch } from "vue";
-import type { TableColumn } from "@nuxt/ui";
+import { computed, h, ref, watch } from "vue";
+import type { TableColumn, TableRow } from "@nuxt/ui";
+import MarketOfferDetailModal from "~/components/MarketOfferDetailModal.vue";
 import StatCard from "~/components/StatCard.vue";
 import { useDateDisplay } from "~/composables/useDateDisplay";
 import type {
-  CvssSeverity,
   MarketOfferListItem,
   MarketOffersResponse,
   MarketProgramType,
-  MarketOfferTargetMatchMethod,
   MarketStatsResponse,
 } from "~/types";
 
@@ -34,64 +33,37 @@ const formatProgramTypeLabel = (type: MarketProgramType) => {
   return type;
 };
 
+const formatRewardRange = (offer: MarketOfferListItem) => {
+  const { minRewardUsd, maxRewardUsd } = offer;
+
+  if (typeof minRewardUsd === "number" && typeof maxRewardUsd === "number") {
+    return `${currencyFormatter.format(minRewardUsd)} – ${currencyFormatter.format(maxRewardUsd)}`;
+  }
+
+  if (typeof minRewardUsd === "number") {
+    return currencyFormatter.format(minRewardUsd);
+  }
+
+  if (typeof maxRewardUsd === "number") {
+    return currencyFormatter.format(maxRewardUsd);
+  }
+
+  return "Not published";
+};
+
+const formatAverageReward = (offer: MarketOfferListItem) => {
+  const { averageRewardUsd } = offer;
+  return typeof averageRewardUsd === "number"
+    ? currencyFormatter.format(averageRewardUsd)
+    : null;
+};
+
 const formatCategoryTypeLabel = (value: string) =>
   value
     .split(/[-_\s]+/u)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-
-const cvssSeverityColors: Record<CvssSeverity, string> = {
-  None: "success",
-  Low: "primary",
-  Medium: "warning",
-  High: "error",
-  Critical: "error",
-};
-
-const formatCvssScore = (score: number | null) =>
-  typeof score === "number" && Number.isFinite(score) ? score.toFixed(1) : null;
-
-const buildCvssLabel = (
-  severity: MarketOfferListItem["targets"][number]["matches"][number]["cvssSeverity"],
-  score: number | null,
-) => {
-  const parts: string[] = [];
-
-  if (severity) {
-    parts.push(severity);
-  }
-
-  const formattedScore = formatCvssScore(score);
-  if (formattedScore) {
-    parts.push(formattedScore);
-  }
-
-  if (!parts.length) {
-    parts.push("Unknown");
-  }
-
-  return parts.join(" ");
-};
-
-const matchMethodLabels: Record<MarketOfferTargetMatchMethod, string> = {
-  exact: "Exact catalog match",
-  fuzzy: "Fuzzy catalog match",
-  "manual-review": "Manual review mapping",
-  unknown: "Match method unknown",
-};
-
-const matchMethodColors: Record<MarketOfferTargetMatchMethod, string> = {
-  exact: "success",
-  fuzzy: "warning",
-  "manual-review": "neutral",
-  unknown: "neutral",
-};
-
-const classificationLabelClass =
-  "text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400";
-
-const classificationBadgeClass = "text-[11px] font-semibold";
 
 const { data, pending, error } = await useFetch<MarketStatsResponse>(
   "/api/market/stats",
@@ -592,452 +564,174 @@ const offersSummaryLabel = computed(() => {
 
 const offersErrorMessage = computed(() => offersError.value?.message ?? "");
 
+const showOfferModal = ref(false);
+const selectedOffer = ref<MarketOfferListItem | null>(null);
+
 const offerTableUi = {
   class: {
-    th: "align-top whitespace-normal",
-    td: "align-top whitespace-normal",
+    th: "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400",
+    td: "align-top px-3 py-3 text-sm text-neutral-600 dark:text-neutral-300",
+    tr: "cursor-pointer transition hover:bg-neutral-50 dark:hover:bg-neutral-800/60",
   },
-};
-
-const UBadge = resolveComponent("UBadge");
-const ULink = resolveComponent("ULink");
-const UIcon = resolveComponent("UIcon");
-
-const renderClassificationGroup = (label: string, values: string[], color: string) => {
-  if (!values.length) {
-    return null;
-  }
-
-  return h("div", { class: "space-y-1" }, [
-    h("p", { class: classificationLabelClass }, label),
-    h(
-      "div",
-      { class: "flex flex-wrap gap-1" },
-      values.map((value) =>
-        h(
-          UBadge,
-          {
-            color,
-            variant: "soft",
-            class: classificationBadgeClass,
-          },
-          () => value,
-        ),
-      ),
-    ),
-  ]);
 };
 
 const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
   {
-    id: "summary",
-    header: "Program & offer",
+    id: "program",
+    header: "Program",
     cell: ({ row }) => {
-      const offer = row.original;
-      const nodes: Array<ReturnType<typeof h>> = [];
-
-      nodes.push(
-        h("div", { class: "space-y-1" }, [
-          h(
-            "p",
-            { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
-            offer.programName,
-          ),
-          h(
-            "p",
-            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            formatProgramTypeLabel(offer.programType),
-          ),
-        ]),
-      );
-
-      const offerDetails: Array<ReturnType<typeof h>> = [
+      const item = row.original;
+      return h("div", { class: "space-y-1" }, [
+        h(
+          "p",
+          { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
+          item.programName,
+        ),
+        h(
+          "p",
+          { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+          formatProgramTypeLabel(item.programType),
+        ),
+      ]);
+    },
+  },
+  {
+    id: "offer",
+    header: "Offer",
+    cell: ({ row }) => {
+      const item = row.original;
+      const nodes: Array<ReturnType<typeof h>> = [
         h(
           "p",
           { class: "text-sm text-neutral-700 dark:text-neutral-200" },
-          offer.title,
+          item.title,
         ),
       ];
 
-      if (offer.categories.length) {
-        offerDetails.push(
+      if (item.categories.length) {
+        nodes.push(
           h(
             "div",
             { class: "flex flex-wrap gap-2" },
-            offer.categories.map((category) =>
+            item.categories.slice(0, 3).map((category) =>
               h(
-                UBadge,
+                "span",
                 {
-                  color: "neutral",
-                  variant: "soft",
-                  class: "text-xs font-medium",
+                  class:
+                    "rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
                 },
-                () => category.name,
+                category.name,
               ),
             ),
           ),
         );
       }
 
-      nodes.push(h("div", { class: "space-y-1" }, offerDetails));
-
-      if (offer.sourceUrl) {
+      if (item.targets.length) {
+        const targetLabels = item.targets
+          .slice(0, 2)
+          .map((target) => `${target.vendorName} · ${target.productName}`);
+        const suffix = item.targets.length > 2 ? " …" : "";
         nodes.push(
           h(
-            ULink,
-            {
-              href: offer.sourceUrl,
-              target: "_blank",
-              rel: "noopener noreferrer",
-              class:
-                "inline-flex items-center gap-2 text-xs font-medium text-primary-600 transition hover:text-primary-500 dark:text-primary-300 dark:hover:text-primary-200",
-            },
-            () => [
-              "View source",
-              h(UIcon, { name: "i-lucide-arrow-up-right", class: "size-4" }),
-            ],
+            "p",
+            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+            targetLabels.join(" • ") + suffix,
           ),
         );
       }
 
-      return h("div", { class: "space-y-3 max-w-xs md:max-w-sm" }, nodes);
+      return h("div", { class: "space-y-1 max-w-xs" }, nodes);
     },
   },
   {
-    id: "valuation",
-    header: "Valuation",
+    id: "reward",
+    header: "Reward",
     cell: ({ row }) => {
-      const offer = row.original;
-      const items: Array<ReturnType<typeof h>> = [];
-      const { minRewardUsd, maxRewardUsd, averageRewardUsd, exclusivity } = offer;
+      const item = row.original;
+      const details: Array<ReturnType<typeof h>> = [
+        h(
+          "p",
+          { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
+          formatRewardRange(item),
+        ),
+      ];
 
-      const rangeLabel = (() => {
-        if (typeof minRewardUsd === "number" && typeof maxRewardUsd === "number") {
-          return `${currencyFormatter.format(minRewardUsd)} – ${currencyFormatter.format(maxRewardUsd)}`;
-        }
-        if (typeof minRewardUsd === "number") {
-          return currencyFormatter.format(minRewardUsd);
-        }
-        if (typeof maxRewardUsd === "number") {
-          return currencyFormatter.format(maxRewardUsd);
-        }
-        return null;
-      })();
-
-      if (rangeLabel) {
-        items.push(
-          h(
-            "p",
-            { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
-            rangeLabel,
-          ),
-        );
-      } else {
-        items.push(
-          h(
-            "p",
-            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-            "—",
-          ),
-        );
-      }
-
-      if (typeof averageRewardUsd === "number") {
-        items.push(
+      const average = formatAverageReward(item);
+      if (average) {
+        details.push(
           h(
             "p",
             { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            `Average ${currencyFormatter.format(averageRewardUsd)}`,
+            `Average ${average}`,
           ),
         );
       }
 
-      if (exclusivity) {
-        items.push(
+      if (item.exclusivity) {
+        details.push(
           h(
             "p",
             { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            exclusivity,
+            item.exclusivity,
           ),
         );
       }
 
-      return h("div", { class: "space-y-1 min-w-[150px]" }, items);
+      return h("div", { class: "space-y-1" }, details);
     },
   },
   {
-    id: "targets",
-    header: "Targets & KEV alignment",
+    id: "captured",
+    header: "Last captured",
     cell: ({ row }) => {
-      const offer = row.original;
-      if (!offer.targets.length) {
+      const item = row.original;
+      if (!item.sourceCaptureDate) {
         return h(
           "span",
-          { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-          "—",
+          { class: "text-xs text-neutral-500 dark:text-neutral-400" },
+          "Not available",
         );
       }
 
       return h(
-        "div",
-        { class: "space-y-3 max-w-2xl break-words" },
-        offer.targets.map((target) => {
-          const metadataBadges: Array<ReturnType<typeof h>> = [];
-          const methodLabel = matchMethodLabels[target.matchMethod];
-          if (methodLabel) {
-            metadataBadges.push(
-              h(
-                UBadge,
-                {
-                  color: matchMethodColors[target.matchMethod],
-                  variant: "soft",
-                  class: "text-[11px] font-semibold",
-                },
-                () => methodLabel,
-              ),
-            );
-          }
-
-          if (typeof target.confidence === "number") {
-            metadataBadges.push(
-              h(
-                UBadge,
-                {
-                  color: "neutral",
-                  variant: "soft",
-                  class: "text-[11px] font-semibold",
-                },
-                () => `Confidence ${target.confidence}%`,
-              ),
-            );
-          }
-
-          const matchNodes = target.matches.map((match) => {
-            const headerItems: Array<ReturnType<typeof h>> = [
-              h(
-                ULink,
-                {
-                  to: { path: "/", query: { search: match.cveId } },
-                  class: "inline-flex items-center justify-center",
-                  "aria-label": `Open catalog with ${match.cveId}`,
-                },
-                () =>
-                  h(
-                    UBadge,
-                    {
-                      color: "error",
-                      variant: "soft",
-                      class: "text-xs font-semibold",
-                    },
-                    () => match.cveId,
-                  ),
-              ),
-              h(
-                "span",
-                { class: "text-xs font-medium text-neutral-700 dark:text-neutral-200" },
-                match.vulnerabilityName,
-              ),
-            ];
-
-            const hasCvss =
-              typeof match.cvssScore === "number" || Boolean(match.cvssSeverity);
-            if (hasCvss) {
-              const cvssColor = match.cvssSeverity
-                ? cvssSeverityColors[match.cvssSeverity]
-                : "neutral";
-              const cvssLabel = buildCvssLabel(match.cvssSeverity, match.cvssScore);
-              headerItems.push(
-                h(
-                  UBadge,
-                  {
-                    color: cvssColor,
-                    variant: "soft",
-                    class: "text-[11px] font-semibold",
-                  },
-                  () => cvssLabel,
-                ),
-              );
-            }
-
-            const alignmentNote =
-              match.vendorKey !== target.vendorKey || match.productKey !== target.productKey
-                ? h(
-                    "p",
-                    { class: "text-[11px] text-neutral-500 dark:text-neutral-400" },
-                    `Catalog entry: ${match.vendorName} · ${match.productName}`,
-                  )
-                : null;
-
-            const vectorNode = match.cvssVector
-              ? h(
-                  "code",
-                  {
-                    class:
-                      "block max-w-full overflow-x-auto rounded bg-neutral-100 px-2 py-1 text-[11px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300",
-                  },
-                  match.cvssVector,
-                )
-              : null;
-
-            const classificationSections = [
-              renderClassificationGroup("Domain", match.domainCategories, "primary"),
-              renderClassificationGroup("Exploit dynamics", match.exploitLayers, "warning"),
-              renderClassificationGroup("Vulnerability mix", match.vulnerabilityCategories, "secondary"),
-            ].filter(Boolean);
-
-            return h(
-              "div",
-              { class: "space-y-2 rounded-md bg-neutral-50 p-3 dark:bg-neutral-800/60" },
-              [
-                h("div", { class: "flex flex-wrap items-center gap-2" }, headerItems),
-                alignmentNote,
-                vectorNode,
-                ...classificationSections,
-              ].filter(Boolean),
-            );
-          });
-
-          const fallbackNode = target.matches.length
-            ? null
-            : h(
-                "div",
-                { class: "space-y-2 rounded-md bg-neutral-50 p-3 dark:bg-neutral-800/60" },
-                [
-                  target.cveId
-                    ? h(
-                        "div",
-                        { class: "flex flex-wrap items-center gap-2" },
-                        [
-                          h(
-                            ULink,
-                            {
-                              to: { path: "/", query: { search: target.cveId } },
-                              class: "inline-flex items-center justify-center",
-                              "aria-label": `Open catalog search for ${target.cveId}`,
-                            },
-                            () =>
-                              h(
-                                UBadge,
-                                {
-                                  color: "neutral",
-                                  variant: "soft",
-                                  class: "text-xs font-semibold",
-                                },
-                                () => target.cveId,
-                              ),
-                          ),
-                          h(
-                            "span",
-                            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-                            "No Known Exploited Vulnerability alignment found.",
-                          ),
-                        ],
-                      )
-                    : h(
-                        "p",
-                        { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-                        "No Known Exploited Vulnerability alignment found.",
-                      ),
-                ],
-              );
-
-          return h(
-            "div",
-            {
-              class:
-                "space-y-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-700",
-            },
-            [
-              h(
-                "div",
-                { class: "flex flex-col gap-2" },
-                [
-                  h(
-                    ULink,
-                    {
-                      to: { path: "/", query: { product: target.productKey } },
-                      class:
-                        "inline-flex w-fit items-center gap-2 text-sm font-semibold text-neutral-900 transition hover:text-primary-600 dark:text-neutral-50 dark:hover:text-primary-200",
-                    },
-                    () => `${target.vendorName} · ${target.productName}`,
-                  ),
-                  metadataBadges.length
-                    ? h("div", { class: "flex flex-wrap gap-1" }, metadataBadges)
-                    : null,
-                ].filter(Boolean),
-              ),
-              target.matches.length
-                ? h("div", { class: "space-y-3" }, matchNodes)
-                : fallbackNode,
-            ].filter(Boolean),
-          );
+        "span",
+        { class: "text-sm text-neutral-700 dark:text-neutral-300" },
+        formatDate(item.sourceCaptureDate, {
+          fallback: item.sourceCaptureDate,
+          preserveInputOnError: true,
         }),
       );
     },
   },
   {
-    id: "coverage",
-    header: "Coverage & capture",
+    id: "matches",
+    header: "KEV matches",
     cell: ({ row }) => {
-      const offer = row.original;
-      const children: Array<ReturnType<typeof h>> = [];
-
-      if (offer.matchedCveIds.length) {
-        const kevSet = new Set(offer.matchedKevCveIds);
-        children.push(
-          h(
-            "div",
-            { class: "flex flex-wrap gap-2" },
-            offer.matchedCveIds.map((cveId) =>
-              h(
-                ULink,
-                {
-                  to: { path: "/", query: { search: cveId } },
-                  class: "inline-flex items-center justify-center",
-                  "aria-label": `Open catalog with ${cveId}`,
-                },
-                () =>
-                  h(
-                    UBadge,
-                    {
-                      color: kevSet.has(cveId) ? "error" : "neutral",
-                      variant: "soft",
-                      class: "text-xs font-semibold",
-                    },
-                    () => cveId,
-                  ),
-              ),
-            ),
-          ),
-        );
-      } else {
-        children.push(
-          h(
-            "span",
-            { class: "text-sm text-neutral-400 dark:text-neutral-500" },
-            "—",
-          ),
-        );
-      }
-
-      if (offer.sourceCaptureDate) {
-        const capturedLabel = formatDate(offer.sourceCaptureDate, {
-          fallback: offer.sourceCaptureDate,
-          preserveInputOnError: true,
-        });
-        children.push(
-          h(
-            "p",
-            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            `Captured ${capturedLabel}`,
-          ),
-        );
-      }
-
-      return h("div", { class: "space-y-2 min-w-[160px]" }, children);
+      const count = row.original.matchedKevCveIds.length;
+      return h(
+        "span",
+        { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
+        count.toLocaleString(),
+      );
     },
   },
 ]);
+
+const handleOfferSelect = (row: TableRow<MarketOfferListItem>) => {
+  if (!row?.original) {
+    return;
+  }
+
+  selectedOffer.value = row.original;
+  showOfferModal.value = true;
+};
+
+watch(showOfferModal, (open) => {
+  if (!open) {
+    selectedOffer.value = null;
+  }
+});
 </script>
 
 <template>
@@ -1288,7 +982,12 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
             <p>No market offers match your filters yet.</p>
           </div>
           <div v-else>
-            <UTable :data="offers" :columns="offerColumns" :ui="offerTableUi" />
+            <UTable
+              :data="offers"
+              :columns="offerColumns"
+              :ui="offerTableUi"
+              @select="handleOfferSelect"
+            />
           </div>
 
           <div
@@ -1395,5 +1094,10 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
         </template>
       </UCard>
     </div>
+
+    <MarketOfferDetailModal
+      v-model:open="showOfferModal"
+      :offer="selectedOffer"
+    />
   </div>
 </template>
