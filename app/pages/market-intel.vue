@@ -51,13 +51,6 @@ const formatRewardRange = (offer: MarketOfferListItem) => {
   return "Not published";
 };
 
-const formatAverageReward = (offer: MarketOfferListItem) => {
-  const { averageRewardUsd } = offer;
-  return typeof averageRewardUsd === "number"
-    ? currencyFormatter.format(averageRewardUsd)
-    : null;
-};
-
 const formatCategoryTypeLabel = (value: string) =>
   value
     .split(/[-_\s]+/u)
@@ -378,7 +371,7 @@ const updateSearch = useDebounceFn((value: string) => {
   if (searchTerm.value !== trimmed) {
     searchTerm.value = trimmed;
   }
-}, 250);
+}, 500);
 
 const parseRewardInput = (value: string): number | null => {
   if (!value.trim()) {
@@ -600,48 +593,11 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
     header: "Offer",
     cell: ({ row }) => {
       const item = row.original;
-      const nodes: Array<ReturnType<typeof h>> = [
-        h(
-          "p",
-          { class: "text-sm text-neutral-700 dark:text-neutral-200" },
-          item.title,
-        ),
-      ];
-
-      if (item.categories.length) {
-        nodes.push(
-          h(
-            "div",
-            { class: "flex flex-wrap gap-2" },
-            item.categories.slice(0, 3).map((category) =>
-              h(
-                "span",
-                {
-                  class:
-                    "rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
-                },
-                category.name,
-              ),
-            ),
-          ),
-        );
-      }
-
-      if (item.targets.length) {
-        const targetLabels = item.targets
-          .slice(0, 2)
-          .map((target) => `${target.vendorName} · ${target.productName}`);
-        const suffix = item.targets.length > 2 ? " …" : "";
-        nodes.push(
-          h(
-            "p",
-            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            targetLabels.join(" • ") + suffix,
-          ),
-        );
-      }
-
-      return h("div", { class: "space-y-1 max-w-xs" }, nodes);
+      return h(
+        "p",
+        { class: "text-sm text-neutral-700 dark:text-neutral-200 max-w-xs" },
+        item.title,
+      );
     },
   },
   {
@@ -649,36 +605,11 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
     header: "Reward",
     cell: ({ row }) => {
       const item = row.original;
-      const details: Array<ReturnType<typeof h>> = [
-        h(
-          "p",
-          { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
-          formatRewardRange(item),
-        ),
-      ];
-
-      const average = formatAverageReward(item);
-      if (average) {
-        details.push(
-          h(
-            "p",
-            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            `Average ${average}`,
-          ),
-        );
-      }
-
-      if (item.exclusivity) {
-        details.push(
-          h(
-            "p",
-            { class: "text-xs text-neutral-500 dark:text-neutral-400" },
-            item.exclusivity,
-          ),
-        );
-      }
-
-      return h("div", { class: "space-y-1" }, details);
+      return h(
+        "p",
+        { class: "text-sm font-semibold text-neutral-900 dark:text-neutral-50" },
+        formatRewardRange(item),
+      );
     },
   },
   {
