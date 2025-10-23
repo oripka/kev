@@ -43,6 +43,8 @@ const searchModel = computed({
   set: (value: string) => emit("update:search-input", value),
 });
 
+const hasSearchTerm = computed(() => searchModel.value.trim().length > 0);
+
 const selectedSource = computed({
   get: () => props.selectedSource,
   set: (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => emit("update:selected-source", value),
@@ -80,6 +82,10 @@ const handleReset = () => {
 
 const handleClearFilter = (key: ActiveFilter["key"]) => {
   emit("clear-filter", key);
+};
+
+const clearSearch = () => {
+  searchModel.value = "";
 };
 
 const sourceLabels: Record<"all" | "kev" | "enisa" | "historic" | "metasploit", string> = {
@@ -127,7 +133,18 @@ const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit"
               v-model="searchModel"
               class="w-full"
               placeholder="Filter by CVE, vendor, product, or description"
-            />
+            >
+              <template v-if="hasSearchTerm" #trailing>
+                <UButton
+                  size="2xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-x"
+                  aria-label="Clear search"
+                  @click.stop.prevent="clearSearch"
+                />
+              </template>
+            </UInput>
           </UFormField>
 
           <UFormField label="Data source">
@@ -229,16 +246,19 @@ const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit"
         <div class="space-y-6">
           <UFormField label="Active filters" v-if="props.hasActiveFilterChips">
             <div class="flex flex-wrap items-center gap-2">
-              <button
+              <UButton
                 v-for="item in props.activeFilters"
                 :key="`${item.key}-${item.value}`"
-                type="button"
-                class="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:focus-visible:ring-primary-500"
+                size="xs"
+                color="neutral"
+                variant="soft"
+                class="rounded-full"
+                :trailing-icon="'i-lucide-x'"
                 @click="handleClearFilter(item.key)"
               >
-                <span>{{ item.label }}: {{ item.value }}</span>
-                <UIcon name="i-lucide-x" class="size-3.5" />
-              </button>
+                <span class="font-medium">{{ item.label }}:</span>
+                <span class="truncate max-w-[12rem]">{{ item.value }}</span>
+              </UButton>
             </div>
           </UFormField>
 
