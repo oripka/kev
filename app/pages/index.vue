@@ -25,8 +25,11 @@ import {
 import type {
   CatalogSource,
   KevCountDatum,
+  KevDomainCategory,
   KevEntryDetail,
   KevEntrySummary,
+  KevExploitLayer,
+  KevVulnerabilityCategory,
   MarketOverview,
   MarketProgramType,
   TrackedProductQuickFilterTarget,
@@ -2471,6 +2474,80 @@ const toProgressStats = (counts: KevCountDatum[]): ProgressDatum[] => {
   });
 };
 
+const allDomainCategories = [
+  "Web Applications",
+  "Web Servers",
+  "Non-Web Applications",
+  "Mail Servers",
+  "Browsers",
+  "Operating Systems",
+  "Networking & VPN",
+  "Industrial Control Systems",
+  "Cloud & SaaS",
+  "Virtualization & Containers",
+  "Database & Storage",
+  "Security Appliances",
+  "Internet Edge",
+  "Other",
+] as const satisfies readonly KevDomainCategory[];
+
+const allExploitLayers = [
+  "RCE · Client-side Memory Corruption",
+  "RCE · Server-side Memory Corruption",
+  "RCE · Client-side Non-memory",
+  "RCE · Server-side Non-memory",
+  "DoS · Client-side",
+  "DoS · Server-side",
+  "Mixed/Needs Review",
+  "Auth Bypass · Edge",
+  "Auth Bypass · Server-side",
+  "Configuration Abuse",
+  "Privilege Escalation",
+  "Command Injection",
+] as const satisfies readonly KevExploitLayer[];
+
+const allVulnerabilityCategories = [
+  "Remote Code Execution",
+  "Memory Corruption",
+  "Command Injection",
+  "Authentication Bypass",
+  "Information Disclosure",
+  "Denial of Service",
+  "Directory Traversal",
+  "SQL Injection",
+  "Cross-Site Scripting",
+  "Server-Side Request Forgery",
+  "Logic Flaw",
+  "Other",
+] as const satisfies readonly KevVulnerabilityCategory[];
+
+const normaliseCategoryIdentifier = (value: string) =>
+  value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+const computeMissingCategoryNames = (
+  allCategories: readonly string[],
+  counts: KevCountDatum[],
+) => {
+  if (!allCategories.length) {
+    return [] as string[];
+  }
+
+  const present = new Set(
+    counts
+      .filter((item) => (item.count ?? 0) > 0)
+      .flatMap((item) => [item.name, item.key])
+      .filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+      .map((value) => normaliseCategoryIdentifier(value)),
+  );
+
+  return allCategories.filter(
+    (category) => !present.has(normaliseCategoryIdentifier(category)),
+  );
+};
+
 const domainStats = computed(() => toProgressStats(domainCounts.value));
 const exploitLayerStats = computed(() => toProgressStats(exploitCounts.value));
 const vulnerabilityStats = computed(() =>
@@ -2478,6 +2555,21 @@ const vulnerabilityStats = computed(() =>
 );
 const vendorStats = computed(() => toProgressStats(vendorCounts.value));
 const productStats = computed(() => toProgressStats(productCounts.value));
+
+const domainMissingCategories = computed(() =>
+  computeMissingCategoryNames(allDomainCategories, domainCounts.value)
+);
+const exploitMissingCategories = computed(() =>
+  computeMissingCategoryNames(allExploitLayers, exploitCounts.value)
+);
+const vulnerabilityMissingCategories = computed(() =>
+  computeMissingCategoryNames(allVulnerabilityCategories, vulnerabilityCounts.value)
+);
+
+const missingFilterSectionClass =
+  "space-y-1 border-t border-dashed border-neutral-200/80 pt-2 text-[11px] text-neutral-500 dark:border-neutral-700/60 dark:text-neutral-400";
+const missingFilterPillClass =
+  "rounded-full border border-neutral-200/70 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-neutral-500 shadow-sm dark:border-neutral-700/60 dark:bg-neutral-800/60 dark:text-neutral-400";
 
 const topCountOptions = [5, 10, 15, 20];
 const topCountItems: SelectMenuItem<number>[] = topCountOptions.map(
@@ -3858,6 +3950,26 @@ const tableMeta = {
                 {{ topDomainStat.name }} ({{ topDomainStat.percentLabel }}%)
               </span>
             </div>
+
+            <div
+              v-if="domainMissingCategories.length"
+              :class="missingFilterSectionClass"
+            >
+              <p
+                class="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500"
+              >
+                No matches yet
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="category in domainMissingCategories"
+                  :key="`missing-domain-${category}`"
+                  :class="missingFilterPillClass"
+                >
+                  {{ category }}
+                </span>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -3924,6 +4036,26 @@ const tableMeta = {
                 }}%)
               </span>
             </div>
+
+            <div
+              v-if="exploitMissingCategories.length"
+              :class="missingFilterSectionClass"
+            >
+              <p
+                class="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500"
+              >
+                No matches yet
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="category in exploitMissingCategories"
+                  :key="`missing-exploit-${category}`"
+                  :class="missingFilterPillClass"
+                >
+                  {{ category }}
+                </span>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -3989,6 +4121,26 @@ const tableMeta = {
                   topVulnerabilityStat.percentLabel
                 }}%)
               </span>
+            </div>
+
+            <div
+              v-if="vulnerabilityMissingCategories.length"
+              :class="missingFilterSectionClass"
+            >
+              <p
+                class="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500"
+              >
+                No matches yet
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="category in vulnerabilityMissingCategories"
+                  :key="`missing-vulnerability-${category}`"
+                  :class="missingFilterPillClass"
+                >
+                  {{ category }}
+                </span>
+              </div>
             </div>
           </div>
         </template>
