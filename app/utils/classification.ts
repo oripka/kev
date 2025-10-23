@@ -2553,24 +2553,25 @@ export const classifyExploitLayers = (
 
   const side = determineSide();
 
-  if (!qualifiesForRce) {
-    const shouldLabelAuthBypass =
-      hasAuthBypassSignal &&
-      (domainSuggestsServer ||
-        domainHasEdgeExposure ||
-        hasServerSignal ||
-        hasStrongServerProtocol ||
-        hasRemoteContext ||
-        curatedServerBias ||
-        cvssStrongServer);
+  const shouldLabelAuthBypass =
+    hasAuthBypassSignal &&
+    (domainSuggestsServer ||
+      domainHasEdgeExposure ||
+      hasServerSignal ||
+      hasStrongServerProtocol ||
+      hasRemoteContext ||
+      curatedServerBias ||
+      cvssStrongServer);
 
-    if (shouldLabelAuthBypass) {
-      layers.add(
-        domainHasEdgeExposure
-          ? "Auth Bypass · Edge"
-          : "Auth Bypass · Server-side"
-      );
-    }
+  if (shouldLabelAuthBypass) {
+    layers.add(
+      domainHasEdgeExposure
+        ? "Auth Bypass · Edge"
+        : "Auth Bypass · Server-side"
+    );
+  }
+
+  if (!qualifiesForRce) {
 
     const shouldLabelConfigurationAbuse =
       hasConfigurationAbuseSignal &&
