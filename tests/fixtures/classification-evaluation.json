@@ -511,5 +511,88 @@
         ]
       }
     }
+  },
+  {
+    "id": "citrix-netscaler-memory-overflow",
+    "title": "Citrix NetScaler memory overflow is treated as server-side memory corruption",
+    "entry": {
+      "cveId": "CVE-2025-7775",
+      "vendor": "Citrix",
+      "product": "NetScaler ADC and NetScaler Gateway",
+      "vulnerabilityName": "Citrix NetScaler memory overflow vulnerability",
+      "description": "Citrix NetScaler ADC and NetScaler Gateway contain a memory overflow vulnerability that could allow for remote code execution and/or denial of service.",
+      "cvssVector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:L/SI:L/SA:L"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Memory Corruption",
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "erlang-otp-ssh-auth-bypass",
+    "title": "Erlang OTP SSH missing authentication is classified as an auth bypass",
+    "entry": {
+      "cveId": "CVE-2025-32433",
+      "vendor": "Erlang",
+      "product": "Erlang/OTP SSH Server",
+      "vulnerabilityName": "Erlang/OTP SSH server missing authentication",
+      "description": "Erlang Erlang/OTP SSH server contains a missing authentication for critical function vulnerability that allows attackers to execute arbitrary commands without valid credentials, enabling unauthenticated remote code execution.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "Auth Bypass · Server-side"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Authentication Bypass",
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "appsmith-command-execution",
+    "title": "Appsmith remote command execution is flagged as command injection",
+    "entry": {
+      "cveId": "CVE-2024-55963",
+      "vendor": "Appsmith",
+      "product": "Appsmith",
+      "vulnerabilityName": "Appsmith remote command execution",
+      "description": "An incorrectly configured PostgreSQL instance in the Appsmith image leads to remote command execution inside the Appsmith Docker container.",
+      "cvssVector": null
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "Command Injection",
+          "RCE · Server-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory",
+          "RCE · Client-side Memory Corruption"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Command Injection",
+          "Remote Code Execution"
+        ]
+      }
+    }
   }
 ]

@@ -1342,13 +1342,25 @@ const privilegeRequirementPatterns: RegExp[] = [
 const remoteExecutionPatterns: RegExp[] = [
   /\b(remote code execution|rce)\b/i,
   /\b(execute code remotely|remote execution|arbitrary remote code)\b/i,
-  /\b(remote exploit|remote payload)\b/i
+  /\b(remote command execution)\b/i,
+  /\b(remote exploit|remote payload)\b/i,
 ];
 
 const codeExecutionPatterns: RegExp[] = [
   /\b(execute arbitrary code|arbitrary code execution|run arbitrary code|code[-\s]?execution|execute injected code)\b/i,
   /\b(arbitrary command execution|command injection)\b/i,
   /(?:malicious|trojan(?:ized)?)\b[\s\S]{0,120}?(?:backdoor|c2|command(?:[-\s]?and[-\s]?control)|c&c)\b/i,
+];
+
+const commandInjectionPatterns: RegExp[] = [
+  /\bcommand injection\b/i,
+  /\bos[-\s]?command(?: injection| execution)?\b/i,
+  /\bshell command(?: injection| execution)?\b/i,
+  /\b(?:remote|arbitrary|unauthorized|unauthenticated|authenticated|privileged|system|os|shell)\s+command execution\b/i,
+  /\bcommand execution vulnerability\b/i,
+  /\bexecute(?:s|d|ing)?\s+(?:arbitrary|remote|os|system|shell)?\s*commands?\b/i,
+  /\brun(?:s|ning)?\s+(?:arbitrary|remote|os|system|shell)?\s*commands?\b/i,
+  /system\(/i,
 ];
 
 const crossSiteScriptingPatterns: RegExp[] = [
@@ -1381,6 +1393,7 @@ const remoteContextPatterns: RegExp[] = [
 const memoryCorruptionPatterns: RegExp[] = [
   // General memory corruption
   /\bmemory (?:corruption|corrupt(?:ed)?)\b/i,
+  /\bmemory overflow\b/i,
 
   // Buffer overflows and similar
   /\b(?:buffer(?:[-\s]?(?:overflow|overrun|underflow|underrun))|stack(?:[-\s]?(?:overflow|overrun))|heap(?:[-\s]?(?:overflow|corruption)))\b/i,
@@ -1447,6 +1460,11 @@ const authenticationBypassPatterns: RegExp[] = [
   /\bwithout authentication\b/i,
   /\bunauthenticated access\b/i,
   /\bauthorization bypass\b/i,
+  /\bmissing authentication\b/i,
+  /\bno authentication required\b/i,
+  /\bwithout valid credentials\b/i,
+  /\bwithout credentials\b/i,
+  /\black(?:ing)? authentication\b/i,
 ];
 
 const configurationAbusePatterns: RegExp[] = [
@@ -1667,7 +1685,7 @@ const vulnerabilityRules: Array<{
 }> = [
   {
     category: "Command Injection",
-    patterns: [/(command injection|os command|system\(|shell command)/i],
+    patterns: commandInjectionPatterns,
   },
   {
     category: "SQL Injection",
@@ -1695,9 +1713,7 @@ const vulnerabilityRules: Array<{
   },
   {
     category: "Authentication Bypass",
-    patterns: [
-      /(authentication bypass|bypass authentication|unauthenticated access|without authentication|authorization bypass)/i,
-    ],
+    patterns: authenticationBypassPatterns,
   },
   {
     category: "Information Disclosure",
@@ -2036,6 +2052,7 @@ export const classifyExploitLayers = (
     text,
     configurationAbusePatterns
   );
+  const hasCommandInjection = matchesAny(text, commandInjectionPatterns);
   let hasClientSignal = matchesAny(text, clientSignalPatterns);
   if (hasCrossSiteScripting) {
     hasClientSignal = true;
@@ -2046,6 +2063,10 @@ export const classifyExploitLayers = (
   const domainHasEdgeExposure = domainCategories.some((category) =>
     internetEdgeDomainHints.includes(category)
   );
+
+  if (hasCommandInjection) {
+    layers.add("Command Injection");
+  }
 
   if (curatedClientBias) {
     hasClientSignal = true;

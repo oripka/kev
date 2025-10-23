@@ -75,6 +75,7 @@ export type KevExploitLayer =
   | 'Auth Bypass · Server-side'
   | 'Configuration Abuse'
   | 'Privilege Escalation'
+  | 'Command Injection'
 
 export type KevVulnerabilityCategory =
   | 'Remote Code Execution'
