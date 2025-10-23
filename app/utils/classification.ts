@@ -2365,6 +2365,15 @@ export const classifyExploitLayers = (
     cvssStrongServer = false;
   }
 
+  const remoteCvssUserInteractionLeansClient =
+    hasRemoteContext &&
+    (Boolean(cvssRequiresUserInteraction) || hasClientUserInteractionSignal) &&
+    !domainSuggestsServer &&
+    !curatedServerBias &&
+    !networkOperatingSystemSignal &&
+    !mobileManagementSignal &&
+    !mobileDeviceManagementContext;
+
   const strongServerIndicators =
     hasServerSignal ||
     domainSuggestsServer ||
@@ -2596,6 +2605,10 @@ export const classifyExploitLayers = (
       }
 
       if (hasRemoteContext && !cvssSuggestsLocal) {
+        if (remoteCvssUserInteractionLeansClient) {
+          hasMixedContext = false;
+          return "Client-side";
+        }
         return "Server-side";
       }
 
@@ -2620,7 +2633,15 @@ export const classifyExploitLayers = (
       return "Client-side";
     }
 
-    return hasRemoteContext ? "Server-side" : "Client-side";
+    if (hasRemoteContext) {
+      if (remoteCvssUserInteractionLeansClient) {
+        hasMixedContext = false;
+        return "Client-side";
+      }
+      return "Server-side";
+    }
+
+    return "Client-side";
   };
 
   const side = determineSide();
