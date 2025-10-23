@@ -6,6 +6,7 @@ import type {
   LatestAdditionSortKey,
   LatestAdditionSortOption,
   LatestAdditionSummary,
+  QuickFilterUpdate,
   SeverityDistributionDatum,
   SourceBadgeMap,
   StatTrend,
@@ -16,6 +17,7 @@ const props = defineProps<{
   isBusy: boolean;
   showRiskDetails: boolean;
   showTrendLines: boolean;
+  showHeatmap: boolean;
   matchingResultsLabel: string;
   periodLabel: string;
   highSeverityShareLabel: string;
@@ -46,9 +48,11 @@ const emit = defineEmits<{
   (event: "update:open", value: boolean): void;
   (event: "update:show-risk-details", value: boolean): void;
   (event: "update:show-trend-lines", value: boolean): void;
+  (event: "update:show-heatmap", value: boolean): void;
   (event: "update:latest-addition-sort-key", value: LatestAdditionSortKey): void;
   (event: "open-details", entry: KevEntrySummary): void;
   (event: "add-to-tracked", entry: KevEntrySummary): void;
+  (event: "quick-filter", payload: QuickFilterUpdate): void;
 }>();
 
 const open = computed({
@@ -66,6 +70,11 @@ const showTrendLines = computed({
   set: (value: boolean) => emit("update:show-trend-lines", value),
 });
 
+const showHeatmap = computed({
+  get: () => props.showHeatmap,
+  set: (value: boolean) => emit("update:show-heatmap", value),
+});
+
 const latestAdditionSortKey = computed({
   get: () => props.latestAdditionSortKey,
   set: (value: LatestAdditionSortKey) => emit("update:latest-addition-sort-key", value),
@@ -77,6 +86,10 @@ const handleOpenDetails = (entry: KevEntrySummary) => {
 
 const handleAddToTracked = (entry: KevEntrySummary) => {
   emit("add-to-tracked", entry);
+};
+
+const handleHeatmapQuickFilter = (payload: QuickFilterUpdate) => {
+  emit("quick-filter", payload);
 };
 </script>
 
@@ -124,6 +137,12 @@ const handleAddToTracked = (entry: KevEntrySummary) => {
         />
 
         <FilteredTrendPanel v-model="showTrendLines" :entries="props.entries" />
+
+        <TrendHeatmapPanel
+          v-model="showHeatmap"
+          :entries="props.entries"
+          @quick-filter="handleHeatmapQuickFilter"
+        />
 
         <UCard>
           <div class="space-y-1">

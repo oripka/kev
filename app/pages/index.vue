@@ -97,6 +97,7 @@ const showWellKnownOnly = ref(false);
 const showRansomwareOnly = ref(false);
 const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
+const showHeatmap = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
@@ -1290,6 +1291,11 @@ const closeDetails = () => {
 const handleDetailQuickFilter = (update: QuickFilterUpdate) => {
   applyQuickFilters(update);
   closeDetails();
+};
+
+const handleTrendQuickFilter = (update: QuickFilterUpdate) => {
+  applyQuickFilters(update);
+  showTrendSlideover.value = false;
 };
 
 const handleTrackedInsightQuickFilter = (
@@ -4554,6 +4560,7 @@ const tableMeta = {
         v-model:open="showTrendSlideover"
         v-model:show-risk-details="showRiskDetails"
         v-model:show-trend-lines="showTrendLines"
+        v-model:show-heatmap="showHeatmap"
         v-model:latest-addition-sort-key="latestAdditionSortKey"
         :is-busy="isBusy"
         :matching-results-label="matchingResultsLabel"
@@ -4581,6 +4588,7 @@ const tableMeta = {
         :focus-context="riskFocusContext"
         @open-details="openDetails"
         @add-to-tracked="handleAddToTracked"
+        @quick-filter="handleTrendQuickFilter"
       />
       <MySoftwareSlideover
         v-model:open="showMySoftwareSlideover"
