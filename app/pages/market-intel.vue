@@ -836,21 +836,24 @@ watch(showOfferModal, (open) => {
 
             <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div class="flex flex-wrap items-center gap-2">
-                <button
+                <UButton
                   v-for="option in programTypeOptions"
                   :key="option.value"
                   type="button"
-                  class="rounded-full border px-3 py-1 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="!h-auto !gap-0 !rounded-full border text-xs font-medium !px-3 !py-1 transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0"
                   :class="[
                     isProgramTypeSelected(option.value)
-                      ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-500/60 dark:bg-primary-500/10 dark:text-primary-200'
-                      : 'border-neutral-200 text-neutral-600 hover:border-primary-200 hover:text-primary-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-primary-500/40 dark:hover:text-primary-200',
+                      ? 'border-primary-300 !bg-primary-50 text-primary-700 dark:border-primary-500/60 dark:!bg-primary-500/10 dark:text-primary-200'
+                      : 'border-neutral-200 text-neutral-600 hover:border-primary-200 hover:!bg-transparent hover:text-primary-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-primary-500/40 dark:hover:!bg-transparent dark:hover:text-primary-200',
                   ]"
                   :aria-pressed="isProgramTypeSelected(option.value)"
                   @click="toggleProgramType(option.value)"
                 >
                   {{ option.label }}
-                </button>
+                </UButton>
               </div>
 
               <div class="flex flex-wrap items-end gap-3">

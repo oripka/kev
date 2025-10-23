@@ -67,17 +67,20 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
         </div>
 
         <div v-if="props.domainStats.length" class="space-y-3">
-          <button
+          <UButton
             v-for="stat in props.domainStats"
             :key="stat.key"
             type="button"
+            color="neutral"
+            variant="ghost"
+            size="md"
             @click="toggle('domain', stat.key)"
             :aria-pressed="props.filters.domain === stat.key"
             :class="[
-              'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:focus-visible:ring-emerald-600',
+              'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-emerald-400 dark:!focus-visible:ring-emerald-600',
               props.filters.domain === stat.name
-                ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-emerald-200 dark:ring-emerald-500/40'
-                : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ? '!bg-emerald-50 dark:!bg-emerald-500/10 !ring-emerald-200 dark:!ring-emerald-500/40'
+                : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
             ]"
           >
             <div class="flex items-center justify-between gap-3 text-sm">
@@ -96,7 +99,7 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
               </span>
             </div>
             <UProgress :model-value="stat.percent" :max="100" color="primary" size="sm" />
-          </button>
+          </UButton>
         </div>
         <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
           No domain category data for this filter.
@@ -126,17 +129,20 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
         </div>
 
         <div v-if="props.exploitLayerStats.length" class="space-y-3">
-          <button
+          <UButton
             v-for="stat in props.exploitLayerStats"
             :key="stat.key"
             type="button"
+            color="neutral"
+            variant="ghost"
+            size="md"
             @click="toggle('exploit', stat.key)"
             :aria-pressed="props.filters.exploit === stat.key"
             :class="[
-              'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:focus-visible:ring-amber-600',
+              'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-amber-400 dark:!focus-visible:ring-amber-600',
               props.filters.exploit === stat.name
-                ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/40'
-                : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ? '!bg-amber-50 dark:!bg-amber-500/10 !ring-amber-200 dark:!ring-amber-500/40'
+                : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
             ]"
           >
             <div class="flex items-center justify-between gap-3 text-sm">
@@ -155,7 +161,7 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
               </span>
             </div>
             <UProgress :model-value="stat.percent" :max="100" color="warning" size="sm" />
-          </button>
+          </UButton>
         </div>
         <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
           No exploit profile data for this filter.
@@ -185,17 +191,20 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
         </div>
 
         <div v-if="props.vulnerabilityStats.length" class="space-y-3">
-          <button
+          <UButton
             v-for="stat in props.vulnerabilityStats"
             :key="stat.key"
             type="button"
+            color="neutral"
+            variant="ghost"
+            size="md"
             @click="toggle('vulnerability', stat.key)"
             :aria-pressed="props.filters.vulnerability === stat.key"
             :class="[
-              'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:focus-visible:ring-rose-600',
+              'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-rose-400 dark:!focus-visible:ring-rose-600',
               props.filters.vulnerability === stat.key
-                ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
-                : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ? '!bg-rose-50 dark:!bg-rose-500/10 !ring-rose-200 dark:!ring-rose-500/40'
+                : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
             ]"
           >
             <div class="flex items-center justify-between gap-3 text-sm">
@@ -207,7 +216,7 @@ const toggle = (key: "domain" | "exploit" | "vulnerability", value: string) => {
               </span>
             </div>
             <UProgress :model-value="stat.percent" :max="100" color="error" size="sm" />
-          </button>
+          </UButton>
         </div>
         <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
           No vulnerability category data for this filter.

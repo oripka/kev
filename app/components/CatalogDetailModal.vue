@@ -557,11 +557,14 @@ const timelineStats = computed(() => {
                 >
                   {{ props.entry.cveId }}
                 </ULink>
-                <button
+                <UButton
                   v-for="source in props.entry.sources"
                   :key="source"
                   type="button"
-                  class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="group !h-auto !gap-0 !rounded-md !p-0 !px-0 !py-0 !bg-transparent transition hover:!bg-transparent focus-visible:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0 dark:hover:!bg-transparent"
                   @click="handleSourceQuickFilter(source)"
                 >
                   <UBadge
@@ -571,7 +574,7 @@ const timelineStats = computed(() => {
                   >
                     {{ props.sourceBadgeMap[source]?.label ?? source.toUpperCase() }}
                   </UBadge>
-                </button>
+                </UButton>
               </div>
             </div>
           </template>
@@ -603,40 +606,49 @@ const timelineStats = computed(() => {
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Vendor
                   </p>
-                  <button
+                  <UButton
                     type="button"
-                    class="rounded-md text-left text-base font-semibold text-neutral-900 transition hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-neutral-100 dark:hover:text-primary-300"
+                    color="neutral"
+                    variant="link"
+                    size="md"
+                    class="!h-auto !p-0 text-left text-base font-semibold text-neutral-900 transition hover:text-primary-600 focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0 dark:text-neutral-100 dark:hover:text-primary-300"
                     :aria-label="`Filter catalog by vendor ${props.entry.vendor}`"
                     @click="handleVendorQuickFilter(props.entry.vendorKey)"
                   >
                     {{ props.entry.vendor }}
-                  </button>
+                  </UButton>
                 </div>
                 <div>
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Product
                   </p>
-                  <button
+                  <UButton
                     type="button"
-                    class="rounded-md text-left text-base font-semibold text-neutral-900 transition hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-neutral-100 dark:hover:text-primary-300"
+                    color="neutral"
+                    variant="link"
+                    size="md"
+                    class="!h-auto !p-0 text-left text-base font-semibold text-neutral-900 transition hover:text-primary-600 focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0 dark:text-neutral-100 dark:hover:text-primary-300"
                     :aria-label="`Filter catalog by product ${props.entry.product}`"
                     @click="handleProductQuickFilter(props.entry.productKey)"
                   >
                     {{ props.entry.product }}
-                  </button>
+                  </UButton>
                 </div>
                 <div>
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     Date added
                   </p>
-                  <button
+                  <UButton
                     type="button"
-                    class="rounded-md text-left text-base text-primary-600 transition hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:text-primary-200"
+                    color="neutral"
+                    variant="link"
+                    size="md"
+                    class="!h-auto !p-0 text-left text-base text-primary-600 transition hover:text-primary-700 focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0 dark:text-primary-300 dark:hover:text-primary-200"
                     :aria-label="`Filter catalog by year ${props.entry.dateAdded}`"
                     @click="handleYearQuickFilter(props.entry.dateAdded)"
                   >
                     {{ props.entry.dateAdded }}
-                  </button>
+                  </UButton>
                 </div>
                 <div>
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
@@ -827,11 +839,14 @@ const timelineStats = computed(() => {
                     Domain categories
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <button
+                    <UButton
                       v-for="category in props.entry.domainCategories"
                       :key="category"
                       type="button"
-                      class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      class="group !h-auto !gap-0 !rounded-md !p-0 !bg-transparent transition hover:!bg-transparent focus-visible:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0 dark:hover:!bg-transparent"
                       @click="handleDomainQuickFilter(category)"
                     >
                       <UBadge
@@ -841,7 +856,7 @@ const timelineStats = computed(() => {
                       >
                         {{ category }}
                       </UBadge>
-                    </button>
+                    </UButton>
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -849,11 +864,14 @@ const timelineStats = computed(() => {
                     Exploit profiles
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <button
+                    <UButton
                       v-for="layer in props.entry.exploitLayers"
                       :key="layer"
                       type="button"
-                      class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 transition"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      class="group !h-auto !gap-0 !rounded-md !p-0 !bg-transparent transition hover:!bg-transparent focus-visible:outline-none !focus-visible:ring-2 !focus-visible:ring-amber-500 !focus-visible:ring-offset-0 dark:hover:!bg-transparent"
                       @click="handleExploitQuickFilter(layer)"
                     >
                       <UBadge
@@ -863,7 +881,7 @@ const timelineStats = computed(() => {
                       >
                         {{ layer }}
                       </UBadge>
-                    </button>
+                    </UButton>
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -871,11 +889,14 @@ const timelineStats = computed(() => {
                     Vulnerability categories
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <button
+                    <UButton
                       v-for="category in props.entry.vulnerabilityCategories"
                       :key="category"
                       type="button"
-                      class="group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 transition"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      class="group !h-auto !gap-0 !rounded-md !p-0 !bg-transparent transition hover:!bg-transparent focus-visible:outline-none !focus-visible:ring-2 !focus-visible:ring-rose-500 !focus-visible:ring-offset-0 dark:hover:!bg-transparent"
                       @click="handleVulnerabilityQuickFilter(category)"
                     >
                       <UBadge
@@ -885,7 +906,7 @@ const timelineStats = computed(() => {
                       >
                         {{ category }}
                       </UBadge>
-                    </button>
+                    </UButton>
                   </div>
                 </div>
               </div>

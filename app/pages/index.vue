@@ -3508,15 +3508,18 @@ const tableMeta = {
               Jump to curated combinations of catalog filters.
             </p>
             <div class="grid grid-cols-1 gap-3">
-              <button
+              <UButton
                 v-for="preset in filterPresets"
                 :key="preset.id"
                 type="button"
+                color="neutral"
+                variant="ghost"
+                size="md"
                 :class="[
-                  'group flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                  'group !flex items-start !gap-3 !rounded-xl border !px-3 !py-3 text-left transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-500 !focus-visible:ring-offset-0',
                   isFilterPresetActive(preset.id)
-                    ? 'border-primary-300 bg-primary-50/70 dark:border-primary-500/60 dark:bg-primary-500/10'
-                    : 'border-neutral-200 bg-white hover:border-primary-200 hover:bg-primary-50/60 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40 dark:hover:bg-primary-500/10',
+                    ? 'border-primary-300 !bg-primary-50/70 dark:border-primary-500/60 dark:!bg-primary-500/10'
+                    : 'border-neutral-200 !bg-white hover:border-primary-200 hover:!bg-primary-50/60 dark:border-neutral-800 dark:!bg-neutral-900 dark:hover:border-primary-500/40 dark:hover:!bg-primary-500/10',
                 ]"
                 @click="handleApplyFilterPreset(preset)"
               >
@@ -3542,7 +3545,7 @@ const tableMeta = {
                     {{ preset.description }}
                   </p>
                 </div>
-              </button>
+              </UButton>
             </div>
           </div>
         </template>
@@ -3801,17 +3804,20 @@ const tableMeta = {
             </p>
 
             <div v-if="domainStats.length" class="space-y-3">
-              <button
+              <UButton
                 v-for="stat in domainStats"
                 :key="stat.key"
                 type="button"
+                color="neutral"
+                variant="ghost"
+                size="md"
                 @click="toggleFilter('domain', stat.key)"
                 :aria-pressed="filters.domain === stat.key"
                 :class="[
-                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:focus-visible:ring-emerald-600',
+                  'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-emerald-400 dark:!focus-visible:ring-emerald-600',
                   filters.domain === stat.key
-                    ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-emerald-200 dark:ring-emerald-500/40'
-                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ? '!bg-emerald-50 dark:!bg-emerald-500/10 !ring-emerald-200 dark:!ring-emerald-500/40'
+                    : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
                 ]"
               >
                 <div class="flex items-center justify-between gap-3 text-sm">
@@ -3837,7 +3843,7 @@ const tableMeta = {
                   color="primary"
                   size="sm"
                 />
-              </button>
+              </UButton>
             </div>
             <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
               No domain category data for this filter.
@@ -3862,17 +3868,20 @@ const tableMeta = {
             </p>
 
             <div v-if="exploitLayerStats.length" class="space-y-3">
-              <button
+              <UButton
                 v-for="stat in exploitLayerStats"
                 :key="stat.key"
                 type="button"
+                color="neutral"
+                variant="ghost"
+                size="md"
                 @click="toggleFilter('exploit', stat.key)"
                 :aria-pressed="filters.exploit === stat.key"
                 :class="[
-                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:focus-visible:ring-amber-600',
+                  'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-amber-400 dark:!focus-visible:ring-amber-600',
                   filters.exploit === stat.key
-                    ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/40'
-                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ? '!bg-amber-50 dark:!bg-amber-500/10 !ring-amber-200 dark:!ring-amber-500/40'
+                    : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
                 ]"
               >
                 <div class="flex items-center justify-between gap-3 text-sm">
@@ -3898,7 +3907,7 @@ const tableMeta = {
                   color="warning"
                   size="sm"
                 />
-              </button>
+              </UButton>
             </div>
             <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
               No exploit profile data for this filter.
@@ -3925,17 +3934,20 @@ const tableMeta = {
             </p>
 
             <div v-if="vulnerabilityStats.length" class="space-y-3">
-              <button
+              <UButton
                 v-for="stat in vulnerabilityStats"
                 :key="stat.key"
                 type="button"
+                color="neutral"
+                variant="ghost"
+                size="md"
                 @click="toggleFilter('vulnerability', stat.key)"
                 :aria-pressed="filters.vulnerability === stat.key"
                 :class="[
-                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:focus-visible:ring-rose-600',
+                  'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-rose-400 dark:!focus-visible:ring-rose-600',
                   filters.vulnerability === stat.key
-                    ? 'bg-rose-50 dark:bg-rose-500/10 ring-rose-200 dark:ring-rose-500/40'
-                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ? '!bg-rose-50 dark:!bg-rose-500/10 !ring-rose-200 dark:!ring-rose-500/40'
+                    : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
                 ]"
               >
                 <div class="flex items-center justify-between gap-3 text-sm">
@@ -3961,7 +3973,7 @@ const tableMeta = {
                   color="secondary"
                   size="sm"
                 />
-              </button>
+              </UButton>
             </div>
             <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
               No vulnerability category data for this filter.
@@ -3993,17 +4005,20 @@ const tableMeta = {
             </UFormField>
 
             <div v-if="topVendorStats.length" class="space-y-3">
-              <button
+              <UButton
                 v-for="stat in topVendorStats"
                 :key="stat.key"
                 type="button"
+                color="neutral"
+                variant="ghost"
+                size="md"
                 @click="toggleFilter('vendor', stat.key)"
                 :aria-pressed="filters.vendor === stat.key"
                 :class="[
-                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
+                  'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-400 dark:!focus-visible:ring-primary-600',
                   filters.vendor === stat.key
-                    ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
-                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ? '!bg-primary-50 dark:!bg-primary-500/10 !ring-primary-200 dark:!ring-primary-500/40'
+                    : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
                 ]"
               >
                 <div class="flex items-center justify-between gap-3 text-sm">
@@ -4029,7 +4044,7 @@ const tableMeta = {
                   color="primary"
                   size="sm"
                 />
-              </button>
+              </UButton>
             </div>
             <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
               No vendor data for this filter.
@@ -4049,17 +4064,20 @@ const tableMeta = {
             </UFormField>
 
             <div v-if="topProductStats.length" class="space-y-3">
-              <button
+              <UButton
                 v-for="stat in topProductStats"
                 :key="stat.key"
                 type="button"
+                color="neutral"
+                variant="ghost"
+                size="md"
                 @click="toggleFilter('product', stat.key)"
                 :aria-pressed="filters.product === stat.key"
                 :class="[
-                  'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
+                  'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-secondary-400 dark:!focus-visible:ring-secondary-600',
                   filters.product === stat.key
-                    ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
-                    : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                    ? '!bg-secondary-50 dark:!bg-secondary-500/10 !ring-secondary-200 dark:!ring-secondary-500/40'
+                    : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
                 ]"
               >
                 <div class="flex items-center justify-between gap-3 text-sm">
@@ -4093,7 +4111,7 @@ const tableMeta = {
                   color="secondary"
                   size="sm"
                 />
-              </button>
+              </UButton>
             </div>
             <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
               No product data for this filter.

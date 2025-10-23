@@ -379,13 +379,16 @@ const handleSummaryQuickFilter = () => {
         </div>
 
         <div class="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-          <button
+          <UButton
             type="button"
-            class="transition hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:hover:text-neutral-200"
+            color="neutral"
+            variant="link"
+            size="xs"
+            class="!p-0 text-neutral-500 transition hover:text-neutral-700 focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-400 !focus-visible:ring-offset-0 dark:text-neutral-400 dark:hover:text-neutral-200"
             @click="emits('clear')"
           >
             Clear all tracked products
-          </button>
+          </UButton>
           <span>{{ props.trackedProductCount.toLocaleString() }} tracked</span>
         </div>
       </div>

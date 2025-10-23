@@ -84,17 +84,20 @@ const toggle = (key: "vendor" | "product", value: string) => {
         </div>
 
         <div v-if="props.topVendorStats.length" class="space-y-3">
-          <button
+          <UButton
             v-for="stat in props.topVendorStats"
             :key="stat.key"
             type="button"
+            color="neutral"
+            variant="ghost"
+            size="md"
             @click="toggle('vendor', stat.key)"
             :aria-pressed="props.filters.vendor === stat.key"
             :class="[
-              'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-600',
+              'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-primary-400 dark:!focus-visible:ring-primary-600',
               props.filters.vendor === stat.key
-                ? 'bg-primary-50 dark:bg-primary-500/10 ring-primary-200 dark:ring-primary-500/40'
-                : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ? '!bg-primary-50 dark:!bg-primary-500/10 !ring-primary-200 dark:!ring-primary-500/40'
+                : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
             ]"
           >
             <div class="flex items-center justify-between gap-3 text-sm">
@@ -113,7 +116,7 @@ const toggle = (key: "vendor" | "product", value: string) => {
               </span>
             </div>
             <UProgress :model-value="stat.percent" :max="100" color="primary" size="sm" />
-          </button>
+          </UButton>
         </div>
         <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
           No vendor data for this filter.
@@ -136,17 +139,20 @@ const toggle = (key: "vendor" | "product", value: string) => {
         </div>
 
         <div v-if="props.topProductStats.length" class="space-y-3">
-          <button
+          <UButton
             v-for="stat in props.topProductStats"
             :key="stat.key"
             type="button"
+            color="neutral"
+            variant="ghost"
+            size="md"
             @click="toggle('product', stat.key)"
             :aria-pressed="props.filters.product === stat.key"
             :class="[
-              'w-full cursor-pointer space-y-2 rounded-lg px-3 py-2 text-left ring-1 ring-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-400 dark:focus-visible:ring-secondary-600',
+              'w-full cursor-pointer !flex !flex-col !items-stretch !gap-0 space-y-2 rounded-lg !px-3 !py-2 text-left ring-1 ring-transparent transition focus:outline-none !focus-visible:ring-2 !focus-visible:ring-secondary-400 dark:!focus-visible:ring-secondary-600',
               props.filters.product === stat.key
-                ? 'bg-secondary-50 dark:bg-secondary-500/10 ring-secondary-200 dark:ring-secondary-500/40'
-                : 'bg-transparent hover:bg-neutral-50 cursor-pointer dark:hover:bg-neutral-800/60',
+                ? '!bg-secondary-50 dark:!bg-secondary-500/10 !ring-secondary-200 dark:!ring-secondary-500/40'
+                : '!bg-transparent hover:!bg-neutral-50 dark:hover:!bg-neutral-800/60',
             ]"
           >
             <div class="flex items-center justify-between gap-3 text-sm">
@@ -170,7 +176,7 @@ const toggle = (key: "vendor" | "product", value: string) => {
               </span>
             </div>
             <UProgress :model-value="stat.percent" :max="100" color="secondary" size="sm" />
-          </button>
+          </UButton>
         </div>
         <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
           No product data for this filter.
