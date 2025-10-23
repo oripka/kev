@@ -2214,6 +2214,13 @@ export const classifyExploitLayers = (
   const domainSuggestsServer =
     domainCategories.some((category) => serverDomainHints.has(category)) ||
     curatedServerBias;
+  const hasServerAnchorSignals =
+    domainSuggestsServer ||
+    curatedServerBias ||
+    hasStrongServerProtocol ||
+    networkOperatingSystemSignal ||
+    mobileManagementSignal ||
+    mobileDeviceManagementContext;
 
   if (
     !qualifiesForRce &&
@@ -2343,14 +2350,7 @@ export const classifyExploitLayers = (
     curatedClientBias;
 
   if (cvssStrongServer) {
-    const lacksServerAnchors =
-      !domainSuggestsServer &&
-      !curatedServerBias &&
-      !hasStrongServerProtocol &&
-      !networkOperatingSystemSignal &&
-      !mobileManagementSignal &&
-      !mobileDeviceManagementContext;
-
+    const lacksServerAnchors = !hasServerAnchorSignals;
     const hasClientDominantSignals =
       strongClientIndicators &&
       (cvssRequiresUserInteraction ||
@@ -2360,7 +2360,10 @@ export const classifyExploitLayers = (
         hasClientApplicationSignal ||
         clientLocalCounts);
 
-    if (lacksServerAnchors && hasClientDominantSignals) {
+    if (
+      (cvssRequiresUserInteraction && lacksServerAnchors) ||
+      (lacksServerAnchors && hasClientDominantSignals)
+    ) {
       cvssStrongServer = false;
     }
   }
@@ -2444,6 +2447,15 @@ export const classifyExploitLayers = (
     (curatedClientBias ? 1 : 0);
 
   let clientScore = clientScoreBase;
+
+  if (
+    clientScoreBase > 0 &&
+    cvssRequiresUserInteraction &&
+    cvssSuggestsRemote &&
+    !hasServerAnchorSignals
+  ) {
+    clientScore += 1;
+  }
 
   if (clientScoreBase > 0) {
     if (cvssSuggestsLocal) {

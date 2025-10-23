@@ -811,6 +811,15 @@
       "cvssSeverity": "High"
     },
     "expect": {
+      "domainCategories": {
+        "includes": [
+          "Non-Web Applications"
+        ],
+        "excludes": [
+          "Web Applications",
+          "Web Servers"
+        ]
+      },
       "exploitLayers": {
         "includes": [
           "RCE · Client-side Memory Corruption"
