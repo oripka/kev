@@ -1457,6 +1457,10 @@ const memoryCorruptionPatterns: RegExp[] = [
   // Format string vulns that cause memory corruption
   /\bformat[-\s]?string(?: vulnerability| bug)?\b/i,
 
+  // Font parsing engines frequently exploited via memory corruption primitives
+  /\b(?:truetype|opentype) font\s+(?:parsing|processing|rendering|handling)\b/i,
+  /\bcrafted\s+(?:truetype|opentype)?\s*font\s+(?:file|data)\b/i,
+
   // Well-known exploit family names and primitives lacking explicit memory wording
   /\bkernel pool\b/i,
   /\b(?:eternal(?:blue|romance|synergy|champion)|doublepulsar|smbghost|coronablue|educatedscholar)\b/i,
