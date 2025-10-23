@@ -837,5 +837,47 @@
         ]
       }
     }
+  },
+  {
+    "id": "microsoft-windows-html-platform-client-rce",
+    "title": "Windows HTML Platform CVSS UI:R vector stays client-side memory corruption",
+    "entry": {
+      "cveId": "CVE-2024-38021",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft Windows HTML Platform Memory Corruption",
+      "description": "Microsoft Windows HTML Platform contains a memory corruption vulnerability that allows remote attackers to execute arbitrary code when a user visits a malicious website.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 7.5,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Non-Web Applications"
+        ],
+        "excludes": [
+          "Web Applications",
+          "Web Servers"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Memory Corruption",
+          "RCE · Server-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution",
+          "Memory Corruption"
+        ]
+      }
+    }
   }
 ]

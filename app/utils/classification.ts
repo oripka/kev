@@ -2071,6 +2071,8 @@ export const classifyExploitLayers = (
   const cvssRequiresUserInteraction = cvssTraits?.userInteraction === "R";
   const cvssPreAuth = cvssTraits?.privilegesRequired === "N";
   let cvssStrongServer = cvssSuggestsRemote && cvssPreAuth;
+  const cvssRemoteUserInteraction =
+    Boolean(cvssRequiresUserInteraction) && cvssSuggestsRemote;
 
   const hasPrivilegeSignal = privilegePatterns.some((pattern) =>
     pattern.test(text)
@@ -2222,6 +2224,16 @@ export const classifyExploitLayers = (
     mobileManagementSignal ||
     mobileDeviceManagementContext;
 
+  const cvssRemoteUiStrongClientBias =
+    cvssRemoteUserInteraction &&
+    !hasServerAnchorSignals &&
+    !curatedServerBias;
+
+  if (cvssRemoteUiStrongClientBias) {
+    hasClientSignal = true;
+    cvssStrongServer = false;
+  }
+
   if (
     !qualifiesForRce &&
     hasCrossSiteScripting &&
@@ -2337,7 +2349,8 @@ export const classifyExploitLayers = (
       hasClientArtifactSignals ||
       clientLocalCounts ||
       domainSuggestsClient ||
-      curatedClientBias);
+      curatedClientBias ||
+      cvssRemoteUiStrongClientBias);
 
   const strongClientIndicators =
     hasClientApplicationSignal ||
@@ -2347,7 +2360,8 @@ export const classifyExploitLayers = (
     clientLocalCounts ||
     hasCrossSiteScripting ||
     domainSuggestsClient ||
-    curatedClientBias;
+    curatedClientBias ||
+    cvssRemoteUiStrongClientBias;
 
   if (cvssStrongServer) {
     const lacksServerAnchors = !hasServerAnchorSignals;
@@ -2373,9 +2387,9 @@ export const classifyExploitLayers = (
   }
 
   const remoteCvssUserInteractionLeansClient =
-    hasRemoteContext &&
-    (Boolean(cvssRequiresUserInteraction) || hasClientUserInteractionSignal) &&
-    !domainSuggestsServer &&
+    (hasRemoteContext || cvssRemoteUserInteraction) &&
+    Boolean(cvssRequiresUserInteraction) &&
+    (!domainSuggestsServer || cvssRemoteUiStrongClientBias) &&
     !curatedServerBias &&
     !networkOperatingSystemSignal &&
     !mobileManagementSignal &&
@@ -2386,8 +2400,8 @@ export const classifyExploitLayers = (
     domainSuggestsServer ||
     hasStrongServerProtocol ||
     hasKernelServerSignal ||
-    (hasRemoteContext && !strongClientIndicators) ||
-    cvssStrongServer ||
+    (hasRemoteContext && !strongClientIndicators && !cvssRemoteUiStrongClientBias) ||
+    (cvssStrongServer && !cvssRemoteUiStrongClientBias) ||
     curatedServerBias;
 
   const clientPrimaryEvidence =
@@ -2399,7 +2413,8 @@ export const classifyExploitLayers = (
     hasUsefulClientSignal ||
     hasCrossSiteScripting ||
     domainSuggestsClient ||
-    curatedClientBias;
+    curatedClientBias ||
+    cvssRemoteUiStrongClientBias;
 
   const serverPrimaryEvidence =
     hasServerSignal ||
@@ -2410,7 +2425,7 @@ export const classifyExploitLayers = (
     mobileManagementSignal ||
     mobileDeviceManagementContext ||
     curatedServerBias ||
-    cvssStrongServer;
+    (cvssStrongServer && !cvssRemoteUiStrongClientBias);
 
   const clientArtifactSupportCount = countTrue(
     hasClientFileSignal,
@@ -2444,7 +2459,8 @@ export const classifyExploitLayers = (
     (hasClientUserInteractionSignal ? 1 : 0) +
     (clientLocalCounts ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0) +
-    (curatedClientBias ? 1 : 0);
+    (curatedClientBias ? 1 : 0) +
+    (cvssRemoteUiStrongClientBias ? 2 : 0);
 
   let clientScore = clientScoreBase;
 
@@ -2477,6 +2493,10 @@ export const classifyExploitLayers = (
     (hasKernelServerSignal ? 2 : 0) +
     (curatedServerBias ? 3 : 0);
 
+  if (cvssRemoteUiStrongClientBias && serverScoreBase > 0) {
+    serverScoreBase = Math.max(0, serverScoreBase - 2);
+  }
+
   if (hasRemoteContext && !strongClientIndicators) {
     serverScoreBase += 1;
   }
@@ -2486,14 +2506,15 @@ export const classifyExploitLayers = (
   }
 
   const serverHardConstraint =
-    (!hasCrossSiteScripting &&
+    (!cvssRemoteUiStrongClientBias &&
+      !hasCrossSiteScripting &&
       domainSuggestsServer &&
       (hasStrongServerProtocol ||
         hasServerSignal ||
         networkOperatingSystemSignal ||
         (hasRemoteContext && !cvssSuggestsLocal))) ||
     curatedServerBias ||
-    cvssStrongServer;
+    (cvssStrongServer && !cvssRemoteUiStrongClientBias);
 
   if (serverHardConstraint) {
     serverScoreBase += 2;
@@ -2505,7 +2526,7 @@ export const classifyExploitLayers = (
     if (cvssSuggestsRemote && !cvssRequiresUserInteraction) {
       serverScore += 1;
     }
-    if (cvssPreAuth) {
+    if (cvssPreAuth && !cvssRemoteUiStrongClientBias) {
       serverScore += 1;
     }
   }
@@ -2617,6 +2638,11 @@ export const classifyExploitLayers = (
       }
 
       if (hasClientApplicationSignal && hasClientFileSignal) {
+        return "Client-side";
+      }
+
+      if (cvssRemoteUiStrongClientBias) {
+        hasMixedContext = false;
         return "Client-side";
       }
 
