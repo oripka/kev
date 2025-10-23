@@ -24,7 +24,10 @@ type ImportMarketSummary = {
 const toCount = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0
 
-export const importMarketIntel = async (db: DrizzleDatabase): Promise<ImportMarketSummary> => {
+export const importMarketIntel = async (
+  db: DrizzleDatabase,
+  options: { forceRefresh?: boolean; allowStale?: boolean } = {}
+): Promise<ImportMarketSummary> => {
   try {
     markTaskRunning('market', 'Refreshing market intelligence metadata')
     const totalPrograms = marketPrograms.length
@@ -37,6 +40,8 @@ export const importMarketIntel = async (db: DrizzleDatabase): Promise<ImportMark
 
     let completedPrograms = 0
     const importResult = await runMarketImport(db, {
+      forceRefresh: options.forceRefresh,
+      allowStale: options.allowStale,
       onProgramStart: ({ program, index, total }) => {
         markTaskProgress('market', index, total, `Fetching ${program.name}`)
       },

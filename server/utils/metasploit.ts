@@ -93,17 +93,39 @@ const syncRepository = async (
 
 const collectModulePublishedDates = async (
   modulePaths: string[],
-  onProgress?: (completed: number, total: number) => void
+  onProgress?: (completed: number, total: number) => void,
+  options: {
+    allowNetworkFetch?: boolean
+    existingDates?: Map<string, string | null>
+  } = {}
 ): Promise<Map<string, string | null>> => {
+  const { allowNetworkFetch = true, existingDates } = options
   const uniquePaths = Array.from(new Set(modulePaths))
   const total = uniquePaths.length
   const pending = new Set(uniquePaths)
   const results = new Map<string, string | null>()
+
   let completed = 0
+
+  if (existingDates) {
+    for (const path of uniquePaths) {
+      if (!pending.has(path)) {
+        continue
+      }
+      if (!existingDates.has(path)) {
+        continue
+      }
+      results.set(path, existingDates.get(path) ?? null)
+      pending.delete(path)
+      completed += 1
+    }
+  }
 
   const reportProgress = () => {
     onProgress?.(completed, total)
   }
+
+  reportProgress()
 
   const attemptResolve = async (paths: string[]) => {
     const queue = paths.filter(path => pending.has(path))
@@ -159,38 +181,75 @@ const collectModulePublishedDates = async (
     await Promise.all(workers)
   }
 
-  await attemptResolve(uniquePaths)
+  await attemptResolve(Array.from(pending))
 
   if (!pending.size) {
     return results
   }
 
-  let currentDepth = 1
-  const depthTargets = [64, 256, 512, 1024, 2048, 4096, 8192, 16384]
+  if (allowNetworkFetch) {
+    let currentDepth = 1
+    const depthTargets = [64, 256, 512, 1024, 2048, 4096, 8192, 16384]
 
-  for (const targetDepth of depthTargets) {
-    if (!pending.size) {
-      break
+    for (const targetDepth of depthTargets) {
+      if (!pending.size) {
+        break
+      }
+
+      const deepenBy = targetDepth - currentDepth
+      if (deepenBy > 0) {
+        await runGit(['fetch', '--filter=blob:none', '--deepen', String(deepenBy)], REPO_DIR).catch(
+          () => null
+        )
+        currentDepth = targetDepth
+      }
+
+      await attemptResolve(Array.from(pending))
     }
-
-    const deepenBy = targetDepth - currentDepth
-    if (deepenBy > 0) {
-      await runGit(['fetch', '--filter=blob:none', '--deepen', String(deepenBy)], REPO_DIR).catch(() => null)
-      currentDepth = targetDepth
-    }
-
-    await attemptResolve(Array.from(pending))
   }
 
   if (pending.size) {
-    for (const path of pending) {
+    for (const path of Array.from(pending)) {
       results.set(path, null)
+      pending.delete(path)
       completed += 1
       reportProgress()
     }
   }
 
   return results
+}
+
+const loadExistingModulePublishedDates = (db: DrizzleDatabase): Map<string, string | null> => {
+  const rows = db
+    .select({
+      path: tables.vulnerabilityEntries.metasploitModulePath,
+      publishedAt: tables.vulnerabilityEntries.metasploitModulePublishedAt
+    })
+    .from(tables.vulnerabilityEntries)
+    .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
+    .all()
+
+  const map = new Map<string, string | null>()
+
+  for (const row of rows) {
+    if (!row.path) {
+      continue
+    }
+    const trimmedPath = row.path.trim()
+    if (!trimmedPath) {
+      continue
+    }
+    const withPrefix = trimmedPath.startsWith('modules/') ? trimmedPath : `modules/${trimmedPath}`
+    const normalisedPath = withPrefix.endsWith('.rb') ? withPrefix : `${withPrefix}.rb`
+    if (!map.has(normalisedPath)) {
+      const publishedAt =
+        typeof row.publishedAt === 'string' && row.publishedAt.length > 0 ? row.publishedAt : null
+      map.set(normalisedPath, publishedAt)
+    }
+  }
+
+  return map
 }
 
 const unescapeRubyString = (value: string): string => {
@@ -1101,7 +1160,7 @@ const walkRubyFiles = async (dir: string): Promise<string[]> => {
 
 export const importMetasploitCatalog = async (
   db: DrizzleDatabase,
-  options: { useCachedRepository?: boolean } = {}
+  options: { useCachedRepository?: boolean; offline?: boolean } = {}
 ): Promise<{ imported: number; commit: string | null; modules: number }> => {
   markTaskRunning('metasploit', 'Synchronising Metasploit catalog')
 
@@ -1122,6 +1181,7 @@ export const importMetasploitCatalog = async (
     const rubyFiles = await walkRubyFiles(MODULES_DIR)
 
     const moduleRelativePaths = rubyFiles.map(file => relative(REPO_DIR, file))
+    const existingPublishedDates = loadExistingModulePublishedDates(db)
 
     if (moduleRelativePaths.length) {
       setImportPhase('fetchingMetasploit', {
@@ -1137,16 +1197,23 @@ export const importMetasploitCatalog = async (
       )
     }
 
-    const publishedDateMap = await collectModulePublishedDates(moduleRelativePaths, (completed, total) => {
-      if (!total) {
-        return
+    const publishedDateMap = await collectModulePublishedDates(
+      moduleRelativePaths,
+      (completed, total) => {
+        if (!total) {
+          return
+        }
+        if (completed === total || completed % 50 === 0) {
+          const message = `Resolving Metasploit publish dates (${completed} of ${total})`
+          setImportPhase('fetchingMetasploit', { message, completed, total })
+          markTaskProgress('metasploit', completed, total, message)
+        }
+      },
+      {
+        allowNetworkFetch: options.offline !== true,
+        existingDates: existingPublishedDates
       }
-      if (completed === total || completed % 50 === 0) {
-        const message = `Resolving Metasploit publish dates (${completed} of ${total})`
-        setImportPhase('fetchingMetasploit', { message, completed, total })
-        markTaskProgress('metasploit', completed, total, message)
-      }
-    })
+    )
 
     setImportPhase('fetchingMetasploit', {
       message: 'Parsing Metasploit data',

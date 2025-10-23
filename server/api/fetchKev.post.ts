@@ -487,7 +487,10 @@ export default defineEventHandler(async event => {
 
     let metasploitSummary = { imported: 0, commit: metasploitCommit, modules: metasploitModules }
     if (shouldImport('metasploit')) {
-      metasploitSummary = await importMetasploitCatalog(db, { useCachedRepository: allowStale })
+      metasploitSummary = await importMetasploitCatalog(db, {
+        useCachedRepository: allowStale,
+        offline: allowStale
+      })
       metasploitImported = metasploitSummary.imported
       metasploitCommit = metasploitSummary.commit ?? metasploitCommit
       metasploitModules = metasploitSummary.modules
@@ -504,7 +507,7 @@ export default defineEventHandler(async event => {
       lastSnapshotAt: null as string | null
     }
     if (shouldImport('market')) {
-      marketSummary = await importMarketIntel(db)
+      marketSummary = await importMarketIntel(db, { forceRefresh, allowStale })
       marketImported = marketSummary.imported
       marketOfferCount = marketSummary.offerCount
       marketProgramCount = marketSummary.programCount

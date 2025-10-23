@@ -18,6 +18,7 @@ import type {
   MarketProgramProgress,
   MarketProgramSnapshot
 } from './types'
+import { getCachedData } from '../utils/cache'
 
 type ExchangeRates = Awaited<ReturnType<typeof fetchUsdExchangeRates>>
 
@@ -96,6 +97,9 @@ const lookupProductForCve = (tx: DrizzleDatabase, cveId: string | null | undefin
   return result
 }
 
+const EXCHANGE_RATES_TTL_MS = 43_200_000
+const SNAPSHOT_TTL_MS = 86_400_000
+
 type ImportOptions = {
   onProgramStart?: (info: { program: MarketProgramDefinition; index: number; total: number }) => void
   onProgramComplete?: (info: {
@@ -105,6 +109,11 @@ type ImportOptions = {
     offersProcessed: number
   }) => void
   onProgramError?: (info: { program: MarketProgramDefinition; index: number; total: number; error: unknown }) => void
+}
+
+export type MarketImportOptions = ImportOptions & {
+  forceRefresh?: boolean
+  allowStale?: boolean
 }
 
 const parseSources = (value: string | null | undefined): CatalogSource[] => {
@@ -573,9 +582,23 @@ export type MarketImportResult = {
 
 export const runMarketImport = async (
   db: DrizzleDatabase,
-  options: ImportOptions = {}
+  options: MarketImportOptions = {}
 ): Promise<MarketImportResult> => {
-  const rates = await fetchUsdExchangeRates()
+  const {
+    onProgramStart,
+    onProgramComplete,
+    onProgramError,
+    forceRefresh = false,
+    allowStale = false
+  } = options
+
+  const ratesResult = await getCachedData('market-exchange-rates', fetchUsdExchangeRates, {
+    ttlMs: EXCHANGE_RATES_TTL_MS,
+    forceRefresh,
+    allowStale
+  })
+  const rates = ratesResult.data
+
   const catalog = loadProductCatalog(db)
   const programSummaries: MarketProgramProgress[] = []
   let offersProcessed = 0
@@ -583,17 +606,26 @@ export const runMarketImport = async (
 
   for (let index = 0; index < marketPrograms.length; index += 1) {
     const program = marketPrograms[index]
-    options.onProgramStart?.({ program, index, total: totalPrograms })
+    onProgramStart?.({ program, index, total: totalPrograms })
 
     try {
-      const snapshot = await program.fetchSnapshot()
+      const snapshotResult = await getCachedData<MarketProgramSnapshot>(
+        `market-program-${program.slug}`,
+        program.fetchSnapshot,
+        {
+          ttlMs: SNAPSHOT_TTL_MS,
+          forceRefresh,
+          allowStale
+        }
+      )
+      const snapshot = snapshotResult.data
       const offers = await program.parseOffers(snapshot)
       const processed = saveProgram(db, program, snapshot, offers, catalog, rates)
       offersProcessed += processed
       programSummaries.push({ program, offersProcessed: processed })
-      options.onProgramComplete?.({ program, index, total: totalPrograms, offersProcessed: processed })
+      onProgramComplete?.({ program, index, total: totalPrograms, offersProcessed: processed })
     } catch (error) {
-      options.onProgramError?.({ program, index, total: totalPrograms, error })
+      onProgramError?.({ program, index, total: totalPrograms, error })
     }
   }
 
