@@ -136,7 +136,7 @@ const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit"
             >
               <template v-if="hasSearchTerm" #trailing>
                 <UButton
-                  size="2xs"
+                  size="xs"
                   color="neutral"
                   variant="ghost"
                   icon="i-lucide-x"

@@ -62,7 +62,9 @@ const staticStats = computed(() =>
 );
 
 const filterChips = computed(() =>
-  props.activeFilters.filter((item) => item.key !== "yearRange"),
+  props.activeFilters.filter(
+    (item) => item.key !== "yearRange" && item.key !== "search",
+  ),
 );
 
 const hasFilterChips = computed(() => filterChips.value.length > 0);
@@ -136,6 +138,15 @@ const handleClearSearch = () => {
                   <span>{{ yearStat.label }}</span>
                   <span class="font-semibold">{{ yearStat.value }}</span>
                 </span>
+                <template v-if="props.isYearRangeLimited" #trailing>
+                  <span
+                    class="ml-1 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-primary-600 transition hover:bg-primary-500/10 dark:text-primary-200"
+                    title="Show all years"
+                    @click.stop.prevent="handleClearYearRange"
+                  >
+                    <UIcon name="i-lucide-x" class="size-4" />
+                  </span>
+                </template>
               </UButton>
 
               <template #content>
@@ -186,17 +197,6 @@ const handleClearSearch = () => {
                 </div>
               </template>
             </UPopover>
-
-            <UButton
-              v-if="props.isYearRangeLimited"
-              size="2xs"
-              color="primary"
-              variant="ghost"
-              icon="i-lucide-x"
-              aria-label="Show all years"
-              class="rounded-full"
-              @click.stop="handleClearYearRange"
-            />
           </div>
         </template>
 
@@ -255,7 +255,7 @@ const handleClearSearch = () => {
             >
               <template v-if="hasSearchTerm" #trailing>
                 <UButton
-                  size="2xs"
+                  size="xs"
                   color="neutral"
                   variant="ghost"
                   icon="i-lucide-x"
