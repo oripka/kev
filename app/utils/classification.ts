@@ -1018,6 +1018,7 @@ const browserPatterns: RegExp[] = [
   /\byandex browser\b/i,
   /\bnaver whale\b/i,
   /\bvivaldi\b/i,
+  /\b(?:microsoft\s+)?windows\s+scripting\s+engine\b/i,
 ];
 
 const webApplicationProductPatterns: RegExp[] = [
@@ -1468,6 +1469,7 @@ const memoryCorruptionPatterns: RegExp[] = [
   /\b(?:server message block|smbv?1|smbv?2|smbv?3)\b[\s\S]{0,120}?\bremote code execution\b/i,
   /\b(?:microsoft\s+)?(?:windows\s+)?server service\b[\s\S]{0,120}?\bremote code execution\b/i,
   /\bms0?(?:8[-\s]?067|17[-\s]?010)\b/i,
+  /\btype\s+confusion\b/i,
 
 ];
 
@@ -1531,6 +1533,7 @@ const clientSignalPatterns: RegExp[] = [
   /\b(?:browser|web browser|chrome|google chrome|chromium|firefox|mozilla firefox|edge|msedge|safari|webkit|blink|internet explorer|ie|msie|trident|opera|opera mini|uc browser|brave)\b/i,
   /\b(?:android webview|webview|web view)\b/i,
   /\b(?:render(?:er|ing) engine|render engine|layout engine)\b/i,
+  /\b(?:microsoft\s+)?windows\s+scripting\s+engine\b/i,
 
   // Client application hosts / runtimes / containers (desktop, mobile, electron, office viewers)
   /\bclient(?: application| app| software| program| binary)\b/i,
@@ -1592,6 +1595,7 @@ const clientApplicationPatterns: RegExp[] = [
 
   // Browser / UI host tokens often used as client vectors
   /\b(?:internet explorer|iexplore|edge|msedge|browser helper object|bho)\b/i,
+  /\b(?:microsoft\s+)?windows\s+scripting\s+engine\b/i,
 
   // Generic document container / compound formats (OLE compound, compound file binary format)
   /\b(?:ole(?:\s+compound)?|compound file|cfb|com)\b/i,
@@ -1606,6 +1610,7 @@ const strongClientApplicationPatterns: RegExp[] = [
   /\b(?:windows|microsoft)\s+(?:appx\s+installer|app\s+installer)\b/i,
   /(?:^|[^a-z0-9])(?:appx\s+installer|appinstaller(?:\.exe)?|msix(?:bundle)?)(?:[^a-z0-9]|$)/i,
   /\bgoogle\s+chrome\b/i,
+  /\b(?:microsoft\s+)?windows\s+scripting\s+engine\b/i,
 ];
 
 const clientFileInteractionPatterns: RegExp[] = [
