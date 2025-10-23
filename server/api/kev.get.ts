@@ -879,37 +879,22 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
   const counts = {
     domain: queryDimensionCounts(
       db,
-      omitFilters(filters, [
-        'domain',
-        'exploit',
-        'vulnerability',
-        'vendor',
-        'vendorKeys',
-        'product',
-        'productKeys'
-      ]),
+      omitFilters(filters, ['domain']),
       'domain'
     ),
     exploit: queryDimensionCounts(
       db,
-      omitFilters(filters, [
-        'exploit',
-        'vulnerability',
-        'vendor',
-        'vendorKeys',
-        'product',
-        'productKeys'
-      ]),
+      omitFilters(filters, ['exploit']),
       'exploit'
     ),
     vulnerability: queryDimensionCounts(
       db,
-      omitFilters(filters, ['vulnerability', 'vendor', 'vendorKeys', 'product', 'productKeys']),
+      omitFilters(filters, ['vulnerability']),
       'vulnerability'
     ),
     vendor: queryVendorCounts(
       db,
-      omitFilters(filters, ['vendor', 'vendorKeys', 'product', 'productKeys'])
+      omitFilters(filters, ['vendor', 'vendorKeys'])
     ),
     product: queryProductCounts(
       db,
