@@ -637,6 +637,96 @@
     }
   },
   {
+    "id": "ms17-010-eternalblue-memory",
+    "title": "Microsoft SMBv1 EternalBlue is flagged as server-side memory corruption",
+    "entry": {
+      "cveId": "CVE-2017-0144",
+      "vendor": "Microsoft",
+      "product": "SMBv1",
+      "vulnerabilityName": "Microsoft SMBv1 Remote Code Execution Vulnerability",
+      "description": "The SMBv1 server in multiple Microsoft Windows versions allows remote attackers to execute arbitrary code via crafted packets.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 8.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "ms17-010-eternalromance-memory",
+    "title": "Microsoft Windows SMB EternalRomance variants stay in server-side memory buckets",
+    "entry": {
+      "cveId": "CVE-2017-0146",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft Windows SMB Remote Code Execution Vulnerability",
+      "description": "The SMBv1 server in Microsoft Windows allows remote attackers to perform remote code execution.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 8.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "ms08-067-netapi-memory",
+    "title": "MS08-067 Windows Server service exploit is recognised as server-side memory corruption",
+    "entry": {
+      "cveId": "CVE-2008-4250",
+      "vendor": "Microsoft",
+      "product": "Windows Server Service",
+      "vulnerabilityName": "MS08-067 Windows Server Service Remote Code Execution",
+      "description": "Remote code execution in the Windows Server service (path canonicalization).",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 9.8,
+      "cvssSeverity": "Critical"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Memory Corruption"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
     "id": "pgadmin-binary-path-api-rce",
     "title": "pgAdmin validate binary path API RCE is treated as a database web app issue",
     "entry": {

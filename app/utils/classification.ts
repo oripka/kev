@@ -1464,6 +1464,10 @@ const memoryCorruptionPatterns: RegExp[] = [
   // Well-known exploit family names and primitives lacking explicit memory wording
   /\bkernel pool\b/i,
   /\b(?:eternal(?:blue|romance|synergy|champion)|doublepulsar|smbghost|coronablue|educatedscholar)\b/i,
+  // Wormable Microsoft SMB / Server Service RCE families lacking explicit memory wording
+  /\b(?:server message block|smbv?1|smbv?2|smbv?3)\b[\s\S]{0,120}?\bremote code execution\b/i,
+  /\b(?:microsoft\s+)?(?:windows\s+)?server service\b[\s\S]{0,120}?\bremote code execution\b/i,
+  /\bms0?(?:8[-\s]?067|17[-\s]?010)\b/i,
 
 ];
 
