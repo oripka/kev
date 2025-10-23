@@ -595,7 +595,7 @@ const offerColumns = computed<TableColumn<MarketOfferListItem>[]>(() => [
       const item = row.original;
       return h(
         "p",
-        { class: "text-sm text-neutral-700 dark:text-neutral-200 max-w-xs" },
+        { class: "text-sm text-neutral-700 break-all text-wrap dark:text-neutral-200 max-w-xs" },
         item.title,
       );
     },
