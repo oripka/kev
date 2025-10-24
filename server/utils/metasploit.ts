@@ -1172,11 +1172,22 @@ const createBaseEntries = (
   const notes = createNotes(metadata)
   const guessedVendorProduct = guessVendorProduct(metadata)
   return cveIds.map(cveId => {
-    const normalised = normaliseVendorProduct({
-      vendor: guessedVendorProduct.vendor,
-      product: guessedVendorProduct.product ?? metadata.name
-    })
     const aliasList = unique([cveId, ...aliases])
+    const normalised = normaliseVendorProduct(
+      {
+        vendor: guessedVendorProduct.vendor,
+        product: guessedVendorProduct.product ?? metadata.name
+      },
+      undefined,
+      undefined,
+      {
+        vulnerabilityName: metadata.name,
+        description: metadata.description,
+        cveId,
+        aliases: aliasList,
+        extraTags: metadata.targets
+      }
+    )
     return {
       id: `metasploit:${moduleId}:${cveId}`,
       sources: ['metasploit'],

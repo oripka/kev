@@ -59,7 +59,16 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
     return null
   }
 
-  const normalised = normaliseVendorProduct({ vendor: item.vendor, product: item.product })
+  const normalised = normaliseVendorProduct(
+    { vendor: item.vendor, product: item.product },
+    undefined,
+    undefined,
+    {
+      vulnerabilityName: item.title,
+      description: item.context ?? item.notes ?? undefined,
+      cveId
+    }
+  )
   const dateAdded = toIsoDate(item.year)
   const notes = toNotes(item.context, item.notes)
 

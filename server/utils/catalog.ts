@@ -366,8 +366,18 @@ const toStandardEntry = (
   const cveId = normaliseCve(row.cve_id ?? row.id)
   const notes = parseJsonArray(row.notes)
   const cwes = parseJsonArray(row.cwes)
-  const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
   const aliasList = parseAliasArray(row.aliases)
+  const normalised = normaliseVendorProduct(
+    { vendor: row.vendor, product: row.product },
+    undefined,
+    undefined,
+    {
+      vulnerabilityName: row.vulnerability_name,
+      description: row.description,
+      cveId,
+      aliases: aliasList
+    }
+  )
   const affectedProducts = parseJsonObjectArray<KevAffectedProduct>(row.affected_products)
   const problemTypes = parseJsonObjectArray<KevProblemType>(row.problem_types)
   const vendorKey = row.vendor_key ?? normalised.vendor.key
