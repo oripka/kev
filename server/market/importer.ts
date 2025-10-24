@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 import type { CatalogSource } from '~/types'
 import { matchExploitProduct } from '~/utils/exploitProductHints'
+import { matchVendorProductByTitle } from '../utils/metasploitVendorCatalog'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from '../utils/sqlite'
@@ -290,9 +291,28 @@ const prepareTargets = (
       }
     }
 
+    let catalogHint: ReturnType<typeof matchVendorProductByTitle> | null = null
     let hintMatch: ReturnType<typeof matchExploitProduct> | null = null
     if ((!resolvedVendor || !resolvedProduct) && (target.rawText || fallbackProduct)) {
-      hintMatch = matchExploitProduct(target.rawText ?? fallbackProduct ?? '')
+      const contextSegments = [
+        target.rawText,
+        fallbackProduct,
+        offer.title,
+        program.name
+      ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+      catalogHint = matchVendorProductByTitle(contextSegments)
+      if (catalogHint) {
+        if (!resolvedVendor) {
+          resolvedVendor = catalogHint.vendor
+        }
+        if (!resolvedProduct) {
+          resolvedProduct = catalogHint.product
+        }
+      }
+
+      const contextForHints = contextSegments.join(' ') || target.rawText || fallbackProduct || ''
+      hintMatch = matchExploitProduct(contextForHints)
       if (hintMatch) {
         if (!resolvedVendor) {
           resolvedVendor = hintMatch.vendor
@@ -323,13 +343,15 @@ const prepareTargets = (
         ? target.confidence
         : matchedCveId
           ? 100
-          : hintMatch
-            ? 75
-            : 50
+          : catalogHint
+            ? 85
+            : hintMatch
+              ? 75
+              : 50
     const matchMethod: NormalisedTarget['matchMethod'] = target.matchMethod
       ?? (matchedCveId
         ? 'exact'
-        : hintMatch
+        : catalogHint || hintMatch
           ? 'fuzzy'
           : candidateVendor || candidateProduct
             ? 'exact'

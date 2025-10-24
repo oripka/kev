@@ -9,6 +9,7 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
+import { matchVendorProductByTitle } from './metasploitVendorCatalog'
 import {
   markTaskComplete,
   markTaskError,
@@ -1114,6 +1115,11 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
+
+  const catalogMatch = matchVendorProductByTitle(contextText)
+  if (catalogMatch) {
+    return catalogMatch
+  }
 
   const hinted = matchExploitProduct(contextText)
   if (hinted) {

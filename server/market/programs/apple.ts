@@ -1,5 +1,6 @@
 import { ofetch } from 'ofetch'
 import { matchExploitProduct } from '~/utils/exploitProductHints'
+import { matchVendorProductByTitle } from '../../utils/metasploitVendorCatalog'
 import { createCategory, defaultHeaders, normaliseWhitespace } from '../utils'
 import type { MarketOfferInput, MarketProgramDefinition } from '../types'
 
@@ -66,6 +67,7 @@ const parseTopics = (
       const rewardType = min !== null && max !== null && min !== max ? 'range' : 'flat'
       const description = topic.amount ? normaliseWhitespace(topic.amount) : null
       const hint = matchExploitProduct(title)
+      const catalogHint = matchVendorProductByTitle([title, entry.title])
       const fallbackProduct = `${entry.title} - ${title}`
       const categories = [scopeCategory, createCategory('program', 'Apple Security Bounty')]
 
@@ -81,8 +83,8 @@ const parseTopics = (
         categories,
         targets: [
           {
-            vendor: hint?.vendor ?? 'Apple',
-            product: hint?.product ?? fallbackProduct,
+            vendor: hint?.vendor ?? catalogHint?.vendor ?? 'Apple',
+            product: hint?.product ?? catalogHint?.product ?? fallbackProduct,
             rawText: title
           }
         ]

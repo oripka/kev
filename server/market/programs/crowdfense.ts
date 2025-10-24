@@ -1,6 +1,7 @@
 import { load, type CheerioAPI, type Element } from 'cheerio'
 import { ofetch } from 'ofetch'
 import { matchExploitProduct } from '~/utils/exploitProductHints'
+import { matchVendorProductByTitle } from '../../utils/metasploitVendorCatalog'
 import { createCategory, defaultHeaders, normaliseWhitespace, parseRewardRange, stripHtml } from '../utils'
 import type { MarketOfferInput, MarketProgramDefinition } from '../types'
 
@@ -74,9 +75,10 @@ const parseOffers = async (html: string, fetchedAt: string): Promise<MarketOffer
         const cleanTitle = strongText.replace(/[:\-]+\s*$/u, '')
         const description = normaliseWhitespace(fullText.replace(strongText, '').replace(/^[:\-\s]+/, '')) || null
         const hint = matchExploitProduct(strongText)
+        const catalogHint = matchVendorProductByTitle([strongText, heading, scopeLabel])
         const baseProduct = strongText.replace(/\([^)]*\)/g, '').replace(/[:\-]+\s*$/u, '').trim()
-        const targetProduct = hint?.product ?? baseProduct
-        const targetVendor = hint?.vendor ?? null
+        const targetProduct = hint?.product ?? catalogHint?.product ?? baseProduct
+        const targetVendor = hint?.vendor ?? catalogHint?.vendor ?? null
 
         const rewardType =
           reward.min !== null && reward.max !== null && reward.min !== reward.max ? 'range' : 'flat'
