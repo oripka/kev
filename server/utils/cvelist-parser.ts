@@ -441,8 +441,9 @@ export const resolveCvePath = (cveId: string): string => {
   const year = match[1]
   const sequenceRaw = match[2]
   const filenameSequence = sequenceRaw.padStart(4, '0')
-  const bucketPrefix = filenameSequence.replace(/^0+/, '') || '0'
-  const bucket = `${bucketPrefix.charAt(0)}xxx`
+  const bucketPrefixLength = Math.max(filenameSequence.length - 3, 1)
+  const bucketPrefix = filenameSequence.slice(0, bucketPrefixLength)
+  const bucket = `${bucketPrefix}xxx`
   return join('cves', year, bucket, `CVE-${year}-${filenameSequence}.json`)
 }
 

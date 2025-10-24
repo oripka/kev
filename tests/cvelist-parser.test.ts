@@ -85,6 +85,8 @@ describe("cvelist parser", () => {
   it("resolves CVE paths using cvelist bucket layout", () => {
     expect(resolveCvePath("CVE-2024-12345")).toBe("cves/2024/1xxx/CVE-2024-12345.json");
     expect(resolveCvePath("CVE-2019-0001")).toBe("cves/2019/0xxx/CVE-2019-0001.json");
+    expect(resolveCvePath("CVE-2025-47916")).toBe("cves/2025/47xxx/CVE-2025-47916.json");
+    expect(resolveCvePath("CVE-2030-123456")).toBe("cves/2030/123xxx/CVE-2030-123456.json");
   });
 
   it("summarises CVE records with affected products and metadata", () => {
