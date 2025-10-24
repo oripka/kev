@@ -880,4 +880,169 @@
       }
     }
   }
+  ,
+  {
+    "id": "windows-search-motw-client",
+    "title": "Windows Search MOTW bypass stays client-side",
+    "entry": {
+      "cveId": "CVE-2022-44670",
+      "vendor": "Microsoft",
+      "product": "Windows Search",
+      "vulnerabilityName": "Microsoft Windows Search Remote Code Execution Vulnerability",
+      "description": "Microsoft Windows Search fails to enforce Mark of the Web restrictions on a specially crafted search-ms shortcut, allowing a malicious file delivered over the network to execute when the user launches the search result.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 7.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "domainCategories": {
+        "includes": [
+          "Non-Web Applications"
+        ],
+        "excludes": [
+          "Web Applications",
+          "Web Servers"
+        ]
+      },
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "winverifytrust-authenticode-client",
+    "title": "WinVerifyTrust signature confusion is a client exploit",
+    "entry": {
+      "cveId": "CVE-2013-3900",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft WinVerifyTrust function Remote Code Execution",
+      "description": "The WinVerifyTrust Authenticode signature verification routine in Windows improperly validates portable executables, enabling attackers to craft a signed file that executes arbitrary code when a user opens the attachment.",
+      "cvssVector": "CVSS:3.0/AV:N/AC:M/PR:N/UI:R/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.0",
+      "cvssScore": 8.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "themebleed-msstyles-client",
+    "title": "ThemeBleed msstyles swap remains client-side",
+    "entry": {
+      "cveId": "CVE-2023-38146",
+      "vendor": "Microsoft",
+      "product": "Windows Themes",
+      "vulnerabilityName": "ThemeBleed Windows 11 Themes Arbitrary Code Execution",
+      "description": "Windows 11 theme packages containing malicious msstyles files exploit the ThemeBleed race condition to load attacker controlled DLLs when a victim double clicks the theme.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 7.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "windows-print-spooler-client",
+    "title": "PrintNightmare execution is attributed to the client host",
+    "entry": {
+      "cveId": "CVE-2021-34527",
+      "vendor": "Microsoft",
+      "product": "Windows",
+      "vulnerabilityName": "Microsoft Windows Print Spooler Remote Code Execution Vulnerability",
+      "description": "The Windows Print Spooler service allows a crafted remote printer driver package to install and execute code on the workstation that processes the job.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 8.8,
+      "cvssSeverity": "High"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Client-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Server-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  },
+  {
+    "id": "http-sys-still-server",
+    "title": "HTTP.sys continues to classify as server-side",
+    "entry": {
+      "cveId": "CVE-2022-21907",
+      "vendor": "Microsoft",
+      "product": "HTTP.sys",
+      "vulnerabilityName": "HTTP.sys Request Smuggling Remote Code Execution Vulnerability",
+      "description": "Microsoft HTTP.sys fails to validate HTTP trailer headers, allowing a single packet request to achieve remote code execution against the listening Windows server.",
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvssVersion": "3.1",
+      "cvssScore": 9.8,
+      "cvssSeverity": "Critical"
+    },
+    "expect": {
+      "exploitLayers": {
+        "includes": [
+          "RCE · Server-side Non-memory"
+        ],
+        "excludes": [
+          "RCE · Client-side Non-memory",
+          "Mixed/Needs Review"
+        ]
+      },
+      "vulnerabilityCategories": {
+        "includes": [
+          "Remote Code Execution"
+        ]
+      }
+    }
+  }
 ]

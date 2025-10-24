@@ -107,6 +107,48 @@ type ClassificationTestCase = {
   expect: ClassificationExpectations;
 };
 
+const expectationMatches = <T extends string>(
+  actual: T[],
+  expectation?: ExpectationList<T>
+): boolean => {
+  if (!expectation) {
+    return true;
+  }
+
+  if (expectation.exact) {
+    const expectedSet = new Set(expectation.exact);
+    if (actual.length !== expectedSet.size) {
+      return false;
+    }
+    for (const expected of expectedSet) {
+      if (!actual.includes(expected)) {
+        return false;
+      }
+    }
+  }
+
+  if (expectation.includes) {
+    for (const value of expectation.includes) {
+      if (!actual.includes(value)) {
+        return false;
+      }
+    }
+  }
+
+  if (expectation.excludes) {
+    for (const value of expectation.excludes) {
+      if (actual.includes(value)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
+
+const summariseList = (values: string[]) =>
+  values.length ? values.join(", ") : "(none)";
+
 const datasetPath = fileURLToPath(
   new URL("./fixtures/classification-evaluation.json", import.meta.url)
 );
@@ -190,6 +232,38 @@ describe("classification evaluation suite", () => {
     it(testCase.title, () => {
       const entry = createBaseEntry(testCase.entry);
       const enriched = enrichEntry(entry);
+
+      const domainMatches = expectationMatches(
+        enriched.domainCategories,
+        testCase.expect.domainCategories
+      );
+      const exploitMatches = expectationMatches(
+        enriched.exploitLayers,
+        testCase.expect.exploitLayers
+      );
+      const vulnerabilityMatches = expectationMatches(
+        enriched.vulnerabilityCategories,
+        testCase.expect.vulnerabilityCategories
+      );
+      const expectedInternetExposed = testCase.expect.internetExposed;
+      const internetMatches =
+        expectedInternetExposed === undefined
+          ? true
+          : enriched.internetExposed === expectedInternetExposed;
+
+      console.info(
+        `[classification fixtures] ${testCase.id} :: domain=${
+          domainMatches ? "match" : "mismatch"
+        } actual=[${summariseList(enriched.domainCategories)}] | exploit=${
+          exploitMatches ? "match" : "mismatch"
+        } actual=[${summariseList(enriched.exploitLayers)}] | vulnerability=${
+          vulnerabilityMatches ? "match" : "mismatch"
+        } actual=[${summariseList(
+          enriched.vulnerabilityCategories
+        )}] | internet=${internetMatches ? "match" : "mismatch"} actual=${
+          enriched.internetExposed
+        }`
+      );
 
       assertExpectation(enriched.domainCategories, testCase.expect.domainCategories);
       assertExpectation(enriched.exploitLayers, testCase.expect.exploitLayers);

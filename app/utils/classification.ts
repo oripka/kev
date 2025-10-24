@@ -1604,6 +1604,38 @@ const clientApplicationPatterns: RegExp[] = [
   /(?:^|[^a-z0-9])(?:appx\s+installer|appinstaller(?:\.exe)?|msix(?:bundle)?)(?:[^a-z0-9]|$)/i,
 ];
 
+const windowsEndpointComponentPatterns: RegExp[] = [
+  /\bwindows\s+search\b/i,
+  /\bwindows\s+shell\b/i,
+  /\bwindows\s+runtime\b/i,
+  /\bwindows\s+scripting\s+languages?\b/i,
+  /(?:^|[^a-z0-9])jscript9(?:[^a-z0-9]|$)/i,
+  /\bwinverifytrust\b/i,
+  /\bauthenticode\b/i,
+  /\bmsstyles?_vrf\.dll\b/i,
+  /\bmsstyles?\b/i,
+  /\btheme(?:bleed| file| pack|s)\b/i,
+  /\bpackaged\s+theme\b/i,
+  /\bprint\s+spooler\b/i,
+  /\bmscomctl(?:\.ocx)?\b/i,
+  /\bfont\s+(?:manager|library)\b/i,
+];
+
+const microsoftServerProductPatterns: RegExp[] = [
+  /\bserver\b/i,
+  /\bexchange\b/i,
+  /\bsharepoint\b/i,
+  /\bsql\b/i,
+  /\biis\b/i,
+  /\bhttp(?:\.?|\s+)sys\b/i,
+  /\bdomain\s+controller\b/i,
+  /\bactive\s+directory\b/i,
+  /\bremote\s+desktop\b/i,
+  /\brdp\b/i,
+  /\bhyper[-\s]?v\b/i,
+  /\bazure\b/i,
+];
+
 const strongClientApplicationPatterns: RegExp[] = [
   /\b(?:microsoft\s+)?(?:word|excel|powerpoint|outlook|project|visio|onenote)\b/i,
   /(?:^|[^a-z0-9])(?:msdt|ms-msdt|mshta|mshtml)(?:[^a-z0-9]|$)/i,
@@ -2069,6 +2101,11 @@ export const classifyExploitLayers = (
   const cvssTraits = parseCvssVector(entry.cvssVector);
   const vendorKey = makeVendorKey(entry.vendor);
   const productKey = makeProductKey(entry.product);
+  const microsoftWindowsProduct =
+    vendorKey === "microsoft" && /\bwindows\b/.test(productKey);
+  const microsoftEndpointProduct =
+    microsoftWindowsProduct &&
+    !matchesAny(productKey, microsoftServerProductPatterns);
   const cvssSuggestsLocal =
     cvssTraits?.attackVector === "L" || cvssTraits?.attackVector === "P";
   const cvssSuggestsRemote =
@@ -2094,6 +2131,19 @@ export const classifyExploitLayers = (
   const hasExplicitRemoteRce = matchesAny(text, remoteExecutionPatterns);
   const hasCodeExecutionSignal = matchesAny(text, codeExecutionPatterns);
   const hasCrossSiteScripting = matchesAny(text, crossSiteScriptingPatterns);
+  const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
+  const hasWindowsEndpointComponent = matchesAny(
+    text,
+    windowsEndpointComponentPatterns
+  );
+  let hasClientSignal =
+    matchesAny(text, clientSignalPatterns) || hasWindowsEndpointComponent;
+  if (microsoftEndpointProduct && !hasStrongServerProtocol) {
+    hasClientSignal = true;
+  }
+  if (hasCrossSiteScripting) {
+    hasClientSignal = true;
+  }
   const remoteContextFromText = matchesAny(text, remoteContextPatterns);
   const hasRemoteContext =
     hasExplicitRemoteRce ||
@@ -2113,10 +2163,6 @@ export const classifyExploitLayers = (
     configurationAbusePatterns
   );
   const hasCommandInjection = matchesAny(text, commandInjectionPatterns);
-  let hasClientSignal = matchesAny(text, clientSignalPatterns);
-  if (hasCrossSiteScripting) {
-    hasClientSignal = true;
-  }
   const curatedHint = resolveCuratedHint(entry.vendor, entry.product);
   const curatedServerBias = curatedHint?.serverBias ?? false;
   const curatedClientBias = curatedHint?.clientBias ?? false;
@@ -2132,15 +2178,15 @@ export const classifyExploitLayers = (
     hasClientSignal = true;
   }
 
-  const hasStrongClientApplicationSignal = matchesAny(
-    text,
-    strongClientApplicationPatterns
-  );
+  const hasStrongClientApplicationSignal =
+    matchesAny(text, strongClientApplicationPatterns) ||
+    (microsoftEndpointProduct && hasWindowsEndpointComponent);
   let hasClientApplicationSignal =
     hasStrongClientApplicationSignal ||
-    matchesAny(text, clientApplicationPatterns);
+    matchesAny(text, clientApplicationPatterns) ||
+    (microsoftEndpointProduct && !hasStrongServerProtocol);
 
-  if (hasStrongClientApplicationSignal) {
+  if (hasStrongClientApplicationSignal || hasWindowsEndpointComponent) {
     hasClientSignal = true;
   }
   let hasClientFileSignal = matchesAny(text, clientFileInteractionPatterns);
@@ -2161,16 +2207,24 @@ export const classifyExploitLayers = (
     serverFileContextPatterns
   );
   if (hasClientFileSignal) {
+    const hasCvssBackedInteraction =
+      Boolean(cvssRequiresUserInteraction) || Boolean(cvssSuggestsLocal);
     const hasTextualUserAction =
-      hasExplicitFileUserAction || rawClientUserInteractionSignal;
-    if (!hasTextualUserAction || (hasServerFileProcessingContext && !hasExplicitFileUserAction)) {
+      hasExplicitFileUserAction ||
+      rawClientUserInteractionSignal ||
+      hasCvssBackedInteraction;
+    if (
+      !hasTextualUserAction ||
+      (hasServerFileProcessingContext &&
+        !hasExplicitFileUserAction &&
+        !cvssSuggestsLocal)
+    ) {
       hasClientFileSignal = false;
     }
   }
   let hasClientLocalExecutionSignal =
     matchesAny(text, clientLocalExecutionPatterns) ||
     Boolean(cvssSuggestsLocal);
-  const hasStrongServerProtocol = matchesAny(text, networkProtocolPatterns);
   let hasServerSignal = serverSignalPatterns.some((pattern) =>
     pattern.test(text)
   );
@@ -2207,6 +2261,17 @@ export const classifyExploitLayers = (
     text
   );
 
+  if (
+    microsoftEndpointProduct &&
+    hasServerSignal &&
+    !hasStrongServerProtocol &&
+    !networkOperatingSystemSignal &&
+    !mobileManagementSignal &&
+    !mobileDeviceManagementContext
+  ) {
+    hasServerSignal = false;
+  }
+
   if (mobileManagementSignal || mobileDeviceManagementContext) {
     hasServerSignal = true;
   }
@@ -2215,12 +2280,17 @@ export const classifyExploitLayers = (
     hasServerSignal = true;
   }
 
+  const rawDomainSuggestsClient = domainCategories.some((category) =>
+    clientDomainHints.has(category)
+  );
+  const rawDomainSuggestsServer = domainCategories.some((category) =>
+    serverDomainHints.has(category)
+  );
+  const domainSuggestsServer = rawDomainSuggestsServer || curatedServerBias;
   const domainSuggestsClient =
-    domainCategories.some((category) => clientDomainHints.has(category)) ||
-    curatedClientBias;
-  const domainSuggestsServer =
-    domainCategories.some((category) => serverDomainHints.has(category)) ||
-    curatedServerBias;
+    rawDomainSuggestsClient ||
+    curatedClientBias ||
+    (microsoftEndpointProduct && !domainSuggestsServer);
   const hasServerAnchorSignals =
     domainSuggestsServer ||
     curatedServerBias ||
@@ -2228,6 +2298,28 @@ export const classifyExploitLayers = (
     networkOperatingSystemSignal ||
     mobileManagementSignal ||
     mobileDeviceManagementContext;
+
+  const endpointLacksServerAnchors =
+    microsoftEndpointProduct && !hasServerAnchorSignals;
+
+  if (endpointLacksServerAnchors && cvssStrongServer) {
+    cvssStrongServer = false;
+  }
+
+  if (
+    endpointLacksServerAnchors &&
+    hasServerSignal &&
+    !domainSuggestsServer &&
+    !networkOperatingSystemSignal &&
+    !mobileManagementSignal &&
+    !mobileDeviceManagementContext
+  ) {
+    hasServerSignal = false;
+  }
+
+  if (endpointLacksServerAnchors) {
+    hasClientSignal = true;
+  }
 
   const cvssRemoteUiStrongClientBias =
     cvssRemoteUserInteraction &&
@@ -2275,7 +2367,11 @@ export const classifyExploitLayers = (
       mobileDeviceManagementContext ||
       hasRemoteContext;
 
-    if (!hasClientArtifactContext && serverDominantContext) {
+    if (
+      !hasClientArtifactContext &&
+      serverDominantContext &&
+      !endpointLacksServerAnchors
+    ) {
       hasClientApplicationSignal = false;
     }
   }
@@ -2316,7 +2412,8 @@ export const classifyExploitLayers = (
     hasStrongClientApplicationSignal ||
     hasClientFileSignal ||
     hasClientUserInteractionSignal ||
-    hasCrossSiteScripting;
+    hasCrossSiteScripting ||
+    hasWindowsEndpointComponent;
 
   if (hasKernelServerSignal) {
     const kernelClientAnchors =
@@ -2327,6 +2424,7 @@ export const classifyExploitLayers = (
       hasClientApplicationSignal ||
       hasStrongClientApplicationSignal ||
       hasCrossSiteScripting ||
+      hasWindowsEndpointComponent ||
       curatedClientBias;
     const kernelLacksServerAnchors =
       !hasStrongServerProtocol &&
@@ -2366,7 +2464,9 @@ export const classifyExploitLayers = (
     hasCrossSiteScripting ||
     domainSuggestsClient ||
     curatedClientBias ||
-    cvssRemoteUiStrongClientBias;
+    cvssRemoteUiStrongClientBias ||
+    hasWindowsEndpointComponent ||
+    (microsoftEndpointProduct && !domainSuggestsServer);
 
   if (cvssStrongServer) {
     const lacksServerAnchors = !hasServerAnchorSignals;
@@ -2419,7 +2519,9 @@ export const classifyExploitLayers = (
     hasCrossSiteScripting ||
     domainSuggestsClient ||
     curatedClientBias ||
-    cvssRemoteUiStrongClientBias;
+    cvssRemoteUiStrongClientBias ||
+    hasWindowsEndpointComponent ||
+    (microsoftEndpointProduct && !domainSuggestsServer);
 
   const serverPrimaryEvidence =
     hasServerSignal ||
@@ -2436,7 +2538,8 @@ export const classifyExploitLayers = (
     hasClientFileSignal,
     hasClientUserInteractionSignal,
     clientLocalCounts,
-    domainSuggestsClient
+    domainSuggestsClient,
+    hasWindowsEndpointComponent
   );
 
   const clientApplicationScore = hasClientApplicationSignal
@@ -2465,7 +2568,8 @@ export const classifyExploitLayers = (
     (clientLocalCounts ? 1 : 0) +
     (domainSuggestsClient ? 1 : 0) +
     (curatedClientBias ? 1 : 0) +
-    (cvssRemoteUiStrongClientBias ? 2 : 0);
+    (cvssRemoteUiStrongClientBias ? 2 : 0) +
+    (microsoftEndpointProduct && !domainSuggestsServer ? 1 : 0);
 
   let clientScore = clientScoreBase;
 
@@ -2508,6 +2612,10 @@ export const classifyExploitLayers = (
 
   if (cvssStrongServer) {
     serverScoreBase += 1;
+  }
+
+  if (endpointLacksServerAnchors && serverScoreBase > 0) {
+    serverScoreBase = Math.max(0, serverScoreBase - 1);
   }
 
   const serverHardConstraint =
@@ -2605,18 +2713,21 @@ export const classifyExploitLayers = (
     }
 
     const serverDominant =
-      strongServerIndicators ||
-      hasStrongServerProtocol ||
-      hasKernelServerSignal ||
-      (domainSuggestsServer && !domainSuggestsClient) ||
-      (hasServerSignal && !hasUsefulClientSignal) ||
-      cvssStrongServer;
+      !endpointLacksServerAnchors &&
+      (strongServerIndicators ||
+        hasStrongServerProtocol ||
+        hasKernelServerSignal ||
+        (domainSuggestsServer && !domainSuggestsClient) ||
+        (hasServerSignal && !hasUsefulClientSignal) ||
+        cvssStrongServer);
 
     const clientDominant =
       strongClientIndicators ||
       (domainSuggestsClient && !domainSuggestsServer) ||
-      (hasUsefulClientSignal && !hasServerSignal) ||
-      curatedClientBias;
+      (hasUsefulClientSignal &&
+        (!hasServerSignal || endpointLacksServerAnchors)) ||
+      curatedClientBias ||
+      (endpointLacksServerAnchors && microsoftEndpointProduct);
 
     if (serverDominant && !clientDominant) {
       return "Server-side";
@@ -2638,7 +2749,10 @@ export const classifyExploitLayers = (
       }
 
       hasMixedContext = true;
-      if (hasStrongServerProtocol || hasKernelServerSignal) {
+      if (
+        !endpointLacksServerAnchors &&
+        (hasStrongServerProtocol || hasKernelServerSignal)
+      ) {
         return "Server-side";
       }
 
@@ -2666,7 +2780,10 @@ export const classifyExploitLayers = (
       return "Server-side";
     }
 
-    if (hasStrongServerProtocol || hasKernelServerSignal || hasServerSignal) {
+    if (
+      !endpointLacksServerAnchors &&
+      (hasStrongServerProtocol || hasKernelServerSignal || hasServerSignal)
+    ) {
       if (clientPrimaryEvidence) {
         hasMixedContext = true;
       }
@@ -2681,7 +2798,7 @@ export const classifyExploitLayers = (
     }
 
     if (hasRemoteContext) {
-      if (remoteCvssUserInteractionLeansClient) {
+      if (remoteCvssUserInteractionLeansClient || endpointLacksServerAnchors) {
         hasMixedContext = false;
         return "Client-side";
       }
