@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import type { Database as SqliteDatabase } from 'better-sqlite3'
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
+import { drizzle as drizzleSqlite, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
+import { drizzle as drizzleD1, type DrizzleD1Database } from 'drizzle-orm/d1'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { readMigrationFiles } from 'drizzle-orm/migrator'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
@@ -8,11 +9,35 @@ import { dirname, join } from 'node:path'
 import * as schema from './schema'
 
 let sqliteInstance: SqliteDatabase | null = null
-let drizzleInstance: BetterSQLite3Database<typeof schema> | null = null
+let drizzleInstance: DrizzleDatabase | null = null
 let migrationsApplied = false
 
 const DB_FILENAME = 'db.sqlite'
 const MIGRATIONS_FOLDER = join(process.cwd(), 'server', 'database', 'migrations')
+
+type D1Client = Parameters<typeof drizzleD1>[0]
+
+type HubGlobal = typeof globalThis & {
+  hubDatabase?: () => D1Client
+}
+
+type SqliteDrizzleDatabase = BetterSQLite3Database<typeof schema>
+type D1DrizzleDatabase = DrizzleD1Database<typeof schema>
+
+export type DrizzleDatabase = SqliteDrizzleDatabase | D1DrizzleDatabase
+
+const resolveHubDatabase = (): D1Client | null => {
+  const hub = (globalThis as HubGlobal).hubDatabase
+  if (typeof hub !== 'function') {
+    return null
+  }
+
+  try {
+    return hub()
+  } catch {
+    return null
+  }
+}
 
 const ensureBaselineMigrations = (sqlite: SqliteDatabase) => {
   const hasCatalogEntries = sqlite
@@ -79,9 +104,16 @@ const initialiseDrizzle = () => {
     return drizzleInstance
   }
 
+  const hubDatabase = resolveHubDatabase()
+  if (hubDatabase) {
+    const db = drizzleD1(hubDatabase, { schema })
+    drizzleInstance = db
+    return db
+  }
+
   const sqlite = initialiseDatabase()
   ensureBaselineMigrations(sqlite)
-  const db = drizzle(sqlite, { schema })
+  const db = drizzleSqlite(sqlite, { schema })
   drizzleInstance = db
 
   if (!migrationsApplied) {
@@ -92,7 +124,7 @@ const initialiseDrizzle = () => {
   return db
 }
 
-export const useDrizzle = (): BetterSQLite3Database<typeof schema> => initialiseDrizzle()
+export const useDrizzle = (): DrizzleDatabase => initialiseDrizzle()
 
 export const tables = schema
 

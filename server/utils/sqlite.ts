@@ -1,8 +1,7 @@
 import { eq } from 'drizzle-orm'
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { useDrizzle, resetDatabase as reset, tables } from '../database/client'
+import { useDrizzle, resetDatabase as reset, tables, type DrizzleDatabase as ClientDrizzleDatabase } from '../database/client'
 
-export type DrizzleDatabase = BetterSQLite3Database<typeof tables>
+export type DrizzleDatabase = ClientDrizzleDatabase
 
 export const getDatabase = (): DrizzleDatabase => useDrizzle()
 

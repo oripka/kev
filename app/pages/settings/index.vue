@@ -1,7 +1,6 @@
 <script setup lang="ts">
-definePageMeta({ middleware: ["admin"] });
-
 import { computed, ref, watch } from "vue";
+import type { FetchError } from "ofetch";
 import type { TableColumn } from "@nuxt/ui";
 import {
   areQuickFilterSummaryConfigsEqual,
@@ -44,6 +43,7 @@ const {
   data,
   pending,
   error,
+  refresh: refreshAdminSoftware,
 } = await useFetch<AdminSoftwareResponse>("/api/admin/software", {
   default: () => ({
     totals: {
@@ -55,6 +55,49 @@ const {
     products: [],
     vendors: [],
   }),
+});
+
+const resolveStatusCode = (fetchError: FetchError<unknown> | null) => {
+  if (!fetchError) {
+    return null;
+  }
+
+  const candidate = fetchError as FetchError<unknown> & {
+    statusCode?: number;
+    status?: number;
+    data?: unknown;
+  };
+
+  if (typeof candidate.statusCode === "number") {
+    return candidate.statusCode;
+  }
+
+  if (typeof candidate.status === "number") {
+    return candidate.status;
+  }
+
+  if (
+    candidate.data &&
+    typeof candidate.data === "object" &&
+    "statusCode" in candidate.data &&
+    typeof (candidate.data as { statusCode?: number }).statusCode === "number"
+  ) {
+    return (candidate.data as { statusCode?: number }).statusCode ?? null;
+  }
+
+  return null;
+};
+
+const adminAccessForbidden = computed(() => resolveStatusCode(error.value) === 403);
+
+const hasAdminAccess = computed(() => !adminAccessForbidden.value && !error.value);
+
+const adminStatsLoadError = computed(() => {
+  if (!error.value || adminAccessForbidden.value) {
+    return null;
+  }
+
+  return error.value;
 });
 
 const totals = computed(() => data.value?.totals ?? {
@@ -151,6 +194,8 @@ const quickFilterSummaryIsDefault = computed(() =>
   ),
 );
 
+const canManageQuickFilterSummary = computed(() => hasAdminAccess.value);
+
 watch(
   () => quickFilterSummaryConfigData.value,
   (config) => {
@@ -177,6 +222,12 @@ watch(
   { deep: true },
 );
 
+watch(hasAdminAccess, (value) => {
+  if (value) {
+    quickFilterSummarySaveError.value = null;
+  }
+});
+
 const disableMetricToggle = (key: QuickFilterSummaryMetricKey) => {
   const metrics = quickFilterSummaryForm.value.metrics;
   return metrics.length === 1 && metrics.includes(key);
@@ -186,6 +237,9 @@ const toggleQuickFilterSummaryMetric = (
   key: QuickFilterSummaryMetricKey,
   selected: boolean,
 ) => {
+  if (!canManageQuickFilterSummary.value) {
+    return;
+  }
   const metrics = new Set(quickFilterSummaryForm.value.metrics);
   if (selected) {
     metrics.add(key);
@@ -202,20 +256,33 @@ const toggleQuickFilterSummaryMetric = (
 };
 
 const setShowQuickFilterChips = (value: boolean) => {
+  if (!canManageQuickFilterSummary.value) {
+    return;
+  }
   quickFilterSummaryForm.value.showActiveFilterChips = value;
 };
 
 const setShowQuickFilterResetButton = (value: boolean) => {
+  if (!canManageQuickFilterSummary.value) {
+    return;
+  }
   quickFilterSummaryForm.value.showResetButton = value;
 };
 
 const restoreQuickFilterSummaryDefaults = () => {
+  if (!canManageQuickFilterSummary.value) {
+    return;
+  }
   quickFilterSummaryForm.value = cloneQuickFilterSummaryConfig(
     defaultQuickFilterSummaryConfig,
   );
 };
 
 const saveQuickFilterSummaryConfig = async () => {
+  if (!canManageQuickFilterSummary.value) {
+    quickFilterSummarySaveError.value = "Admin access required to update settings";
+    return;
+  }
   if (!quickFilterSummaryDirty.value) {
     return;
   }
@@ -278,13 +345,47 @@ const quickFilterSummaryCanSave = computed(() =>
 );
 
 const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault.value);
+
+const adminApiKey = ref("");
+const adminLoginPending = ref(false);
+const adminLoginError = ref<string | null>(null);
+const adminLoginSuccess = ref(false);
+
+const submitAdminApiKey = async () => {
+  if (!adminApiKey.value.trim()) {
+    adminLoginError.value = "Enter the admin API key to continue";
+    return;
+  }
+
+  adminLoginPending.value = true;
+  adminLoginError.value = null;
+  adminLoginSuccess.value = false;
+
+  try {
+    await $fetch("/api/admin/session", {
+      method: "POST",
+      body: { key: adminApiKey.value.trim() },
+    });
+
+    adminLoginSuccess.value = true;
+    adminApiKey.value = "";
+    await refreshAdminSoftware();
+  } catch (exception) {
+    adminLoginError.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to verify admin API key";
+  } finally {
+    adminLoginPending.value = false;
+  }
+};
 </script>
 
 <template>
   <UPage>
     <UPageBody>
       <div class="mx-auto grid w-full max-w-6xl gap-4 px-6">
-        <UCard>
+        <UCard v-if="hasAdminAccess">
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="space-y-1">
@@ -341,16 +442,75 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
           </div>
 
           <UAlert
-            v-if="error"
+            v-if="adminStatsLoadError"
             color="error"
             variant="soft"
             title="Unable to load usage data"
-            :description="error.message"
+            :description="adminStatsLoadError.message"
             class="mt-4"
           />
-          <p v-else-if="pending" class="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+          <p
+            v-else-if="pending"
+            class="mt-4 text-sm text-neutral-500 dark:text-neutral-400"
+          >
             Loading saved filter analytics…
           </p>
+        </UCard>
+
+        <UCard v-else-if="adminAccessForbidden">
+          <template #header>
+            <div class="space-y-1">
+              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                Unlock admin controls
+              </p>
+              <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                Enter the admin API key to access usage analytics and global preferences.
+              </p>
+            </div>
+          </template>
+
+          <form class="space-y-4" @submit.prevent="submitAdminApiKey">
+            <UFormField label="Admin API key" required>
+              <UInput
+                v-model="adminApiKey"
+                type="password"
+                autocomplete="off"
+                placeholder="Enter the API key"
+              />
+            </UFormField>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <UButton type="submit" color="primary" :loading="adminLoginPending">
+                Unlock settings
+              </UButton>
+
+              <span
+                v-if="adminLoginPending"
+                class="text-sm text-neutral-500 dark:text-neutral-400"
+              >
+                Verifying…
+              </span>
+            </div>
+          </form>
+
+          <UAlert
+            v-if="adminLoginError"
+            color="error"
+            variant="soft"
+            class="mt-4"
+            icon="i-lucide-alert-triangle"
+            :description="adminLoginError"
+          />
+
+          <UAlert
+            v-else-if="adminLoginSuccess"
+            color="success"
+            variant="soft"
+            class="mt-4"
+            icon="i-lucide-badge-check"
+            title="Admin controls unlocked"
+            description="Usage analytics and admin settings are now available."
+          />
         </UCard>
 
         <UCard>
@@ -372,6 +532,14 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
             icon="i-lucide-alert-triangle"
             title="Unable to load quick filter settings"
             :description="quickFilterSummaryError.message"
+          />
+          <UAlert
+            v-else-if="adminAccessForbidden"
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-lock"
+            title="Admin access required"
+            description="Unlock admin controls above to change the default quick filter summary."
           />
           <p
             v-else-if="quickFilterSummaryPending"
@@ -397,7 +565,7 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
                 >
                   <UCheckbox
                     :model-value="quickFilterSummaryForm.metrics.includes(metric.key)"
-                    :disabled="disableMetricToggle(metric.key)"
+                    :disabled="disableMetricToggle(metric.key) || !canManageQuickFilterSummary"
                     @update:model-value="(value) => toggleQuickFilterSummaryMetric(metric.key, value)"
                   />
                   <div class="space-y-1">
@@ -427,6 +595,7 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
                 </div>
                 <USwitch
                   :model-value="quickFilterSummaryForm.showActiveFilterChips"
+                  :disabled="!canManageQuickFilterSummary"
                   @update:model-value="setShowQuickFilterChips"
                 />
               </div>
@@ -442,6 +611,7 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
                 </div>
                 <USwitch
                   :model-value="quickFilterSummaryForm.showResetButton"
+                  :disabled="!canManageQuickFilterSummary"
                   @update:model-value="setShowQuickFilterResetButton"
                 />
               </div>
@@ -455,7 +625,7 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  :disabled="!quickFilterSummaryCanRestore || quickFilterSummarySaving"
+                  :disabled="!canManageQuickFilterSummary || !quickFilterSummaryCanRestore || quickFilterSummarySaving"
                   @click="restoreQuickFilterSummaryDefaults"
                 >
                   Restore defaults
@@ -463,7 +633,7 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
                 <UButton
                   color="primary"
                   :loading="quickFilterSummarySaving"
-                  :disabled="!quickFilterSummaryCanSave"
+                  :disabled="!canManageQuickFilterSummary || !quickFilterSummaryCanSave"
                   @click="saveQuickFilterSummaryConfig"
                 >
                   Save changes
@@ -473,7 +643,7 @@ const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault
           </div>
         </UCard>
 
-        <div class="grid gap-4 md:grid-cols-2">
+        <div v-if="hasAdminAccess" class="grid gap-4 md:grid-cols-2">
           <UCard>
             <template #header>
               <div class="flex items-center justify-between">
