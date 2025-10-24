@@ -1,0 +1,2623 @@
+[
+  {
+    "vendor": "Acronis",
+    "product": "Cyber Infrastructure (ACI)",
+    "cves": [
+      "CVE-2023-45249"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "adobe",
+    "product": "adobe reader",
+    "cves": [
+      "CVE-2010-1240"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "Adobe",
+    "product": "Acrobat and Reader",
+    "cves": [
+      "CVE-2007-5659",
+      "CVE-2008-2992",
+      "CVE-2009-3953",
+      "CVE-2009-4324",
+      "CVE-2010-2883",
+      "CVE-2011-2462"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Adobe",
+    "product": "ColdFusion",
+    "cves": [
+      "CVE-2013-0632",
+      "CVE-2018-15961",
+      "CVE-2023-26360"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Adobe",
+    "product": "Commerce and Magento Open Source",
+    "cves": [
+      "CVE-2024-34102"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Adobe",
+    "product": "Flash Player",
+    "cves": [
+      "CVE-2010-1297",
+      "CVE-2011-0609",
+      "CVE-2011-0611",
+      "CVE-2012-0754",
+      "CVE-2012-1535",
+      "CVE-2014-0497",
+      "CVE-2015-0311",
+      "CVE-2015-0313",
+      "CVE-2015-3043",
+      "CVE-2015-3113",
+      "CVE-2015-5119",
+      "CVE-2015-5122",
+      "CVE-2016-4117"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Adobe",
+    "product": "Reader and Acrobat",
+    "cves": [
+      "CVE-2009-0927",
+      "CVE-2010-0188",
+      "CVE-2013-3346"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Alcatel",
+    "product": "OmniPCX Enterprise",
+    "cves": [
+      "CVE-2007-3010"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Android",
+    "product": "Android Kernel",
+    "cves": [
+      "CVE-2019-2215"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "ActiveMQ",
+    "cves": [
+      "CVE-2016-3088",
+      "CVE-2023-46604"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Airflow",
+    "cves": [
+      "CVE-2020-11978"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Airflow's Experimental API",
+    "cves": [
+      "CVE-2020-13927"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "APISIX",
+    "cves": [
+      "CVE-2022-24112"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "CouchDB",
+    "cves": [
+      "CVE-2022-24706"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "HTTP Server",
+    "cves": [
+      "CVE-2021-41773",
+      "CVE-2021-42013"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "HugeGraph-Server",
+    "cves": [
+      "CVE-2024-27348"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Log4j2",
+    "cves": [
+      "CVE-2021-44228"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "OFBiz",
+    "cves": [
+      "CVE-2024-32113",
+      "CVE-2024-38856"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "RocketMQ",
+    "cves": [
+      "CVE-2023-33246"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Shiro",
+    "cves": [
+      "CVE-2016-4437"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Solr",
+    "cves": [
+      "CVE-2019-17558"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Spark",
+    "cves": [
+      "CVE-2022-33891"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Struts",
+    "cves": [
+      "CVE-2013-2251",
+      "CVE-2017-5638",
+      "CVE-2017-9805",
+      "CVE-2018-11776",
+      "CVE-2020-17530"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Struts 1",
+    "cves": [
+      "CVE-2017-9791"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Struts 2",
+    "cves": [
+      "CVE-2012-0391"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Superset",
+    "cves": [
+      "CVE-2023-27524"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apache",
+    "product": "Tomcat",
+    "cves": [
+      "CVE-2017-12617",
+      "CVE-2025-24813"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apple",
+    "product": "iOS",
+    "cves": [
+      "CVE-2016-4655",
+      "CVE-2016-4656",
+      "CVE-2016-4657"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apple",
+    "product": "macOS",
+    "cves": [
+      "CVE-2021-30657"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Apple",
+    "product": "OS X",
+    "cves": [
+      "CVE-2014-4404",
+      "CVE-2015-1130"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Artifex",
+    "product": "Ghostscript",
+    "cves": [
+      "CVE-2017-8291"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Atlassian",
+    "product": "Bitbucket Server and Data Center",
+    "cves": [
+      "CVE-2022-36804"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Atlassian",
+    "product": "Confluence Data Center and Server",
+    "cves": [
+      "CVE-2023-22515",
+      "CVE-2023-22518",
+      "CVE-2023-22527"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Atlassian",
+    "product": "Confluence Server and Data Center",
+    "cves": [
+      "CVE-2021-26084"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Atlassian",
+    "product": "Confluence Server and Data Server",
+    "cves": [
+      "CVE-2019-3396"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Atlassian",
+    "product": "Confluence Server/Data Center",
+    "cves": [
+      "CVE-2022-26134"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Atlassian",
+    "product": "Crowd and Crowd Data Center",
+    "cves": [
+      "CVE-2019-11580"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "BeyondTrust",
+    "product": "Privileged Remote Access (PRA) and Remote Support (RS)",
+    "cves": [
+      "CVE-2024-12356"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cacti",
+    "product": "Cacti",
+    "cves": [
+      "CVE-2022-46169"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "AnyConnect Secure",
+    "cves": [
+      "CVE-2020-3153",
+      "CVE-2020-3433"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "Cisco IOS XE Web UI",
+    "cves": [
+      "CVE-2023-20273"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "HyperFlex HX",
+    "cves": [
+      "CVE-2021-1497",
+      "CVE-2021-1498"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "IOS XE Web UI",
+    "cves": [
+      "CVE-2023-20198"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "Small Business RV160, RV260, RV340, and RV345 Series Routers",
+    "cves": [
+      "CVE-2022-20699"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "Small Business RV320 and RV325 Dual Gigabit WAN VPN Routers",
+    "cves": [
+      "CVE-2019-1652"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cisco",
+    "product": "Small Business RV320 and RV325 Routers",
+    "cves": [
+      "CVE-2019-1653"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Citrix",
+    "product": "Application Delivery Controller (ADC), Gateway, and SD-WAN WANOP Appliance",
+    "cves": [
+      "CVE-2019-19781"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Citrix",
+    "product": "NetScaler ADC and NetScaler Gateway",
+    "cves": [
+      "CVE-2023-3519"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Cleo",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2024-50623",
+      "CVE-2024-55956"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "ConnectWise",
+    "product": "ScreenConnect",
+    "cves": [
+      "CVE-2024-1709"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Craft CMS",
+    "product": "Craft CMS",
+    "cves": [
+      "CVE-2024-56145"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Crestron",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2019-3929"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "CWP",
+    "product": "Control Web Panel",
+    "cves": [
+      "CVE-2022-44877"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "CyberPersons",
+    "product": "CyberPanel",
+    "cves": [
+      "CVE-2024-51378",
+      "CVE-2024-51567"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "D-Link",
+    "product": "DCS-930L Devices",
+    "cves": [
+      "CVE-2016-11021"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "D-Link",
+    "product": "DIR-600 Router",
+    "cves": [
+      "CVE-2014-100005"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "D-Link",
+    "product": "DIR-645 Router",
+    "cves": [
+      "CVE-2015-2051"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "D-Link",
+    "product": "DIR-859 Router",
+    "cves": [
+      "CVE-2019-17621"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "D-Link",
+    "product": "DSL-2750B Devices",
+    "cves": [
+      "CVE-2016-20017"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "D-Link and TRENDnet",
+    "product": "Multiple Devices",
+    "cves": [
+      "CVE-2015-1187"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Dell",
+    "product": "dbutil Driver",
+    "cves": [
+      "CVE-2021-21551"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Docker",
+    "product": "Desktop Community Edition",
+    "cves": [
+      "CVE-2019-15752"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "dotCMS",
+    "product": "dotCMS",
+    "cves": [
+      "CVE-2022-26352"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "DotNetNuke (DNN)",
+    "product": "DotNetNuke (DNN)",
+    "cves": [
+      "CVE-2017-9822",
+      "CVE-2018-15811",
+      "CVE-2018-18325"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Drupal",
+    "product": "Core",
+    "cves": [
+      "CVE-2019-6340"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Drupal",
+    "product": "Drupal Core",
+    "cves": [
+      "CVE-2018-7600"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Elastic",
+    "product": "Elasticsearch",
+    "cves": [
+      "CVE-2014-3120",
+      "CVE-2015-1427"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Elastic",
+    "product": "Kibana",
+    "cves": [
+      "CVE-2019-7609"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Embedthis",
+    "product": "GoAhead",
+    "cves": [
+      "CVE-2017-17562"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Erlang",
+    "product": "Erlang/OTP",
+    "cves": [
+      "CVE-2025-32433"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Exim",
+    "product": "Exim",
+    "cves": [
+      "CVE-2010-4344",
+      "CVE-2010-4345"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Exim",
+    "product": "Mail Transfer Agent (MTA)",
+    "cves": [
+      "CVE-2019-10149"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "EyesOfNetwork",
+    "product": "EyesOfNetwork",
+    "cves": [
+      "CVE-2020-8655",
+      "CVE-2020-8657"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "F5",
+    "product": "BIG-IP",
+    "cves": [
+      "CVE-2020-5902",
+      "CVE-2022-1388"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "F5",
+    "product": "BIG-IP and BIG-IQ Centralized Management",
+    "cves": [
+      "CVE-2021-22986"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "F5",
+    "product": "BIG-IP Configuration Utility",
+    "cves": [
+      "CVE-2023-46747"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "ForgeRock",
+    "product": "Access Management (AM)",
+    "cves": [
+      "CVE-2021-35464"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Fortinet",
+    "product": "FortiClient EMS",
+    "cves": [
+      "CVE-2023-48788"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Fortinet",
+    "product": "FortiManager",
+    "cves": [
+      "CVE-2024-47575"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Fortinet",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2022-40684"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Fortra",
+    "product": "GoAnywhere MFT",
+    "cves": [
+      "CVE-2023-0669"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "GitLab",
+    "product": "Community and Enterprise Editions",
+    "cves": [
+      "CVE-2021-22205"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Gladinet",
+    "product": "CentreStack",
+    "cves": [
+      "CVE-2025-30406"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "GNU",
+    "product": "Bourne-Again Shell (Bash)",
+    "cves": [
+      "CVE-2014-6271"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "GNU",
+    "product": "GNU Bash",
+    "cves": [
+      "CVE-2014-6278"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "GNU",
+    "product": "GNU C Library",
+    "cves": [
+      "CVE-2023-4911"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Google",
+    "product": "Chrome Blink",
+    "cves": [
+      "CVE-2019-5786"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Google",
+    "product": "Chromium V8",
+    "cves": [
+      "CVE-2018-17463",
+      "CVE-2019-5825",
+      "CVE-2020-6418",
+      "CVE-2021-21220"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Grandstream",
+    "product": "UCM6200",
+    "cves": [
+      "CVE-2020-5722"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Hewlett Packard (HP)",
+    "product": "OpenView Network Node Manager",
+    "cves": [
+      "CVE-2005-2773"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Hikvision",
+    "product": "Security cameras web server",
+    "cves": [
+      "CVE-2021-36260"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Hitachi Vantara",
+    "product": "Pentaho Business Analytics (BA) Server",
+    "cves": [
+      "CVE-2022-43769",
+      "CVE-2022-43939"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "IBM",
+    "product": "Data Risk Manager",
+    "cves": [
+      "CVE-2020-4427",
+      "CVE-2020-4428"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "IBM",
+    "product": "Planning Analytics",
+    "cves": [
+      "CVE-2019-4716"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "IBM",
+    "product": "WebSphere Application Server and Server Hypervisor Edition",
+    "cves": [
+      "CVE-2015-7450"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ignite Realtime",
+    "product": "Openfire",
+    "cves": [
+      "CVE-2023-32315"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "ImageMagick",
+    "product": "ImageMagick",
+    "cves": [
+      "CVE-2016-3714"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Connect Secure and Policy Secure",
+    "cves": [
+      "CVE-2023-46805",
+      "CVE-2024-21887"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Connect Secure, Policy Secure, and Neurons",
+    "cves": [
+      "CVE-2024-21893"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Connect Secure, Policy Secure, and ZTA Gateways",
+    "cves": [
+      "CVE-2025-22457"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Endpoint Manager (EPM)",
+    "cves": [
+      "CVE-2024-29824"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Endpoint Manager Cloud Service Appliance (EPM CSA)",
+    "cves": [
+      "CVE-2021-44529"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Endpoint Manager Mobile (EPMM)",
+    "cves": [
+      "CVE-2025-4427",
+      "CVE-2025-4428"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "MobileIron Multiple Products",
+    "cves": [
+      "CVE-2020-15505"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Pulse Connect Secure",
+    "cves": [
+      "CVE-2020-8260"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Pulse Connect Secure and Pulse Policy Secure",
+    "cves": [
+      "CVE-2019-11539"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Ivanti",
+    "product": "Sentry",
+    "cves": [
+      "CVE-2023-38035"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Jenkins",
+    "product": "Jenkins",
+    "cves": [
+      "CVE-2017-1000353"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Jenkins",
+    "product": "Jenkins Stapler Web Framework",
+    "cves": [
+      "CVE-2018-1000861"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Jenkins",
+    "product": "Script Security Plugin",
+    "cves": [
+      "CVE-2019-1003029"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "JetBrains",
+    "product": "TeamCity",
+    "cves": [
+      "CVE-2023-42793",
+      "CVE-2024-27198"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Juniper",
+    "product": "Junos OS",
+    "cves": [
+      "CVE-2023-36844",
+      "CVE-2023-36845"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Kentico",
+    "product": "Xperience",
+    "cves": [
+      "CVE-2019-10068"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Langflow",
+    "product": "Langflow",
+    "cves": [
+      "CVE-2025-3248"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Laravel",
+    "product": "Ignition",
+    "cves": [
+      "CVE-2021-3129"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Laravel",
+    "product": "Laravel Framework",
+    "cves": [
+      "CVE-2018-15133"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Liferay",
+    "product": "Liferay Portal",
+    "cves": [
+      "CVE-2020-7961"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Linux",
+    "product": "Kernel",
+    "cves": [
+      "CVE-2010-3904",
+      "CVE-2013-6282",
+      "CVE-2014-3153",
+      "CVE-2019-13272",
+      "CVE-2021-22555",
+      "CVE-2021-3493",
+      "CVE-2022-0847",
+      "CVE-2023-0386"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Micro Focus",
+    "product": "Operation Bridge Reporter (OBR)",
+    "cves": [
+      "CVE-2021-22502"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "microsoft sql server",
+    "cves": [
+      "CVE-2002-0649"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "plug and play service",
+    "cves": [
+      "CVE-2005-1983"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "psexec / windows admin tools",
+    "cves": [
+      "CVE-1999-0504"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "rpc dcom / windows nt",
+    "cves": [
+      "CVE-2003-0352"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "server service / windows nt",
+    "cves": [
+      "CVE-2006-3439"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "windows print spooler",
+    "cves": [
+      "CVE-2010-2729"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "microsoft",
+    "product": "windows server / windows xp",
+    "cves": [
+      "CVE-2008-4250"
+    ],
+    "sources": [
+      "historic"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": ".NET Framework",
+    "cves": [
+      "CVE-2020-0646"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": ".NET Framework, SharePoint, Visual Studio",
+    "cves": [
+      "CVE-2020-1147"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Ancillary Function Driver (afd.sys)",
+    "cves": [
+      "CVE-2011-2005"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Excel",
+    "cves": [
+      "CVE-2009-3129"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Exchange",
+    "cves": [
+      "CVE-2021-42321"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Exchange Server",
+    "cves": [
+      "CVE-2020-0688",
+      "CVE-2021-26855",
+      "CVE-2021-27065",
+      "CVE-2021-31207",
+      "CVE-2021-34473",
+      "CVE-2021-34523",
+      "CVE-2022-41040",
+      "CVE-2022-41082"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Graphics Component",
+    "cves": [
+      "CVE-2013-3906"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Internet Explorer",
+    "cves": [
+      "CVE-2010-0249",
+      "CVE-2010-3962",
+      "CVE-2012-4792",
+      "CVE-2012-4969",
+      "CVE-2013-1347",
+      "CVE-2013-2551",
+      "CVE-2013-3163",
+      "CVE-2013-3893",
+      "CVE-2013-3897",
+      "CVE-2014-0322",
+      "CVE-2016-0189"
+    ],
+    "sources": [
+      "historic",
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Internet Information Services (IIS)",
+    "cves": [
+      "CVE-2017-7269"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "MSCOMCTL.OCX",
+    "cves": [
+      "CVE-2012-0158"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "MSHTML",
+    "cves": [
+      "CVE-2021-40444"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Office",
+    "cves": [
+      "CVE-2010-3333",
+      "CVE-2016-3235",
+      "CVE-2017-11882"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Office and WordPad",
+    "cves": [
+      "CVE-2017-0199"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Open Management Infrastructure (OMI)",
+    "cves": [
+      "CVE-2021-38647",
+      "CVE-2021-38648"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Remote Desktop Services",
+    "cves": [
+      "CVE-2019-0708"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "SharePoint",
+    "cves": [
+      "CVE-2025-49704",
+      "CVE-2025-49706",
+      "CVE-2025-53770"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "SharePoint Server",
+    "cves": [
+      "CVE-2023-24955",
+      "CVE-2023-29357"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Silverlight",
+    "cves": [
+      "CVE-2013-0074",
+      "CVE-2013-3896"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "SMBv1",
+    "cves": [
+      "CVE-2017-0144",
+      "CVE-2017-0145"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "SMBv1 server",
+    "cves": [
+      "CVE-2017-0147",
+      "CVE-2017-0148"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "SMBv3",
+    "cves": [
+      "CVE-2020-0796"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "SQL Server",
+    "cves": [
+      "CVE-2020-0618"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Win32k",
+    "cves": [
+      "CVE-2013-3660",
+      "CVE-2014-4113",
+      "CVE-2015-1701",
+      "CVE-2016-7255",
+      "CVE-2018-8120",
+      "CVE-2018-8453",
+      "CVE-2019-0808",
+      "CVE-2019-1458",
+      "CVE-2020-1054",
+      "CVE-2021-1732",
+      "CVE-2022-21882"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Windows",
+    "cves": [
+      "CVE-2010-0232",
+      "CVE-2010-2568",
+      "CVE-2013-3918",
+      "CVE-2013-5065",
+      "CVE-2014-4114",
+      "CVE-2014-6332",
+      "CVE-2014-6352",
+      "CVE-2015-0016",
+      "CVE-2015-2426",
+      "CVE-2016-0040",
+      "CVE-2016-0099",
+      "CVE-2017-0143",
+      "CVE-2017-0146",
+      "CVE-2017-8464",
+      "CVE-2018-8440",
+      "CVE-2019-0841",
+      "CVE-2019-1322",
+      "CVE-2019-1405",
+      "CVE-2020-0787",
+      "CVE-2021-1675",
+      "CVE-2021-34527",
+      "CVE-2021-40449",
+      "CVE-2022-21999",
+      "CVE-2022-22718",
+      "CVE-2022-26904",
+      "CVE-2022-30190",
+      "CVE-2023-28252",
+      "CVE-2023-36874",
+      "CVE-2024-30088",
+      "CVE-2024-35250",
+      "CVE-2025-33053"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "Word",
+    "cves": [
+      "CVE-2014-1761"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Microsoft",
+    "product": "XML Core Services",
+    "cves": [
+      "CVE-2012-1889"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Mozilla",
+    "product": "Firefox and Thunderbird",
+    "cves": [
+      "CVE-2013-1690"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Mozilla",
+    "product": "Firefox, Firefox ESR, and Thunderbird",
+    "cves": [
+      "CVE-2016-9079"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Mozilla",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2010-3765"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Nagios",
+    "product": "Nagios XI",
+    "cves": [
+      "CVE-2019-15949",
+      "CVE-2021-25296",
+      "CVE-2021-25297",
+      "CVE-2021-25298"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "NETGEAR",
+    "product": "DGN2200 Devices",
+    "cves": [
+      "CVE-2017-6334"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "NETGEAR",
+    "product": "Multiple Routers",
+    "cves": [
+      "CVE-2016-6277"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "NETGEAR",
+    "product": "Wireless Access Point (WAP) Devices",
+    "cves": [
+      "CVE-2016-1555"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "NETGEAR",
+    "product": "WNR2000v5 Router",
+    "cves": [
+      "CVE-2016-10174"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "NextGen Healthcare",
+    "product": "Mirth Connect",
+    "cves": [
+      "CVE-2023-43208"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Nice",
+    "product": "Linear eMerge E3-Series",
+    "cves": [
+      "CVE-2019-7256"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Nostromo",
+    "product": "nhttpd",
+    "cves": [
+      "CVE-2019-16278"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "NUUO",
+    "product": "NVRmini Devices",
+    "cves": [
+      "CVE-2018-14933"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "OpenBSD",
+    "product": "OpenSMTPD",
+    "cves": [
+      "CVE-2020-7247"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "E-Business Suite",
+    "cves": [
+      "CVE-2022-21587"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Fusion Middleware",
+    "cves": [
+      "CVE-2012-3152",
+      "CVE-2021-35587"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Java Runtime Environment (JRE)",
+    "cves": [
+      "CVE-2010-0840",
+      "CVE-2013-0422",
+      "CVE-2013-0431",
+      "CVE-2013-2423"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Java SE",
+    "cves": [
+      "CVE-2012-0507",
+      "CVE-2012-1723",
+      "CVE-2012-4681",
+      "CVE-2012-5076",
+      "CVE-2013-2465"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Java SE JDK and JRE",
+    "cves": [
+      "CVE-2011-3544"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2020-2555"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Solaris",
+    "cves": [
+      "CVE-2019-3010"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "Solaris and Zettabyte File System (ZFS)",
+    "cves": [
+      "CVE-2020-14871"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Oracle",
+    "product": "WebLogic Server",
+    "cves": [
+      "CVE-2015-4852",
+      "CVE-2017-10271",
+      "CVE-2018-2628",
+      "CVE-2019-2725",
+      "CVE-2020-14750",
+      "CVE-2020-14882",
+      "CVE-2020-14883",
+      "CVE-2020-2883",
+      "CVE-2023-21839"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "OSGeo",
+    "product": "GeoServer",
+    "cves": [
+      "CVE-2024-36401"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Paessler",
+    "product": "PRTG Network Monitor",
+    "cves": [
+      "CVE-2018-9276"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Palo Alto Networks",
+    "product": "Expedition",
+    "cves": [
+      "CVE-2024-5910"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Palo Alto Networks",
+    "product": "PAN-OS",
+    "cves": [
+      "CVE-2017-15944",
+      "CVE-2024-0012",
+      "CVE-2024-3400",
+      "CVE-2024-9474"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PaperCut",
+    "product": "MF/NG",
+    "cves": [
+      "CVE-2023-27350"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PEAR",
+    "product": "Archive_Tar",
+    "cves": [
+      "CVE-2020-28949"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Perl",
+    "product": "Exiftool",
+    "cves": [
+      "CVE-2021-22204"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PHP",
+    "product": "FastCGI Process Manager (FPM)",
+    "cves": [
+      "CVE-2019-11043"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PHP",
+    "product": "PHP",
+    "cves": [
+      "CVE-2012-1823"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PHP",
+    "product": "PHPMailer",
+    "cves": [
+      "CVE-2016-10033"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PHP Group",
+    "product": "PHP",
+    "cves": [
+      "CVE-2024-4577"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "phpMyAdmin",
+    "product": "phpMyAdmin",
+    "cves": [
+      "CVE-2009-1151"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Pi-hole",
+    "product": "AdminLTE",
+    "cves": [
+      "CVE-2020-8816"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "PlaySMS",
+    "product": "PlaySMS",
+    "cves": [
+      "CVE-2020-8644"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Plex",
+    "product": "Media Server",
+    "cves": [
+      "CVE-2020-5741"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Primetek",
+    "product": "Primefaces Application",
+    "cves": [
+      "CVE-2017-1000486"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Progress",
+    "product": "Kemp LoadMaster",
+    "cves": [
+      "CVE-2024-1212"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Progress",
+    "product": "MOVEit Transfer",
+    "cves": [
+      "CVE-2023-34362"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Progress",
+    "product": "Telerik Report Server",
+    "cves": [
+      "CVE-2024-4358"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Progress",
+    "product": "Telerik UI for ASP.NET AJAX",
+    "cves": [
+      "CVE-2019-18935"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Progress",
+    "product": "WS_FTP Server",
+    "cves": [
+      "CVE-2023-40044"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "ProjectSend",
+    "product": "ProjectSend",
+    "cves": [
+      "CVE-2024-11680"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Quest",
+    "product": "KACE System Management Appliance",
+    "cves": [
+      "CVE-2018-11138"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Rails",
+    "product": "Ruby on Rails",
+    "cves": [
+      "CVE-2016-0752"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "RARLAB",
+    "product": "UnRAR",
+    "cves": [
+      "CVE-2022-30333"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "RARLAB",
+    "product": "WinRAR",
+    "cves": [
+      "CVE-2018-20250",
+      "CVE-2023-38831"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Realtek",
+    "product": "SDK",
+    "cves": [
+      "CVE-2014-8361"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Red Hat",
+    "product": "JBoss",
+    "cves": [
+      "CVE-2010-0738"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Red Hat",
+    "product": "JBoss Seam 2",
+    "cves": [
+      "CVE-2010-1871"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Red Hat",
+    "product": "Polkit",
+    "cves": [
+      "CVE-2021-3560",
+      "CVE-2021-4034"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Redis",
+    "product": "Debian-specific Redis Servers",
+    "cves": [
+      "CVE-2022-0543"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Rejetto",
+    "product": "HTTP File Server",
+    "cves": [
+      "CVE-2024-23692"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Rejetto",
+    "product": "HTTP File Server (HFS)",
+    "cves": [
+      "CVE-2014-6287"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "SaltStack",
+    "product": "Salt",
+    "cves": [
+      "CVE-2020-11651",
+      "CVE-2020-11652",
+      "CVE-2020-16846"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Samba",
+    "product": "Samba",
+    "cves": [
+      "CVE-2017-7494"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Sangoma",
+    "product": "FreePBX",
+    "cves": [
+      "CVE-2025-57819"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "SAP",
+    "product": "Solution Manager",
+    "cves": [
+      "CVE-2020-6207"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Sitecore",
+    "product": "XP",
+    "cves": [
+      "CVE-2021-42237"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Sonatype",
+    "product": "Nexus Repository",
+    "cves": [
+      "CVE-2020-10199"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "SonicWall",
+    "product": "SMA 100 Appliances",
+    "cves": [
+      "CVE-2021-20038"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Sophos",
+    "product": "SG UTM",
+    "cves": [
+      "CVE-2020-25223"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Sudo",
+    "product": "Sudo",
+    "cves": [
+      "CVE-2021-3156",
+      "CVE-2025-32463"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "SugarCRM",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2023-22952"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Synacor",
+    "product": "Zimbra Collaboration Suite (ZCS)",
+    "cves": [
+      "CVE-2019-9621",
+      "CVE-2019-9670",
+      "CVE-2022-27925",
+      "CVE-2022-37042",
+      "CVE-2022-41352"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Teclib",
+    "product": "GLPI",
+    "cves": [
+      "CVE-2022-35914"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Telerik",
+    "product": "User Interface (UI) for ASP.NET AJAX",
+    "cves": [
+      "CVE-2017-11317"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "TerraMaster",
+    "product": "TerraMaster OS",
+    "cves": [
+      "CVE-2022-24990"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "ThinkPHP",
+    "product": "noneCms",
+    "cves": [
+      "CVE-2018-20062"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "ThinkPHP",
+    "product": "ThinkPHP",
+    "cves": [
+      "CVE-2019-9082"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Unraid",
+    "product": "Unraid",
+    "cves": [
+      "CVE-2020-5847",
+      "CVE-2020-5849"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "vBulletin",
+    "product": "vBulletin",
+    "cves": [
+      "CVE-2019-16759",
+      "CVE-2020-17496"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Veritas",
+    "product": "Backup Exec Agent",
+    "cves": [
+      "CVE-2021-27876",
+      "CVE-2021-27877",
+      "CVE-2021-27878"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "Aria Operations for Networks",
+    "cves": [
+      "CVE-2023-20887"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2020-3950",
+      "CVE-2022-22960"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "Spring Cloud Gateway",
+    "cves": [
+      "CVE-2022-22947"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "Spring Framework",
+    "cves": [
+      "CVE-2022-22965"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "vCenter Server",
+    "cves": [
+      "CVE-2021-21972",
+      "CVE-2021-21985",
+      "CVE-2021-22005"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "vRealize Operations Manager API",
+    "cves": [
+      "CVE-2021-21975"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware",
+    "product": "Workspace ONE Access and Identity Manager",
+    "cves": [
+      "CVE-2022-22954"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "VMware Tanzu",
+    "product": "Spring Cloud",
+    "cves": [
+      "CVE-2022-22963"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "WatchGuard",
+    "product": "Firebox and XTM Appliances",
+    "cves": [
+      "CVE-2022-26318"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Wazuh",
+    "product": "Wazuh Server",
+    "cves": [
+      "CVE-2025-24016"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Webmin",
+    "product": "Webmin",
+    "cves": [
+      "CVE-2019-15107"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Wing FTP Server",
+    "product": "Wing FTP Server",
+    "cves": [
+      "CVE-2025-47812"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "WordPress",
+    "product": "File Manager Plugin",
+    "cves": [
+      "CVE-2020-25213"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "WSO2",
+    "product": "Multiple Products",
+    "cves": [
+      "CVE-2022-29464"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "XStream",
+    "product": "XStream",
+    "cves": [
+      "CVE-2021-39144"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Zoho",
+    "product": "ManageEngine",
+    "cves": [
+      "CVE-2019-8394",
+      "CVE-2020-10189",
+      "CVE-2021-40539",
+      "CVE-2022-28810",
+      "CVE-2022-35405",
+      "CVE-2022-47966"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Zoho",
+    "product": "ManageEngine ServiceDesk Plus (SDP) / SupportCenter Plus",
+    "cves": [
+      "CVE-2021-44077"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Zyxel",
+    "product": "Multiple Firewalls",
+    "cves": [
+      "CVE-2022-30525",
+      "CVE-2023-28771"
+    ],
+    "sources": [
+      "kev"
+    ]
+  },
+  {
+    "vendor": "Zyxel",
+    "product": "P660HN-T1A Routers",
+    "cves": [
+      "CVE-2017-18368"
+    ],
+    "sources": [
+      "kev"
+    ]
+  }
+]

@@ -5,10 +5,13 @@
 .nuxt
 .nitro
 dist
-data/
+data/*
+!data/cache/
 
 # Data cache
-data/cache/
+# Keep generated cache files in version control when explicitly whitelisted.
+data/cache/*
+!data/cache/metasploit_exploit_titles.json
 
 # Node dependencies
 node_modules
