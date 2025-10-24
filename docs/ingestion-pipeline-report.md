@@ -60,3 +60,17 @@ Given the shared helper and caching behaviour, we recommend:
 - Enhancing the reclassify endpoint to reload raw entries and rerun normalization so data-quality fixes can be rolled out without lengthy imports.
 
 
+consdiering this
+
+Vendor/product handling for “n/a”, “N/A”, etc.
+The shared normaliseVendorProduct helper explicitly treats strings such as n/a, N/A, none, unknown, and unspecified as ambiguous for both vendors and products. Any time those tokens appear, the helper either looks for a curated override, infers a vendor from the product name, or falls back to the canonical "Unknown" label and slug so downstream tables stay consistent.
+
+Should later stages overwrite earlier vendor/product decisions with “Unknown”?
+During catalog assembly we always preserve the first non-"Unknown" vendor/product that was merged for a CVE; subsequent entries only replace the value if the existing record is still "Unknown". That means a later source that only knows “N/A” cannot erase a good label established earlier in the run. Letting later stages downgrade fields to "Unknown" would throw away that guard and reintroduce the propagation issues the merge code is trying to avoid.
+
+The Metasploit importer even looks up previously-saved entries (prioritising KEV over historic over ENISA) so that it can inherit the best-known vendor/product instead of overwriting them with weaker guesses. This helps keep cross-feed alignment tight rather than drifting back to ambiguous labels.
+
+Identity and deduplication across imports
+Raw source rows live in vulnerability_entries, where the primary key is a synthetic per-source identifier such as kev:CVE-2021-1234. Each importer wipes and repopulates its own slice of that table on every run, so a feed never inserts the same source entry twice in a single run.
+
+When we build the analytics catalog we merge those source entries by upper-cased CVE ID, yielding one consolidated catalog row per CVE regardless of how many feeds mention it. That’s why the downstream tables (and the UI) see a single record per vulnerability even though multiple importers contribute data.
