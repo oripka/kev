@@ -1,15 +1,15 @@
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon, neonConfig } from '@neondatabase/serverless';
-import ws from 'ws';
-import { tables } from '~/server/database/client';
-import type * as schema from '~~/server/database/schema';
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
+import { useDrizzle as useDatabaseClient, tables } from '~/server/database/client'
+import { useStorage } from '#imports'
+import type * as schema from '~/server/database/schema'
 
-neonConfig.webSocketConstructor = ws;
-// Optional for Edge environments (Vercel, Cloudflare, etc.):
-// neonConfig.poolQueryViaFetch = true;
+const storage = useStorage()
 
-const sql = neon(process.env.DATABASE_URL!);
-export const db = drizzle(sql, { schema });
+export { tables }
 
-// Optionally export tables for convenience
-export { tables };
+export function useDrizzle(): BetterSQLite3Database<typeof schema> {
+  // Ensure the data storage is initialised for environments such as Nitro edge.
+  void storage.getMount?.('data')
+  return useDatabaseClient()
+}
+
