@@ -2,8 +2,11 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxt/ui'],
+  modules: ['@nuxt/ui', '@nuxthub/core'],
   css: ['~/assets/css/main.css'],
+  hub: {
+    database: true
+  },
   runtimeConfig: {
     admin: {
       apiKey: process.env.ADMIN_API_KEY ?? '',
