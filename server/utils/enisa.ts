@@ -7,6 +7,10 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { getCachedData } from './cache'
 import { setMetadata } from './sqlite'
 import {
+  enrichBaseEntryWithCvelist,
+  type VulnerabilityImpactRecord
+} from './cvelist'
+import {
   markTaskComplete,
   markTaskError,
   markTaskProgress,
@@ -170,6 +174,8 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
     vendorKey: normalised.vendor.key,
     product: normalised.product.label,
     productKey: normalised.product.key,
+    affectedProducts: [],
+    problemTypes: [],
     vulnerabilityName: aliases[0] ?? item.id,
     description: item.description?.trim() ?? '',
     requiredAction: null,
@@ -301,7 +307,41 @@ export const importEnisaCatalog = async (
       message: 'Enriching ENISA entries with classification data'
     })
 
-    const entries = baseEntries.map(enrichEntry)
+    let cvelistHits = 0
+    let cvelistMisses = 0
+
+    const cvelistResults = await Promise.all(
+      baseEntries.map(async base => {
+        try {
+          const result = await enrichBaseEntryWithCvelist(base, {
+            preferCache: allowStale
+          })
+          if (result.hit) {
+            cvelistHits += 1
+          } else {
+            cvelistMisses += 1
+          }
+          return result
+        } catch {
+          cvelistMisses += 1
+          return { entry: base, impacts: [], hit: false }
+        }
+      })
+    )
+
+    if (cvelistHits > 0 || cvelistMisses > 0) {
+      const message = `ENISA CVEList enrichment (${cvelistHits} hits, ${cvelistMisses} misses)`
+      markTaskProgress('enisa', 0, 0, message)
+    }
+
+    const impactRecordMap = new Map<string, VulnerabilityImpactRecord[]>()
+    for (const result of cvelistResults) {
+      if (result.impacts.length) {
+        impactRecordMap.set(result.entry.id, result.impacts)
+      }
+    }
+
+    const entries = cvelistResults.map(result => enrichEntry(result.entry))
 
     setImportPhase('savingEnisa', {
       message: 'Saving ENISA entries to the local cache',
@@ -327,6 +367,8 @@ export const importEnisaCatalog = async (
             source: 'enisa',
             vendor: entry.vendor,
             product: entry.product,
+            vendorKey: entry.vendorKey,
+            productKey: entry.productKey,
             vulnerabilityName: entry.vulnerabilityName,
             description: entry.description,
             requiredAction: entry.requiredAction,
@@ -347,11 +389,32 @@ export const importEnisaCatalog = async (
             sourceUrl: entry.sourceUrl,
             referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
+            affectedProducts: toJson(entry.affectedProducts),
+            problemTypes: toJson(entry.problemTypes),
             metasploitModulePath: entry.metasploitModulePath,
             metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
             internetExposed: entry.internetExposed ? 1 : 0
           })
           .run()
+
+        const entryImpacts = impactRecordMap.get(entry.id) ?? []
+        if (entryImpacts.length) {
+          for (const impact of entryImpacts) {
+            tx
+              .insert(tables.vulnerabilityEntryImpacts)
+              .values({
+                entryId: impact.entryId,
+                vendor: impact.vendor,
+                vendorKey: impact.vendorKey,
+                product: impact.product,
+                productKey: impact.productKey,
+                status: impact.status,
+                versionRange: impact.versionRange,
+                source: impact.source
+              })
+              .run()
+          }
+        }
 
         if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
           const message = `Saving ENISA entries to the local cache (${index + 1} of ${entries.length})`

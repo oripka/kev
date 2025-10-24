@@ -91,6 +91,8 @@ export const vulnerabilityEntries = sqliteTable('vulnerability_entries', {
   source: text('source').notNull(),
   vendor: text('vendor'),
   product: text('product'),
+  vendorKey: text('vendor_key'),
+  productKey: text('product_key'),
   vulnerabilityName: text('vulnerability_name'),
   description: text('description'),
   requiredAction: text('required_action'),
@@ -111,11 +113,37 @@ export const vulnerabilityEntries = sqliteTable('vulnerability_entries', {
   sourceUrl: text('source_url'),
   referenceLinks: text('reference_links'),
   aliases: text('aliases'),
+  affectedProducts: text('affected_products').notNull().default('[]'),
+  problemTypes: text('problem_types').notNull().default('[]'),
   metasploitModulePath: text('metasploit_module_path'),
   metasploitModulePublishedAt: text('metasploit_module_published_at'),
   internetExposed: integer('internet_exposed').notNull().default(0),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })
+
+export const vulnerabilityEntryImpacts = sqliteTable(
+  'vulnerability_entry_impacts',
+  {
+    entryId: text('entry_id')
+      .notNull()
+      .references(() => vulnerabilityEntries.id, { onDelete: 'cascade' }),
+    vendor: text('vendor').notNull(),
+    vendorKey: text('vendor_key').notNull(),
+    product: text('product').notNull(),
+    productKey: text('product_key').notNull(),
+    status: text('status').notNull().default(''),
+    versionRange: text('version_range').notNull(),
+    source: text('source').notNull()
+  },
+  table => ({
+    pk: primaryKey({
+      columns: [table.entryId, table.vendorKey, table.productKey, table.status, table.versionRange]
+    }),
+    entryIdx: index('idx_vulnerability_entry_impacts_entry').on(table.entryId),
+    vendorIdx: index('idx_vulnerability_entry_impacts_vendor').on(table.vendorKey),
+    productIdx: index('idx_vulnerability_entry_impacts_product').on(table.productKey)
+  })
+)
 
 export const vulnerabilityEntryCategories = sqliteTable(
   'vulnerability_entry_categories',

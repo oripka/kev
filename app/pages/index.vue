@@ -1239,6 +1239,8 @@ const createDetailPlaceholder = (entry: KevEntrySummary): KevEntryDetail => ({
   dueDate: null,
   notes: [],
   cwes: [],
+  affectedProducts: [],
+  problemTypes: [],
   cvssVector: null,
   cvssVersion: null,
   assigner: null,

@@ -5,6 +5,7 @@ import type {
   KevDomainCategory,
   KevEntry,
   KevExploitLayer,
+  KevProblemType,
   KevVulnerabilityCategory,
 } from "~/types";
 
@@ -139,7 +140,28 @@ const vendorNoiseTokens = new Set([
   "the",
 ]);
 
-const makeVendorKey = (value?: string | null) => {
+const cweCategoryMap: Record<string, KevVulnerabilityCategory> = {
+  "CWE-20": "Logic Flaw",
+  "CWE-22": "Directory Traversal",
+  "CWE-77": "Command Injection",
+  "CWE-78": "Command Injection",
+  "CWE-79": "Cross-Site Scripting",
+  "CWE-89": "SQL Injection",
+  "CWE-94": "Remote Code Execution",
+  "CWE-119": "Memory Corruption",
+  "CWE-125": "Information Disclosure",
+  "CWE-200": "Information Disclosure",
+  "CWE-284": "Authentication Bypass",
+  "CWE-306": "Authentication Bypass",
+  "CWE-352": "Logic Flaw",
+  "CWE-476": "Memory Corruption",
+  "CWE-502": "Server-Side Request Forgery",
+  "CWE-787": "Memory Corruption",
+  "CWE-862": "Authentication Bypass",
+  "CWE-918": "Server-Side Request Forgery",
+};
+
+export const makeVendorKey = (value?: string | null) => {
   const normalized = normaliseKeySegment(value ?? "");
 
   if (!normalized) {
@@ -155,8 +177,11 @@ const makeVendorKey = (value?: string | null) => {
 
   return filtered.join(" ");
 };
-const makeProductKey = (value?: string | null) => normaliseKeySegment(value ?? "");
-const makeVendorProductKey = (vendor?: string | null, product?: string | null) => {
+export const makeProductKey = (value?: string | null) => normaliseKeySegment(value ?? "");
+export const makeVendorProductKey = (
+  vendor?: string | null,
+  product?: string | null
+) => {
   const vendorKey = makeVendorKey(vendor);
   const productKey = makeProductKey(product);
 
@@ -167,7 +192,7 @@ const makeVendorProductKey = (vendor?: string | null, product?: string | null) =
   return `${vendorKey}::${productKey}`.trim();
 };
 
-const splitVendorProductKey = (value: string) => {
+export const splitVendorProductKey = (value: string) => {
   const [vendorKey = "", productKey = ""] = value.split("::");
   return { vendorKey, productKey };
 };
@@ -2896,11 +2921,77 @@ export const classifyExploitLayers = (
 export const classifyVulnerabilityCategories = (entry: {
   vulnerabilityName: string;
   description: string;
+  problemTypes?: KevProblemType[];
+  cwes?: string[];
 }): KevVulnerabilityCategory[] => {
-  const text = normalise(`${entry.vulnerabilityName} ${entry.description}`);
-  const categories = matchCategory(text, vulnerabilityRules, "Other");
+  const problemTypeText = entry.problemTypes
+    ?.map((problem) => problem.description)
+    .join(" ")
+    ?.trim();
+  const text = normalise(
+    `${entry.vulnerabilityName} ${entry.description} ${problemTypeText ?? ""}`
+  );
+  const initialCategories = matchCategory(text, vulnerabilityRules, "Other");
+  const categorySet = new Set(initialCategories);
 
-  return categories;
+  const addCategory = (category: KevVulnerabilityCategory) => {
+    if (category === "Other") {
+      return;
+    }
+    categorySet.add(category);
+  };
+
+  for (const cwe of entry.cwes ?? []) {
+    const mapped = cweCategoryMap[cwe.toUpperCase()];
+    if (mapped) {
+      addCategory(mapped);
+    }
+  }
+
+  for (const problem of entry.problemTypes ?? []) {
+    if (problem.cweId) {
+      const mapped = cweCategoryMap[problem.cweId.toUpperCase()];
+      if (mapped) {
+        addCategory(mapped);
+        continue;
+      }
+    }
+
+    const description = problem.description.toLowerCase();
+    if (description.includes("denial of service") || description.includes("dos")) {
+      addCategory("Denial of Service");
+    }
+    if (description.includes("remote code execution") || description.includes("rce")) {
+      addCategory("Remote Code Execution");
+    }
+    if (description.includes("memory corruption")) {
+      addCategory("Memory Corruption");
+    }
+    if (description.includes("cross-site scripting") || description.includes("xss")) {
+      addCategory("Cross-Site Scripting");
+    }
+    if (description.includes("sql injection")) {
+      addCategory("SQL Injection");
+    }
+    if (description.includes("authentication bypass")) {
+      addCategory("Authentication Bypass");
+    }
+    if (description.includes("command injection")) {
+      addCategory("Command Injection");
+    }
+    if (description.includes("information disclosure") || description.includes("exposure")) {
+      addCategory("Information Disclosure");
+    }
+    if (description.includes("server-side request forgery") || description.includes("ssrf")) {
+      addCategory("Server-Side Request Forgery");
+    }
+  }
+
+  if (categorySet.size > 1 && categorySet.has("Other")) {
+    categorySet.delete("Other");
+  }
+
+  return Array.from(categorySet);
 };
 
 export const enrichEntry = (entry: KevBaseEntry): KevEntry => {

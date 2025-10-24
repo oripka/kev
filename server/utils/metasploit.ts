@@ -1,5 +1,4 @@
-import { access, mkdir, readdir, readFile } from 'node:fs/promises'
-import { spawn } from 'node:child_process'
+import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { enrichEntry } from '~/utils/classification'
@@ -9,6 +8,10 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
+import {
+  enrichBaseEntryWithCvelist,
+  type VulnerabilityImpactRecord
+} from './cvelist'
 import { matchVendorProductByTitle } from './metasploitVendorCatalog'
 import {
   markTaskComplete,
@@ -17,6 +20,7 @@ import {
   markTaskRunning,
   setImportPhase
 } from './import-progress'
+import { ensureDir, runGit, syncSparseRepo } from './git'
 
 const METASPLOIT_REPO_URL = 'https://github.com/rapid7/metasploit-framework.git'
 const METASPLOIT_BRANCH = 'master'
@@ -27,69 +31,21 @@ const MODULES_DIR = join(REPO_DIR, 'modules', 'exploits')
 const RE_CVE_GENERIC = /CVE[-\s_]*(\d{4})[-\s_]?([0-9]{4,7})/gi
 const RE_VENDOR_ADVISORY = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{4}-\d{2,}$/i
 
-type GitResult = { stdout: string; stderr: string }
-
-const runGit = async (args: string[], cwd: string): Promise<GitResult> => {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    const stdoutChunks: Buffer[] = []
-    const stderrChunks: Buffer[] = []
-
-    child.stdout.on('data', chunk => stdoutChunks.push(Buffer.from(chunk)))
-    child.stderr.on('data', chunk => stderrChunks.push(Buffer.from(chunk)))
-
-    child.on('error', reject)
-    child.on('close', code => {
-      const stdout = Buffer.concat(stdoutChunks).toString('utf8').trim()
-      const stderr = Buffer.concat(stderrChunks).toString('utf8').trim()
-      if (code === 0) {
-        resolve({ stdout, stderr })
-      } else {
-        const error = new Error(`git ${args.join(' ')} failed${stderr ? `: ${stderr}` : ''}`)
-        reject(error)
-      }
-    })
-  })
-}
-
-const pathExists = async (target: string): Promise<boolean> => {
-  try {
-    await access(target)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const ensureCacheDir = async () => {
-  await mkdir(CACHE_DIR, { recursive: true })
-}
-
 const syncRepository = async (
   options: { useCachedRepository?: boolean } = {}
 ): Promise<{ commit: string | null }> => {
   const { useCachedRepository = false } = options
-  await ensureCacheDir()
+  await ensureDir(CACHE_DIR)
 
-  const repoExists = await pathExists(join(REPO_DIR, '.git'))
+  const { commit } = await syncSparseRepo({
+    repoUrl: METASPLOIT_REPO_URL,
+    branch: METASPLOIT_BRANCH,
+    workingDir: REPO_DIR,
+    sparsePaths: ['modules'],
+    useCachedRepository
+  })
 
-  if (!repoExists) {
-    await runGit(
-      ['clone', '--depth', '1', '--filter=blob:none', '--sparse', METASPLOIT_REPO_URL, REPO_DIR],
-      process.cwd()
-    )
-    await runGit(['sparse-checkout', 'set', 'modules'], REPO_DIR)
-  } else if (!useCachedRepository) {
-    await runGit(['fetch', '--depth', '1', 'origin', METASPLOIT_BRANCH], REPO_DIR)
-    await runGit(['reset', '--hard', `origin/${METASPLOIT_BRANCH}`], REPO_DIR)
-    await runGit(['clean', '-fdx'], REPO_DIR)
-    await runGit(['sparse-checkout', 'set', 'modules'], REPO_DIR)
-  } else {
-    await runGit(['sparse-checkout', 'set', 'modules'], REPO_DIR).catch(() => {})
-  }
-
-  const commitResult = await runGit(['rev-parse', 'HEAD'], REPO_DIR).catch(() => ({ stdout: '', stderr: '' }))
-  return { commit: commitResult.stdout || null }
+  return { commit }
 }
 
 const collectModulePublishedDates = async (
@@ -1227,6 +1183,8 @@ const createBaseEntries = (
       vendorKey: normalised.vendor.key,
       product: normalised.product.label,
       productKey: normalised.product.key,
+      affectedProducts: [],
+      problemTypes: [],
       vulnerabilityName: metadata.name || cveId,
       description: metadata.description,
       requiredAction: null,
@@ -1464,7 +1422,46 @@ export const importMetasploitCatalog = async (
       return { imported: 0, commit, modules: processedModules.size }
     }
 
-    const vendorAdjustedEntries = applyVendorProductOverrides(baseEntries, db)
+    let cvelistHits = 0
+    let cvelistMisses = 0
+
+    const preferCache = options.offline ?? false
+
+    const cvelistResults = await Promise.all(
+      baseEntries.map(async base => {
+        try {
+          const result = await enrichBaseEntryWithCvelist(base, {
+            preferCache
+          })
+          if (result.hit) {
+            cvelistHits += 1
+          } else {
+            cvelistMisses += 1
+          }
+          return result
+        } catch {
+          cvelistMisses += 1
+          return { entry: base, impacts: [], hit: false }
+        }
+      })
+    )
+
+    if (cvelistHits > 0 || cvelistMisses > 0) {
+      const message = `Metasploit CVEList enrichment (${cvelistHits} hits, ${cvelistMisses} misses)`
+      markTaskProgress('metasploit', 0, 0, message)
+    }
+
+    const impactRecordMap = new Map<string, VulnerabilityImpactRecord[]>()
+    for (const result of cvelistResults) {
+      if (result.impacts.length) {
+        impactRecordMap.set(result.entry.id, result.impacts)
+      }
+    }
+
+    const vendorAdjustedEntries = applyVendorProductOverrides(
+      cvelistResults.map(result => result.entry),
+      db
+    )
     const entries = vendorAdjustedEntries.map(entry => enrichEntry(entry))
 
     setImportPhase('savingMetasploit', {
@@ -1490,6 +1487,8 @@ export const importMetasploitCatalog = async (
             source: 'metasploit',
             vendor: entry.vendor,
             product: entry.product,
+            vendorKey: entry.vendorKey,
+            productKey: entry.productKey,
             vulnerabilityName: entry.vulnerabilityName,
             description: entry.description,
             requiredAction: entry.requiredAction,
@@ -1510,11 +1509,32 @@ export const importMetasploitCatalog = async (
             sourceUrl: entry.sourceUrl,
             referenceLinks: JSON.stringify(entry.references),
             aliases: JSON.stringify(entry.aliases),
+            affectedProducts: JSON.stringify(entry.affectedProducts),
+            problemTypes: JSON.stringify(entry.problemTypes),
             metasploitModulePath: entry.metasploitModulePath,
             metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
             internetExposed: entry.internetExposed ? 1 : 0
           })
           .run()
+
+        const entryImpacts = impactRecordMap.get(entry.id) ?? []
+        if (entryImpacts.length) {
+          for (const impact of entryImpacts) {
+            tx
+              .insert(tables.vulnerabilityEntryImpacts)
+              .values({
+                entryId: impact.entryId,
+                vendor: impact.vendor,
+                vendorKey: impact.vendorKey,
+                product: impact.product,
+                productKey: impact.productKey,
+                status: impact.status,
+                versionRange: impact.versionRange,
+                source: impact.source
+              })
+              .run()
+          }
+        }
 
         const dimensionRecords: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
 

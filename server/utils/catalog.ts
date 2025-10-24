@@ -4,6 +4,8 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type {
   CatalogSource,
   KevEntry,
+  KevAffectedProduct,
+  KevProblemType,
   KevEntrySummary,
   MarketProgramType,
   MarketSignal
@@ -44,6 +46,10 @@ type VulnerabilityEntryRow = {
   source_url: string | null
   reference_links: string | null
   aliases: string | null
+  vendor_key: string | null
+  product_key: string | null
+  affected_products: string | null
+  problem_types: string | null
   metasploit_module_path: string | null
   metasploit_module_published_at: string | null
   internet_exposed: number | null
@@ -160,6 +166,22 @@ const parseJsonArray = (value: string | null): string[] => {
   }
 }
 
+const parseJsonObjectArray = <T>(value: string | null): T[] => {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.filter((item): item is T => typeof item === 'object' && item !== null)
+  } catch {
+    return []
+  }
+}
+
 const parseAliasArray = (value: string | null): string[] =>
   parseJsonArray(value).map(alias => alias.toUpperCase())
 
@@ -196,6 +218,67 @@ const mergeUniqueClassification = <T extends string>(first: T[], second: T[]): T
     }
     seen.add(value)
     result.push(value)
+  }
+
+  return result
+}
+
+const mergeAffectedProducts = (
+  first: KevAffectedProduct[],
+  second: KevAffectedProduct[]
+): KevAffectedProduct[] => {
+  const combined: KevAffectedProduct[] = []
+  const map = new Map<string, KevAffectedProduct>()
+
+  for (const product of [...first, ...second]) {
+    const key = `${product.vendorKey}::${product.productKey}::${product.source}::${product.status ?? ''}`
+    const existing = map.get(key)
+
+    if (!existing) {
+      map.set(key, {
+        vendor: product.vendor,
+        vendorKey: product.vendorKey,
+        product: product.product,
+        productKey: product.productKey,
+        status: product.status ?? null,
+        source: product.source,
+        platforms: mergeUniqueStrings([], product.platforms),
+        versions: product.versions.map(version => ({ ...version }))
+      })
+      continue
+    }
+
+    existing.platforms = mergeUniqueStrings(existing.platforms, product.platforms)
+
+    const seenVersions = new Set(existing.versions.map(version => JSON.stringify(version)))
+    for (const version of product.versions) {
+      const serialised = JSON.stringify(version)
+      if (seenVersions.has(serialised)) {
+        continue
+      }
+      seenVersions.add(serialised)
+      existing.versions.push({ ...version })
+    }
+  }
+
+  map.forEach(value => combined.push(value))
+  return combined
+}
+
+const mergeProblemTypes = (
+  first: KevProblemType[],
+  second: KevProblemType[]
+): KevProblemType[] => {
+  const result: KevProblemType[] = []
+  const seen = new Set<string>()
+
+  for (const item of [...first, ...second]) {
+    const key = `${item.source}:${item.cweId ?? ''}:${item.description}`.toLowerCase()
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    result.push({ ...item })
   }
 
   return result
@@ -285,15 +368,19 @@ const toStandardEntry = (
   const cwes = parseJsonArray(row.cwes)
   const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
   const aliasList = parseAliasArray(row.aliases)
+  const affectedProducts = parseJsonObjectArray<KevAffectedProduct>(row.affected_products)
+  const problemTypes = parseJsonObjectArray<KevProblemType>(row.problem_types)
+  const vendorKey = row.vendor_key ?? normalised.vendor.key
+  const productKey = row.product_key ?? normalised.product.key
 
   return {
     id: row.id,
     cveId,
     sources: [source],
     vendor: normalised.vendor.label,
-    vendorKey: normalised.vendor.key,
+    vendorKey,
     product: normalised.product.label,
-    productKey: normalised.product.key,
+    productKey,
     vulnerabilityName: ensureString(row.vulnerability_name, cveId || DEFAULT_VULNERABILITY),
     description: row.description ?? '',
     requiredAction: row.required_action ?? null,
@@ -317,6 +404,8 @@ const toStandardEntry = (
     sourceUrl: row.source_url ?? null,
     references: parseJsonArray(row.reference_links),
     aliases: aliasList.length ? aliasList : [cveId],
+    affectedProducts,
+    problemTypes,
     metasploitModulePath: row.metasploit_module_path ?? null,
     metasploitModulePublishedAt: row.metasploit_module_published_at ?? null,
     domainCategories: categories.domain as KevEntry['domainCategories'],
@@ -353,15 +442,19 @@ const toEnisaEntry = (
   const references = parseJsonArray(row.reference_links)
   const aliases = parseAliasArray(row.aliases)
   const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
+  const affectedProducts = parseJsonObjectArray<KevAffectedProduct>(row.affected_products)
+  const problemTypes = parseJsonObjectArray<KevProblemType>(row.problem_types)
+  const vendorKey = row.vendor_key ?? normalised.vendor.key
+  const productKey = row.product_key ?? normalised.product.key
 
   return {
     id: row.id,
     cveId,
     sources: ['enisa'],
     vendor: normalised.vendor.label,
-    vendorKey: normalised.vendor.key,
+    vendorKey,
     product: normalised.product.label,
-    productKey: normalised.product.key,
+    productKey,
     vulnerabilityName: ensureString(row.vulnerability_name, aliases[0] ?? cveId ?? DEFAULT_VULNERABILITY),
     description: row.description ?? '',
     requiredAction: null,
@@ -385,6 +478,8 @@ const toEnisaEntry = (
     sourceUrl: row.source_url ?? null,
     references,
     aliases: aliases.length ? aliases : [cveId],
+    affectedProducts,
+    problemTypes,
     metasploitModulePath: row.metasploit_module_path ?? null,
     metasploitModulePublishedAt: null,
     domainCategories: categories.domain as KevEntry['domainCategories'],
@@ -439,6 +534,9 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   const references = mergeUniqueStrings(existing.references, incoming.references)
   const aliases = mergeUniqueStrings(existing.aliases, incoming.aliases).map(alias => alias.toUpperCase())
 
+  const affectedProducts = mergeAffectedProducts(existing.affectedProducts, incoming.affectedProducts)
+  const problemTypes = mergeProblemTypes(existing.problemTypes, incoming.problemTypes)
+
   const metasploitModulePath = existing.metasploitModulePath ?? incoming.metasploitModulePath ?? null
   const metasploitModulePublishedAt = pickEarliestString(
     existing.metasploitModulePublishedAt,
@@ -487,6 +585,8 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     sourceUrl,
     references,
     aliases,
+    affectedProducts,
+    problemTypes,
     metasploitModulePath,
     metasploitModulePublishedAt,
     domainCategories,
@@ -603,6 +703,8 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
         source,
         vendor,
         product,
+        vendor_key,
+        product_key,
         vulnerability_name,
         description,
         required_action,
@@ -623,6 +725,8 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
         source_url,
         reference_links,
         aliases,
+        affected_products,
+        problem_types,
         metasploit_module_path,
         metasploit_module_published_at,
         internet_exposed,
@@ -960,6 +1064,8 @@ export const catalogRowToEntry = (
     vendorKey: row.vendor_key,
     product: row.product,
     productKey: row.product_key,
+    affectedProducts: [],
+    problemTypes: [],
     vulnerabilityName: row.vulnerability_name,
     description: row.description,
     requiredAction: row.required_action,

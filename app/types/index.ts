@@ -99,6 +99,8 @@ export type KevEntry = {
   vendorKey: string
   product: string
   productKey: string
+  affectedProducts: KevAffectedProduct[]
+  problemTypes: KevProblemType[]
   vulnerabilityName: string
   description: string
   requiredAction: string | null
@@ -126,6 +128,35 @@ export type KevEntry = {
   vulnerabilityCategories: KevVulnerabilityCategory[]
   internetExposed: boolean
   marketSignals: MarketSignal | null
+}
+
+export type KevProblemType = {
+  cweId?: string
+  description: string
+  source: 'cna' | 'adp'
+}
+
+export type KevVersionRange = {
+  version?: string | null
+  introduced?: string | null
+  fixed?: string | null
+  lessThan?: string | null
+  lessThanOrEqual?: string | null
+  greaterThan?: string | null
+  greaterThanOrEqual?: string | null
+  status?: string | null
+  versionType?: string | null
+}
+
+export type KevAffectedProduct = {
+  vendor: string
+  vendorKey: string
+  product: string
+  productKey: string
+  status?: string | null
+  source: 'cna' | 'adp' | 'cpe'
+  platforms: string[]
+  versions: KevVersionRange[]
 }
 
 export type KevEntryDetail = KevEntry & {

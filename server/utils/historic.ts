@@ -9,6 +9,10 @@ import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
 import {
+  enrichBaseEntryWithCvelist,
+  type VulnerabilityImpactRecord
+} from './cvelist'
+import {
   markTaskComplete,
   markTaskError,
   markTaskProgress,
@@ -65,6 +69,8 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
     vendorKey: normalised.vendor.key,
     product: normalised.product.label,
     productKey: normalised.product.key,
+    affectedProducts: [],
+    problemTypes: [],
     vulnerabilityName: item.title?.trim() || cveId.toUpperCase(),
     description: item.context?.trim() || item.notes?.trim() || '',
     requiredAction: null,
@@ -113,9 +119,15 @@ const collectDimensionRecords = (
   return records
 }
 
+type HistoricImportOptions = {
+  allowStale?: boolean
+}
+
 export const importHistoricCatalog = async (
-  db: DrizzleDatabase
+  db: DrizzleDatabase,
+  options: HistoricImportOptions = {}
 ): Promise<{ imported: number }> => {
+  const { allowStale = false } = options
   markTaskRunning('historic', 'Loading historic exploit dataset')
 
   try {
@@ -150,7 +162,41 @@ export const importHistoricCatalog = async (
       .map(toBaseEntry)
       .filter((entry): entry is KevBaseEntry => entry !== null)
 
-    const enrichedEntries = baseEntries.map(entry => enrichEntry(entry))
+    let cvelistHits = 0
+    let cvelistMisses = 0
+
+    const cvelistResults = await Promise.all(
+      baseEntries.map(async base => {
+        try {
+          const result = await enrichBaseEntryWithCvelist(base, {
+            preferCache: allowStale
+          })
+          if (result.hit) {
+            cvelistHits += 1
+          } else {
+            cvelistMisses += 1
+          }
+          return result
+        } catch {
+          cvelistMisses += 1
+          return { entry: base, impacts: [], hit: false }
+        }
+      })
+    )
+
+    if (cvelistHits > 0 || cvelistMisses > 0) {
+      const message = `Historic CVEList enrichment (${cvelistHits} hits, ${cvelistMisses} misses)`
+      markTaskProgress('historic', 0, 0, message)
+    }
+
+    const impactRecordMap = new Map<string, VulnerabilityImpactRecord[]>()
+    for (const result of cvelistResults) {
+      if (result.impacts.length) {
+        impactRecordMap.set(result.entry.id, result.impacts)
+      }
+    }
+
+    const enrichedEntries = cvelistResults.map(result => enrichEntry(result.entry))
 
     setImportPhase('savingHistoric', {
       message: 'Saving historic entries to the local cache',
@@ -177,6 +223,8 @@ export const importHistoricCatalog = async (
             source: 'historic',
             vendor: entry.vendor,
             product: entry.product,
+            vendorKey: entry.vendorKey,
+            productKey: entry.productKey,
             vulnerabilityName: entry.vulnerabilityName,
             description: entry.description,
             requiredAction: entry.requiredAction,
@@ -197,11 +245,32 @@ export const importHistoricCatalog = async (
             sourceUrl: entry.sourceUrl,
             referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
+            affectedProducts: toJson(entry.affectedProducts),
+            problemTypes: toJson(entry.problemTypes),
             metasploitModulePath: entry.metasploitModulePath,
             metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
             internetExposed: entry.internetExposed ? 1 : 0
           })
           .run()
+
+        const entryImpacts = impactRecordMap.get(entryId) ?? []
+        if (entryImpacts.length) {
+          for (const impact of entryImpacts) {
+            tx
+              .insert(tables.vulnerabilityEntryImpacts)
+              .values({
+                entryId: impact.entryId,
+                vendor: impact.vendor,
+                vendorKey: impact.vendorKey,
+                product: impact.product,
+                productKey: impact.productKey,
+                status: impact.status,
+                versionRange: impact.versionRange,
+                source: impact.source
+              })
+              .run()
+          }
+        }
 
         const dimensions = collectDimensionRecords(entryId, entry)
 

@@ -154,11 +154,11 @@ Create `server/utils/cvelist-parser.ts` to expose pure functions that accept raw
 
 ## Deliverables checklist
 
-- [ ] `server/utils/git.ts` with shared git helpers.
-- [ ] `server/utils/cvelist.ts` for repo sync + lookup cache.
-- [ ] `server/utils/cvelist-parser.ts` with unit tests and fixtures.
-- [ ] Database migration adding CVEList columns and the impacts join table.
-- [ ] Import pipeline updates (KEV, ENSISA, historic, Metasploit enrichment).
-- [ ] Make sure to srufacne this in the admin ui as well
-- [ ] Classification updates for problem types/CWEs.
-- [ ] Documentation updates describing the new dependency & cache location.
+- [x] `server/utils/git.ts` with shared git helpers.
+- [x] `server/utils/cvelist.ts` for repo sync + lookup cache.
+- [x] `server/utils/cvelist-parser.ts` with unit tests and fixtures.
+- [x] Database migration adding CVEList columns and the impacts join table.
+- [x] Import pipeline updates (KEV, ENSISA, historic, Metasploit enrichment).
+- [x] Make sure to srufacne this in the admin ui as well
+- [x] Classification updates for problem types/CWEs.
+- [x] Documentation updates describing the new dependency & cache location.

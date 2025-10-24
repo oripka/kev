@@ -29,6 +29,12 @@ import { rebuildProductCatalog } from '../utils/product-catalog'
 import { importMetasploitCatalog } from '../utils/metasploit'
 import { importMarketIntel } from '../utils/market'
 import { requireAdminKey } from '../utils/adminAuth'
+import {
+  enrichBaseEntryWithCvelist,
+  syncCvelistRepo,
+  type EnrichBaseEntryResult,
+  type VulnerabilityImpactRecord
+} from '../utils/cvelist'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -63,7 +69,7 @@ const toNotes = (raw: unknown): string[] => {
     .filter(Boolean)
 }
 
-const toJson = (value: string[] | undefined | null): string => JSON.stringify(value ?? [])
+const toJson = (value: unknown): string => JSON.stringify(value ?? [])
 
 const normaliseStoredSeverity = (value: unknown): KevEntry['cvssSeverity'] | null => {
   if (typeof value !== 'string') {
@@ -168,6 +174,17 @@ export default defineEventHandler(async event => {
       markTaskRunning('kev', 'Checking KEV cache')
 
       try {
+        const syncResult = await syncCvelistRepo({ useCachedRepository: allowStale })
+        const message = syncResult.updated
+          ? 'Synced CVEList repository'
+          : 'Using cached CVEList repository'
+        markTaskProgress('kev', 0, 0, message)
+      } catch (error) {
+        const reason = (error as Error).message || 'Unknown error'
+        markTaskError('kev', `Failed to sync CVEList repository: ${reason}`)
+      }
+
+      try {
         setImportPhase('preparing', { message: 'Checking KEV cache', completed: 0, total: 0 })
         const kevDataset = await getCachedData(
           'kev-feed',
@@ -216,6 +233,8 @@ export default defineEventHandler(async event => {
             vendorKey: normalised.vendor.key,
             product: normalised.product.label,
             productKey: normalised.product.key,
+            affectedProducts: [],
+            problemTypes: [],
             vulnerabilityName: item.vulnerabilityName ?? 'Unknown vulnerability',
             description: item.shortDescription ?? '',
             requiredAction: item.requiredAction ?? null,
@@ -344,18 +363,53 @@ export default defineEventHandler(async event => {
       setImportPhase('enriching', { message: 'Enriching KEV entries with classification data' })
       markTaskProgress('kev', 0, baseEntries.length, 'Enriching KEV entries')
 
-      const entries = baseEntries.map(base => {
-        const metrics = cvssMetrics.get(base.cveId)
-        const enrichedBase: KevBaseEntry = {
-          ...base,
-          cvssScore: metrics?.score ?? null,
-          cvssVector: metrics?.vector ?? null,
-          cvssVersion: metrics?.version ?? null,
-          cvssSeverity: metrics?.severity ?? null
-        }
+      let cvelistHits = 0
+      let cvelistMisses = 0
 
-        return enrichEntry(enrichedBase)
-      })
+      const enrichedResults = await Promise.all(
+        baseEntries.map(async base => {
+          const metrics = cvssMetrics.get(base.cveId)
+          const enrichedBase: KevBaseEntry = {
+            ...base,
+            cvssScore: metrics?.score ?? null,
+            cvssVector: metrics?.vector ?? null,
+            cvssVersion: metrics?.version ?? null,
+            cvssSeverity: metrics?.severity ?? null
+          }
+
+          let enrichmentResult: EnrichBaseEntryResult
+
+          try {
+            enrichmentResult = await enrichBaseEntryWithCvelist(enrichedBase, {
+              preferCache: allowStale
+            })
+          } catch {
+            enrichmentResult = { entry: enrichedBase, impacts: [], hit: false }
+          }
+
+          if (enrichmentResult.hit) {
+            cvelistHits += 1
+          } else {
+            cvelistMisses += 1
+          }
+
+          const entry = enrichEntry(enrichmentResult.entry)
+          return { entry, impacts: enrichmentResult.impacts }
+        })
+      )
+
+      if (cvelistHits > 0 || cvelistMisses > 0) {
+        const message = `CVEList enrichment processed (${cvelistHits} hits, ${cvelistMisses} misses)`
+        markTaskProgress('kev', 0, 0, message)
+      }
+
+      const entries = enrichedResults.map(result => result.entry)
+      const impactRecordMap = new Map<string, VulnerabilityImpactRecord[]>()
+      for (const result of enrichedResults) {
+        if (result.impacts.length) {
+          impactRecordMap.set(result.entry.id, result.impacts)
+        }
+      }
 
       const importedAt = new Date().toISOString()
 
@@ -384,6 +438,8 @@ export default defineEventHandler(async event => {
               source: 'kev',
               vendor: entry.vendor,
               product: entry.product,
+              vendorKey: entry.vendorKey,
+              productKey: entry.productKey,
               vulnerabilityName: entry.vulnerabilityName,
               description: entry.description,
               requiredAction: entry.requiredAction,
@@ -404,11 +460,32 @@ export default defineEventHandler(async event => {
               sourceUrl: entry.sourceUrl ?? null,
               referenceLinks: toJson(entry.references),
               aliases: toJson(entry.aliases),
+              affectedProducts: toJson(entry.affectedProducts),
+              problemTypes: toJson(entry.problemTypes),
               metasploitModulePath: entry.metasploitModulePath,
               metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
               internetExposed: entry.internetExposed ? 1 : 0
             })
             .run()
+
+          const entryImpacts = impactRecordMap.get(entryId) ?? []
+          if (entryImpacts.length) {
+            for (const impact of entryImpacts) {
+              tx
+                .insert(tables.vulnerabilityEntryImpacts)
+                .values({
+                  entryId: impact.entryId,
+                  vendor: impact.vendor,
+                  vendorKey: impact.vendorKey,
+                  product: impact.product,
+                  productKey: impact.productKey,
+                  status: impact.status,
+                  versionRange: impact.versionRange,
+                  source: impact.source
+                })
+                .run()
+            }
+          }
 
           const dimensionRecords: Array<{
             entryId: string
@@ -480,7 +557,7 @@ export default defineEventHandler(async event => {
 
     let historicSummary = { imported: 0 }
     if (shouldImport('historic')) {
-      historicSummary = await importHistoricCatalog(db)
+      historicSummary = await importHistoricCatalog(db, { allowStale })
       historicImported = historicSummary.imported
     } else {
       markTaskSkipped('historic', 'Skipped this run')

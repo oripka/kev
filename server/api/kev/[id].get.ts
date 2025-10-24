@@ -6,8 +6,10 @@ import { catalogRowToEntry, getMarketSignalsForProducts } from '../../utils/cata
 import { getDatabase } from '../../utils/sqlite'
 import type {
   CatalogSource,
+  KevAffectedProduct,
   KevEntry,
   KevEntryTimelineEvent,
+  KevProblemType,
   KevTimelineEventType,
 } from '~/types'
 
@@ -20,6 +22,128 @@ const toCatalogSource = (value: string | null | undefined): CatalogSource | null
 
   const lower = value.toLowerCase()
   return (catalogSourceValues as string[]).includes(lower) ? (lower as CatalogSource) : null
+}
+
+const parseAffectedProductsJson = (value: string | null): KevAffectedProduct[] => {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed
+      .map((item): KevAffectedProduct | null => {
+        if (!item || typeof item !== 'object') {
+          return null
+        }
+
+        const vendor = typeof (item as Record<string, unknown>).vendor === 'string' ? (item as Record<string, unknown>).vendor : ''
+        const vendorKey =
+          typeof (item as Record<string, unknown>).vendorKey === 'string'
+            ? (item as Record<string, unknown>).vendorKey
+            : ''
+        const product = typeof (item as Record<string, unknown>).product === 'string' ? (item as Record<string, unknown>).product : ''
+        const productKey =
+          typeof (item as Record<string, unknown>).productKey === 'string'
+            ? (item as Record<string, unknown>).productKey
+            : ''
+
+        const statusRaw = (item as Record<string, unknown>).status
+        const status = typeof statusRaw === 'string' ? statusRaw : statusRaw === null ? null : undefined
+
+        const sourceRaw = (item as Record<string, unknown>).source
+        const sourceValue =
+          typeof sourceRaw === 'string' ? sourceRaw.toLowerCase() : 'cna'
+        const source: KevAffectedProduct['source'] =
+          sourceValue === 'adp' || sourceValue === 'cpe'
+            ? (sourceValue as KevAffectedProduct['source'])
+            : 'cna'
+
+        const platformsRaw = (item as Record<string, unknown>).platforms
+        const platforms = Array.isArray(platformsRaw)
+          ? platformsRaw.filter((platform): platform is string => typeof platform === 'string')
+          : []
+
+        const versionsRaw = (item as Record<string, unknown>).versions
+        const versions = Array.isArray(versionsRaw)
+          ? versionsRaw
+              .filter(version => version && typeof version === 'object')
+              .map(version => {
+                const record = version as Record<string, unknown>
+                return {
+                  version: typeof record.version === 'string' ? record.version : null,
+                  introduced: typeof record.introduced === 'string' ? record.introduced : null,
+                  fixed: typeof record.fixed === 'string' ? record.fixed : null,
+                  lessThan: typeof record.lessThan === 'string' ? record.lessThan : null,
+                  lessThanOrEqual:
+                    typeof record.lessThanOrEqual === 'string' ? record.lessThanOrEqual : null,
+                  greaterThan: typeof record.greaterThan === 'string' ? record.greaterThan : null,
+                  greaterThanOrEqual:
+                    typeof record.greaterThanOrEqual === 'string'
+                      ? record.greaterThanOrEqual
+                      : null,
+                  status: typeof record.status === 'string' ? record.status : null,
+                  versionType: typeof record.versionType === 'string' ? record.versionType : null
+                }
+              })
+          : []
+
+        return {
+          vendor,
+          vendorKey,
+          product,
+          productKey,
+          status,
+          source,
+          platforms,
+          versions
+        }
+      })
+      .filter((item): item is KevAffectedProduct => item !== null)
+  } catch {
+    return []
+  }
+}
+
+const parseProblemTypesJson = (value: string | null): KevProblemType[] => {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed
+      .map((item): KevProblemType | null => {
+        if (!item || typeof item !== 'object') {
+          return null
+        }
+
+        const record = item as Record<string, unknown>
+        const description = typeof record.description === 'string' ? record.description : ''
+        if (!description) {
+          return null
+        }
+
+        const cweId = typeof record.cweId === 'string' && record.cweId.trim().length ? record.cweId : undefined
+        const sourceValue =
+          typeof record.source === 'string' && record.source.toLowerCase() === 'adp'
+            ? 'adp'
+            : 'cna'
+
+        return { description, cweId, source: sourceValue }
+      })
+      .filter((item): item is KevProblemType => item !== null)
+  } catch {
+    return []
+  }
 }
 
 const normalizeValue = (value: string | null | undefined): string | null => {
@@ -248,6 +372,20 @@ export default defineEventHandler(async event => {
   const entry = catalogRowToEntry(row, { marketSignals })
 
   const cveId = normalizeValue(entry.cveId)
+
+  const detailRow = db.get(
+    sql<{ affected_products: string | null; problem_types: string | null }>`
+      SELECT
+        ve.affected_products,
+        ve.problem_types
+      FROM ${tables.vulnerabilityEntries} ve
+      WHERE ve.id = ${row.entry_id}
+      LIMIT 1
+    `
+  )
+
+  entry.affectedProducts = parseAffectedProductsJson(detailRow?.affected_products ?? null)
+  entry.problemTypes = parseProblemTypesJson(detailRow?.problem_types ?? null)
 
   const timelineRows: TimelineRow[] = cveId
     ? (db.all(
