@@ -4534,7 +4534,7 @@ const tableMeta = {
                   </span>
                 </div>
               </div>
-              <UButton
+              <!-- <UButton
                 color="neutral"
                 variant="outline"
                 icon="i-lucide-sparkles"
@@ -4542,7 +4542,7 @@ const tableMeta = {
                 @click="showClassificationReviewSlideover = true"
               >
                 LLM classification audit
-              </UButton>
+              </UButton> -->
             </div>
           </div>
         </template>
