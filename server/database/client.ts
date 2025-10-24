@@ -8,7 +8,7 @@ import * as schema from './schema';
 neonConfig.webSocketConstructor = ws;
 
 // Optional: enable for Edge (Vercel, Cloudflare Workers)
-// neonConfig.poolQueryViaFetch = true;
+neonConfig.poolQueryViaFetch = true;
 
 // Ensure the environment variable is set
 if (!process.env.DATABASE_URL) {
