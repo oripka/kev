@@ -5,6 +5,9 @@ export default defineNuxtConfig({
   modules: ['@nuxt/ui'],
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
+    admin: {
+      apiKey: process.env.ADMIN_API_KEY ?? '',
+    },
     llmAudit: {
       apiUrl: process.env.LLM_AUDIT_API_URL ?? '',
       apiKey: process.env.LLM_AUDIT_API_KEY ?? '',
@@ -15,6 +18,9 @@ export default defineNuxtConfig({
     },
     openai: {
       apiKey: process.env.OPENAI_API_KEY ?? '',
+    },
+    public: {
+      adminCookieName: 'admin-access',
     },
   },
   devServer: {

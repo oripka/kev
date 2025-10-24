@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { tables } from '../../database/client'
 import { getDatabase } from '../../utils/sqlite'
+import { requireAdminKey } from '../../utils/adminAuth'
 
 type ProductRow = {
   vendor_key: string
@@ -41,7 +42,9 @@ type AdminSoftwareResponse = {
   }>
 }
 
-export default defineEventHandler<AdminSoftwareResponse>(() => {
+export default defineEventHandler<AdminSoftwareResponse>(event => {
+  requireAdminKey(event)
+
   const db = getDatabase()
 
   const productRows = db.all(

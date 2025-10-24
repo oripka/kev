@@ -11,6 +11,7 @@ import type {
   QuickFilterSummaryMetricKey,
 } from "~/types/dashboard";
 import { setMetadata } from "../../utils/sqlite";
+import { requireAdminKey } from "../../utils/adminAuth";
 
 const metricSchema = z.enum(
   quickFilterSummaryMetricOrder as [
@@ -28,6 +29,8 @@ const bodySchema = z
   .strict();
 
 export default defineEventHandler(async (event) => {
+  requireAdminKey(event);
+
   const parsed = bodySchema.safeParse(await readBody(event));
 
   if (!parsed.success) {

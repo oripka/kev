@@ -1,46 +1,16 @@
 <script setup lang="ts">
+definePageMeta({ middleware: ["admin"] });
+
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { parseISO } from "date-fns";
-import type { TableColumn } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
 import { useDateDisplay } from "~/composables/useDateDisplay";
-import {
-  areQuickFilterSummaryConfigsEqual,
-  cloneQuickFilterSummaryConfig,
-  defaultQuickFilterSummaryConfig,
-  normaliseQuickFilterSummaryConfig,
-  quickFilterSummaryMetricInfo,
-  quickFilterSummaryMetricOrder,
-} from "~/utils/quickFilterSummaryConfig";
-import type { ClassificationProgress, ImportTaskKey, ImportTaskStatus } from "~/types";
-import type { QuickFilterSummaryConfig, QuickFilterSummaryMetricKey } from "~/types/dashboard";
+import type {
+  ClassificationProgress,
+  ImportTaskKey,
+  ImportTaskStatus,
+} from "~/types";
 
-interface ProductStat {
-  vendorKey: string;
-  vendorName: string;
-  productKey: string;
-  productName: string;
-  selections: number;
-}
-
-interface VendorStat {
-  vendorKey: string;
-  vendorName: string;
-  selections: number;
-}
-
-interface AdminSoftwareResponse {
-  totals: {
-    sessions: number;
-    trackedSelections: number;
-    uniqueProducts: number;
-    uniqueVendors: number;
-  };
-  products: ProductStat[];
-  vendors: VendorStat[];
-}
-
-interface ImportSourceStatus {
+type ImportSourceStatus = {
   key: string;
   label: string;
   catalogVersion: string | null;
@@ -50,25 +20,36 @@ interface ImportSourceStatus {
   totalCount: number | null;
   programCount: number | null;
   latestCaptureAt: string | null;
-}
+};
 
-interface AdminImportStatusResponse {
+type AdminImportStatusResponse = {
   sources: ImportSourceStatus[];
-}
+};
 
-const { data, pending, error } = await useFetch<AdminSoftwareResponse>(
-  "/api/admin/software",
-  { default: () => ({
-    totals: {
-      sessions: 0,
-      trackedSelections: 0,
-      uniqueProducts: 0,
-      uniqueVendors: 0,
-    },
-    products: [],
-    vendors: [],
-  }) }
-);
+const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
+  kev: "CISA KEV entries",
+  historic: "historic entries",
+  enisa: "ENISA entries",
+  metasploit: "Metasploit entries",
+  market: "market intelligence offers",
+};
+
+const isDevEnvironment = import.meta.dev;
+
+const numberFormatter = new Intl.NumberFormat("en-US");
+
+const {
+  catalogBounds,
+  updatedAt,
+  importLatest,
+  importing,
+  importError,
+  lastImportSummary,
+  importProgress,
+  totalEntries,
+  entryLimit,
+  refresh: refreshKevData,
+} = useKevData();
 
 const {
   data: importStatusData,
@@ -82,39 +63,9 @@ const {
   },
 });
 
-const totals = computed(() => data.value?.totals ?? {
-  sessions: 0,
-  trackedSelections: 0,
-  uniqueProducts: 0,
-  uniqueVendors: 0,
-});
-
-const productStats = computed(() => data.value?.products ?? []);
-const vendorStats = computed(() => data.value?.vendors ?? []);
-
-const numberFormatter = new Intl.NumberFormat("en-US");
-
 const importSources = computed(() => importStatusData.value?.sources ?? []);
 
-const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
-  kev: "CISA KEV entries",
-  historic: "historic entries",
-  enisa: "ENISA entries",
-  metasploit: "Metasploit entries",
-  market: "market intelligence offers",
-};
-
-const { formatDate } = useDateDisplay();
-
-const formatOptionalTimestamp = (value: string | null | undefined, fallback: string) => {
-  if (!value) {
-    return fallback;
-  }
-
-  return formatTimestamp(value);
-};
-
-interface FormattedImportSource {
+type FormattedImportSource = {
   key: string;
   label: string;
   versionLabel: string | null;
@@ -122,7 +73,23 @@ interface FormattedImportSource {
   cacheLabel: string;
   totalCountLabel: string | null;
   hasCache: boolean;
-}
+};
+
+const { formatDate } = useDateDisplay();
+
+const formatTimestamp = (value: string) =>
+  formatDate(value, { fallback: value, preserveInputOnError: true });
+
+const formatOptionalTimestamp = (
+  value: string | null | undefined,
+  fallback: string,
+) => {
+  if (!value) {
+    return fallback;
+  }
+
+  return formatTimestamp(value);
+};
 
 const formattedImportSources = computed<FormattedImportSource[]>(() =>
   importSources.value.map((source) => {
@@ -141,9 +108,15 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
     }
 
     const versionLabel = versionParts.length ? versionParts.join(" • ") : null;
-    const lastImportedLabel = formatOptionalTimestamp(source.lastImportedAt, "Never imported");
+    const lastImportedLabel = formatOptionalTimestamp(
+      source.lastImportedAt,
+      "Never imported",
+    );
     const cacheTimestamp = source.cachedAt ?? source.lastImportedAt;
-    const cacheLabel = formatOptionalTimestamp(cacheTimestamp, "No cached feed yet");
+    const cacheLabel = formatOptionalTimestamp(
+      cacheTimestamp,
+      "No cached feed yet",
+    );
     const totalCountLabel =
       typeof source.totalCount === "number"
         ? `${numberFormatter.format(source.totalCount)} entries cached`
@@ -161,234 +134,110 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
   }),
 );
 
-const productColumns: TableColumn<ProductStat>[] = [
-  {
-    accessorKey: "productName",
-    header: "Product",
-    enableSorting: true,
-  },
-  {
-    accessorKey: "vendorName",
-    header: "Vendor",
-    enableSorting: true,
-  },
-  {
-    accessorKey: "selections",
-    header: "Selections",
-    enableSorting: true,
-    cell: ({ row }) => numberFormatter.format(row.getValue<number>("selections")),
-    meta: {
-      align: "end",
-    },
-  },
-];
+const totalCachedEntries = computed(() => totalEntries.value);
 
-const {
-  data: quickFilterSummaryConfigData,
-  pending: quickFilterSummaryPending,
-  error: quickFilterSummaryError,
-} = await useFetch<QuickFilterSummaryConfig>(
-  "/api/quick-filter-summary",
-  {
-    default: () => defaultQuickFilterSummaryConfig,
-    headers: {
-      "cache-control": "no-store",
-    },
-  },
-);
-
-const quickFilterSummaryForm = ref<QuickFilterSummaryConfig>(
-  cloneQuickFilterSummaryConfig(defaultQuickFilterSummaryConfig),
-);
-const quickFilterSummarySaved = ref<QuickFilterSummaryConfig>(
-  cloneQuickFilterSummaryConfig(defaultQuickFilterSummaryConfig),
-);
-const quickFilterSummarySaving = ref(false);
-const quickFilterSummarySaveError = ref<string | null>(null);
-const quickFilterSummarySaveSuccess = ref(false);
-
-const quickFilterSummaryMetrics = computed(() =>
-  quickFilterSummaryMetricOrder.map((key) => ({
-    key,
-    ...quickFilterSummaryMetricInfo[key],
-  })),
-);
-
-const quickFilterSummaryDirty = computed(() =>
-  !areQuickFilterSummaryConfigsEqual(
-    quickFilterSummaryForm.value,
-    quickFilterSummarySaved.value,
-  ),
-);
-
-const quickFilterSummaryIsDefault = computed(() =>
-  areQuickFilterSummaryConfigsEqual(
-    quickFilterSummaryForm.value,
-    defaultQuickFilterSummaryConfig,
-  ),
-);
-
-watch(
-  () => quickFilterSummaryConfigData.value,
-  (config) => {
-    const normalised = normaliseQuickFilterSummaryConfig(config);
-    quickFilterSummaryForm.value = cloneQuickFilterSummaryConfig(normalised);
-    quickFilterSummarySaved.value = cloneQuickFilterSummaryConfig(normalised);
-    quickFilterSummarySaveError.value = null;
-    quickFilterSummarySaveSuccess.value = false;
-  },
-  { immediate: true },
-);
-
-watch(quickFilterSummaryDirty, (dirty) => {
-  if (dirty) {
-    quickFilterSummarySaveSuccess.value = false;
+const importSummaryMessage = computed(() => {
+  const summary = lastImportSummary.value;
+  if (!summary) {
+    return null;
   }
-});
 
-watch(
-  () => quickFilterSummaryForm.value,
-  () => {
-    quickFilterSummarySaveError.value = null;
-  },
-  { deep: true },
-);
+  const counts: Record<ImportTaskKey, number> = {
+    kev: summary.kevImported,
+    historic: summary.historicImported,
+    enisa: summary.enisaImported,
+    metasploit: summary.metasploitImported,
+    market: summary.marketImported,
+  };
 
-const disableMetricToggle = (key: QuickFilterSummaryMetricKey) => {
-  const metrics = quickFilterSummaryForm.value.metrics;
-  return metrics.length === 1 && metrics.includes(key);
-};
+  const segments = summary.sources
+    .map((source) => {
+      const label = SOURCE_SUMMARY_LABELS[source];
+      if (!label) {
+        return null;
+      }
+      if (source === "metasploit") {
+        const base = `${counts[source].toLocaleString()} ${label}`;
+        return summary.metasploitModules > 0
+          ? `${base} across ${summary.metasploitModules.toLocaleString()} modules`
+          : base;
+      }
+      if (source === "market") {
+        const base = `${counts[source].toLocaleString()} ${label}`;
+        const extras: string[] = [];
+        if (summary.marketProgramCount > 0) {
+          extras.push(`${summary.marketProgramCount.toLocaleString()} programs`);
+        }
+        if (summary.marketProductCount > 0) {
+          extras.push(`${summary.marketProductCount.toLocaleString()} matched products`);
+        }
+        if (!extras.length) {
+          return base;
+        }
+        const scopeLabel =
+          extras.length === 1
+            ? extras[0]
+            : `${extras.slice(0, -1).join(", ")} and ${extras[extras.length - 1]}`;
+        return `${base} across ${scopeLabel}`;
+      }
+      return `${counts[source].toLocaleString()} ${label}`;
+    })
+    .filter((segment): segment is string => Boolean(segment));
 
-const toggleQuickFilterSummaryMetric = (
-  key: QuickFilterSummaryMetricKey,
-  selected: boolean,
-) => {
-  const metrics = new Set(quickFilterSummaryForm.value.metrics);
-  if (selected) {
-    metrics.add(key);
+  const importedAt = formatTimestamp(summary.importedAt);
+  const messageParts: string[] = [];
+
+  if (segments.length) {
+    messageParts.push(`Imported ${segments.join(", ")} on ${importedAt}.`);
   } else {
-    if (metrics.size === 1 && metrics.has(key)) {
-      return;
+    messageParts.push(`Import completed on ${importedAt}.`);
+  }
+
+  if (summary.sources.includes("kev")) {
+    const kevDetails: string[] = [];
+    if (summary.catalogVersion) {
+      kevDetails.push(`catalog version ${summary.catalogVersion}`);
     }
-    metrics.delete(key);
+    if (summary.dateReleased) {
+      kevDetails.push(`release ${summary.dateReleased}`);
+    }
+    if (kevDetails.length) {
+      messageParts.push(`Latest KEV ${kevDetails.join(", ")}.`);
+    }
   }
 
-  quickFilterSummaryForm.value.metrics = quickFilterSummaryMetricOrder.filter((metric) =>
-    metrics.has(metric),
-  );
-};
-
-const setShowQuickFilterChips = (value: boolean) => {
-  quickFilterSummaryForm.value.showActiveFilterChips = value;
-};
-
-const setShowQuickFilterResetButton = (value: boolean) => {
-  quickFilterSummaryForm.value.showResetButton = value;
-};
-
-const restoreQuickFilterSummaryDefaults = () => {
-  quickFilterSummaryForm.value = cloneQuickFilterSummaryConfig(
-    defaultQuickFilterSummaryConfig,
-  );
-};
-
-const saveQuickFilterSummaryConfig = async () => {
-  if (!quickFilterSummaryDirty.value) {
-    return;
+  if (summary.sources.includes("enisa") && summary.enisaLastUpdated) {
+    messageParts.push(`ENISA last updated ${formatTimestamp(summary.enisaLastUpdated)}.`);
   }
 
-  quickFilterSummarySaving.value = true;
-  quickFilterSummarySaveError.value = null;
+  if (summary.sources.includes("metasploit")) {
+    if (summary.metasploitModules > 0) {
+      const commitLabel = summary.metasploitCommit
+        ? ` (commit ${summary.metasploitCommit.slice(0, 7)})`
+        : "";
+      messageParts.push(
+        `Metasploit entries processed: ${summary.metasploitModules.toLocaleString()}${commitLabel}.`,
+      );
+    } else if (summary.metasploitCommit) {
+      messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);
+    }
+  }
 
-  try {
-    const response = await $fetch<QuickFilterSummaryConfig>(
-      "/api/admin/quick-filter-summary",
-      {
-        method: "POST",
-        body: quickFilterSummaryForm.value,
-      },
-    );
+  if (summary.sources.includes("market")) {
+    const details: string[] = [];
+    if (summary.marketLastCaptureAt) {
+      details.push(`latest offer captured ${formatTimestamp(summary.marketLastCaptureAt)}`);
+    }
+    if (summary.marketLastSnapshotAt) {
+      details.push(`last snapshot ${formatTimestamp(summary.marketLastSnapshotAt)}`);
+    }
+    if (details.length) {
+      messageParts.push(`Market intelligence ${details.join(" • ")}.`);
+    }
+  }
 
-    const normalised = normaliseQuickFilterSummaryConfig(response);
-    quickFilterSummaryForm.value = cloneQuickFilterSummaryConfig(normalised);
-    quickFilterSummarySaved.value = cloneQuickFilterSummaryConfig(normalised);
-    quickFilterSummarySaveSuccess.value = true;
-    quickFilterSummaryConfigData.value = cloneQuickFilterSummaryConfig(normalised);
-  } catch (exception) {
-    quickFilterSummarySaveError.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to save configuration";
-  } finally {
-    quickFilterSummarySaving.value = false;
-  }
-};
-
-const quickFilterSummaryStatusLabel = computed(() => {
-  if (quickFilterSummarySaveError.value) {
-    return quickFilterSummarySaveError.value;
-  }
-  if (quickFilterSummarySaveSuccess.value) {
-    return "Configuration saved";
-  }
-  if (quickFilterSummaryDirty.value) {
-    return "Unsaved changes";
-  }
-  return "No pending changes";
+  return messageParts.join(" ");
 });
-
-const quickFilterSummaryStatusTone = computed(() => {
-  if (quickFilterSummarySaveError.value) {
-    return "error" as const;
-  }
-  if (quickFilterSummarySaveSuccess.value) {
-    return "success" as const;
-  }
-  if (quickFilterSummaryDirty.value) {
-    return "warning" as const;
-  }
-  return "neutral" as const;
-});
-
-const quickFilterSummaryCanSave = computed(() =>
-  quickFilterSummaryDirty.value && !quickFilterSummarySaving.value,
-);
-
-const quickFilterSummaryCanRestore = computed(() => !quickFilterSummaryIsDefault.value);
-
-const vendorColumns: TableColumn<VendorStat>[] = [
-  {
-    accessorKey: "vendorName",
-    header: "Vendor",
-    enableSorting: true,
-  },
-  {
-    accessorKey: "selections",
-    header: "Tracked products",
-    enableSorting: true,
-    cell: ({ row }) => numberFormatter.format(row.getValue<number>("selections")),
-    meta: {
-      align: "end",
-    },
-  },
-];
-
-const {
-  catalogBounds,
-  updatedAt,
-  importLatest,
-  importing,
-  importError,
-  lastImportSummary,
-  importProgress,
-  entries,
-  totalEntries,
-  entryLimit,
-  refresh: refreshKevData,
-} = useKevData();
-
-const formatTimestamp = (value: string) =>
-  formatDate(value, { fallback: value, preserveInputOnError: true });
 
 const catalogUpdatedAt = computed(() => {
   const summary = lastImportSummary.value;
@@ -398,7 +247,23 @@ const catalogUpdatedAt = computed(() => {
   return updatedAt.value ? formatTimestamp(updatedAt.value) : "Not imported yet";
 });
 
+const catalogRangeLabel = computed(() => {
+  const { earliest, latest } = catalogBounds.value;
+  const formattedEarliest = earliest ? formatTimestamp(earliest) : "Unknown";
+  const formattedLatest = latest ? formatTimestamp(latest) : "Unknown";
+
+  if (!earliest && !latest) {
+    return "Range unavailable";
+  }
+
+  return `${formattedEarliest} → ${formattedLatest}`;
+});
+
 const handleImport = async (source: ImportTaskKey | "all" = "all") => {
+  if (!isDevEnvironment) {
+    return;
+  }
+
   try {
     await importLatest({ mode: "force", source });
   } finally {
@@ -407,6 +272,10 @@ const handleImport = async (source: ImportTaskKey | "all" = "all") => {
 };
 
 const handleCachedReimport = async (source: ImportTaskKey | "all" = "all") => {
+  if (!isDevEnvironment) {
+    return;
+  }
+
   try {
     await importLatest({ mode: "cache", source });
   } finally {
@@ -528,111 +397,6 @@ const formattedImportTasks = computed(() =>
     };
   }),
 );
-
-const totalCachedEntries = computed(() => totalEntries.value);
-
-const importSummaryMessage = computed(() => {
-  const summary = lastImportSummary.value;
-  if (!summary) {
-    return null;
-  }
-
-  const counts: Record<ImportTaskKey, number> = {
-    kev: summary.kevImported,
-    historic: summary.historicImported,
-    enisa: summary.enisaImported,
-    metasploit: summary.metasploitImported,
-    market: summary.marketImported,
-  };
-
-  const segments = summary.sources
-    .map((source) => {
-      const label = SOURCE_SUMMARY_LABELS[source];
-      if (!label) {
-        return null;
-      }
-      if (source === "metasploit") {
-        const base = `${counts[source].toLocaleString()} ${label}`;
-        return summary.metasploitModules > 0
-          ? `${base} across ${summary.metasploitModules.toLocaleString()} modules`
-          : base;
-      }
-      if (source === "market") {
-        const base = `${counts[source].toLocaleString()} ${label}`;
-        const extras: string[] = [];
-        if (summary.marketProgramCount > 0) {
-          extras.push(`${summary.marketProgramCount.toLocaleString()} programs`);
-        }
-        if (summary.marketProductCount > 0) {
-          extras.push(`${summary.marketProductCount.toLocaleString()} matched products`);
-        }
-        if (!extras.length) {
-          return base;
-        }
-        const scopeLabel =
-          extras.length === 1
-            ? extras[0]
-            : `${extras.slice(0, -1).join(", ")} and ${extras[extras.length - 1]}`;
-        return `${base} across ${scopeLabel}`;
-      }
-      return `${counts[source].toLocaleString()} ${label}`;
-    })
-    .filter((segment): segment is string => Boolean(segment));
-
-  const importedAt = formatTimestamp(summary.importedAt);
-  const messageParts: string[] = [];
-
-  if (segments.length) {
-    messageParts.push(`Imported ${segments.join(", ")} on ${importedAt}.`);
-  } else {
-    messageParts.push(`Import completed on ${importedAt}.`);
-  }
-
-  if (summary.sources.includes("kev")) {
-    const kevDetails: string[] = [];
-    if (summary.catalogVersion) {
-      kevDetails.push(`catalog version ${summary.catalogVersion}`);
-    }
-    if (summary.dateReleased) {
-      kevDetails.push(`release ${summary.dateReleased}`);
-    }
-    if (kevDetails.length) {
-      messageParts.push(`Latest KEV ${kevDetails.join(", ")}.`);
-    }
-  }
-
-  if (summary.sources.includes("enisa") && summary.enisaLastUpdated) {
-    messageParts.push(`ENISA last updated ${formatTimestamp(summary.enisaLastUpdated)}.`);
-  }
-
-  if (summary.sources.includes("metasploit")) {
-    if (summary.metasploitModules > 0) {
-      const commitLabel = summary.metasploitCommit
-        ? ` (commit ${summary.metasploitCommit.slice(0, 7)})`
-        : "";
-      messageParts.push(
-        `Metasploit entries processed: ${summary.metasploitModules.toLocaleString()}${commitLabel}.`,
-      );
-    } else if (summary.metasploitCommit) {
-      messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);
-    }
-  }
-
-  if (summary.sources.includes("market")) {
-    const details: string[] = [];
-    if (summary.marketLastCaptureAt) {
-      details.push(`latest offer captured ${formatTimestamp(summary.marketLastCaptureAt)}`);
-    }
-    if (summary.marketLastSnapshotAt) {
-      details.push(`last snapshot ${formatTimestamp(summary.marketLastSnapshotAt)}`);
-    }
-    if (details.length) {
-      messageParts.push(`Market intelligence ${details.join(" • ")}.`);
-    }
-  }
-
-  return messageParts.join(" ");
-});
 
 const createDefaultClassificationProgress = (): ClassificationProgress => ({
   phase: "idle",
@@ -762,6 +526,10 @@ if (typeof window !== "undefined") {
 }
 
 const handleReclassify = async () => {
+  if (!isDevEnvironment) {
+    return;
+  }
+
   reclassifyingCatalog.value = true;
 
   try {
@@ -780,6 +548,10 @@ const handleReclassify = async () => {
 };
 
 const handleResetDatabase = async () => {
+  if (!isDevEnvironment) {
+    return;
+  }
+
   resettingDatabase.value = true;
 
   try {
@@ -794,90 +566,23 @@ const handleResetDatabase = async () => {
     resettingDatabase.value = false;
   }
 };
-
-const catalogRangeLabel = computed(() => {
-  const { earliest, latest } = catalogBounds.value;
-  const formattedEarliest = earliest ? formatTimestamp(earliest) : "Unknown";
-  const formattedLatest = latest ? formatTimestamp(latest) : "Unknown";
-
-  if (!earliest && !latest) {
-    return "Range unavailable";
-  }
-
-  return `${formattedEarliest} → ${formattedLatest}`;
-});
 </script>
 
 <template>
   <UPage>
     <UPageBody>
-      <div class="mx-auto grid w-full max-w-6xl gap-4 px-6">
-        <UCard>
-          <template #header>
-            <div class="space-y-1">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Software tracking overview
-              </p>
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                An aggregate view of anonymous session filters saved for analysis.
-              </p>
-            </div>
-          </template>
-
-          <div class="grid gap-4 md:grid-cols-4">
-            <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-              <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Sessions observed
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ numberFormatter.format(totals.sessions) }}
-              </p>
-            </div>
-            <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-              <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Products tracked
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ numberFormatter.format(totals.trackedSelections) }}
-              </p>
-            </div>
-            <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-              <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Unique products
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ numberFormatter.format(totals.uniqueProducts) }}
-              </p>
-            </div>
-            <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
-              <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Unique vendors
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ numberFormatter.format(totals.uniqueVendors) }}
-              </p>
-            </div>
-          </div>
-
-          <UAlert
-            v-if="error"
-            color="error"
-            variant="soft"
-            title="Unable to load usage data"
-            :description="error.message"
-            class="mt-4"
-          />
-          <p v-else-if="pending" class="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Loading saved filter analytics…
-          </p>
-        </UCard>
-
+      <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-6">
         <UCard>
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Data freshness
-              </p>
+              <div class="space-y-1">
+                <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                  Catalog maintenance
+                </p>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                  Review cached feed history and refresh local data.
+                </p>
+              </div>
               <UBadge color="neutral" variant="soft" class="text-xs font-semibold">
                 {{ catalogUpdatedAt }}
               </UBadge>
@@ -887,7 +592,10 @@ const catalogRangeLabel = computed(() => {
           <div class="space-y-4">
             <div class="space-y-2">
               <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                Cached entries: <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ totalCachedEntries.toLocaleString() }}</span>
+                Cached entries:
+                <span class="font-semibold text-neutral-900 dark:text-neutral-100">
+                  {{ totalCachedEntries.toLocaleString() }}
+                </span>
               </p>
               <p class="text-xs text-neutral-500 dark:text-neutral-400">
                 Catalog coverage: {{ catalogRangeLabel }}
@@ -901,6 +609,14 @@ const catalogRangeLabel = computed(() => {
               >
                 {{ importSummaryMessage }}
               </p>
+              <UAlert
+                v-if="!isDevEnvironment"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-lock"
+                title="Development only"
+                description="Catalog maintenance actions are disabled outside development mode."
+              />
             </div>
 
             <div class="space-y-3">
@@ -938,8 +654,11 @@ const catalogRangeLabel = computed(() => {
                       </span>
                     </p>
                     <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Cache:
-                      <span class="font-medium text-neutral-700 dark:text-neutral-200">
+                      Cache status:
+                      <span
+                        class="font-medium"
+                        :class="source.hasCache ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'"
+                      >
                         {{ source.cacheLabel }}
                       </span>
                     </p>
@@ -953,7 +672,7 @@ const catalogRangeLabel = computed(() => {
                       color="primary"
                       variant="soft"
                       icon="i-lucide-cloud-download"
-                      :disabled="importing"
+                      :disabled="importing || !isDevEnvironment"
                       :aria-label="`Fetch latest ${source.label}`"
                       @click="() => handleImport(source.key as ImportTaskKey)"
                     >
@@ -964,7 +683,7 @@ const catalogRangeLabel = computed(() => {
                       color="neutral"
                       variant="ghost"
                       icon="i-lucide-hard-drive-download"
-                      :disabled="importing || !source.hasCache"
+                      :disabled="importing || !isDevEnvironment || !source.hasCache"
                       :aria-label="`Use cached ${source.label}`"
                       @click="() => handleCachedReimport(source.key as ImportTaskKey)"
                     >
@@ -973,9 +692,6 @@ const catalogRangeLabel = computed(() => {
                   </div>
                 </div>
               </div>
-              <p v-else class="text-xs text-neutral-500 dark:text-neutral-400">
-                No cached import history available yet.
-              </p>
             </div>
 
             <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -984,7 +700,7 @@ const catalogRangeLabel = computed(() => {
                   color="primary"
                   icon="i-lucide-cloud-download"
                   :loading="importing"
-                  :disabled="importing"
+                  :disabled="importing || !isDevEnvironment"
                   @click="() => handleImport()"
                 >
                   {{ importing ? "Importing…" : "Import latest data" }}
@@ -993,7 +709,7 @@ const catalogRangeLabel = computed(() => {
                   color="neutral"
                   variant="soft"
                   icon="i-lucide-refresh-ccw"
-                  :disabled="importing"
+                  :disabled="importing || !isDevEnvironment"
                   @click="() => handleCachedReimport()"
                 >
                   Reimport cached data
@@ -1003,7 +719,7 @@ const catalogRangeLabel = computed(() => {
                   variant="soft"
                   icon="i-lucide-layers"
                   :loading="reclassifyingCatalog"
-                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning"
+                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning || !isDevEnvironment"
                   @click="handleReclassify"
                 >
                   {{ reclassifyingCatalog ? "Reclassifying…" : "Reclassify cached data" }}
@@ -1013,7 +729,7 @@ const catalogRangeLabel = computed(() => {
                   variant="soft"
                   icon="i-lucide-trash"
                   :loading="resettingDatabase"
-                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning"
+                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning || !isDevEnvironment"
                   @click="handleResetDatabase"
                 >
                   {{ resettingDatabase ? "Resetting cache…" : "Reset local cache" }}
@@ -1146,166 +862,6 @@ const catalogRangeLabel = computed(() => {
               </div>
             </div>
           </div>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="space-y-1">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Quick filter summary
-              </p>
-              <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                Choose which metrics appear above the catalog and how the clear controls behave.
-              </p>
-            </div>
-          </template>
-
-          <UAlert
-            v-if="quickFilterSummaryError"
-            color="error"
-            variant="soft"
-            icon="i-lucide-alert-triangle"
-            title="Unable to load quick filter settings"
-            :description="quickFilterSummaryError.message"
-          />
-          <p
-            v-else-if="quickFilterSummaryPending"
-            class="text-sm text-neutral-500 dark:text-neutral-400"
-          >
-            Loading quick filter preferences…
-          </p>
-          <div v-else class="space-y-6">
-            <div class="space-y-3">
-              <div>
-                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                  Visible metrics
-                </p>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                  Enable the summary chips shown in the dashboard header.
-                </p>
-              </div>
-              <div class="grid gap-3 sm:grid-cols-2">
-                <label
-                  v-for="metric in quickFilterSummaryMetrics"
-                  :key="metric.key"
-                  class="flex items-start gap-3 rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40"
-                >
-                  <UCheckbox
-                    :model-value="quickFilterSummaryForm.metrics.includes(metric.key)"
-                    :disabled="disableMetricToggle(metric.key)"
-                    @update:model-value="(value) => toggleQuickFilterSummaryMetric(metric.key, value)"
-                  />
-                  <div class="space-y-1">
-                    <div class="flex items-center gap-2">
-                      <UIcon :name="metric.icon" class="size-4 text-primary-500 dark:text-primary-400" />
-                      <p class="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-                        {{ metric.label }}
-                      </p>
-                    </div>
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      {{ metric.description }}
-                    </p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div class="grid gap-3 md:grid-cols-2">
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
-                <div>
-                  <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                    Show active filter chips
-                  </p>
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Display applied filters inside the summary pill.
-                  </p>
-                </div>
-                <USwitch
-                  :model-value="quickFilterSummaryForm.showActiveFilterChips"
-                  @update:model-value="setShowQuickFilterChips"
-                />
-              </div>
-
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
-                <div>
-                  <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                    Show reset button
-                  </p>
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Allow analysts to clear all filters from the summary.
-                  </p>
-                </div>
-                <USwitch
-                  :model-value="quickFilterSummaryForm.showResetButton"
-                  @update:model-value="setShowQuickFilterResetButton"
-                />
-              </div>
-            </div>
-
-            <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
-              <UBadge :color="quickFilterSummaryStatusTone" variant="soft" class="text-xs font-semibold">
-                {{ quickFilterSummaryStatusLabel }}
-              </UBadge>
-              <div class="flex items-center gap-2">
-                <UButton
-                  color="neutral"
-                  variant="ghost"
-                  :disabled="!quickFilterSummaryCanRestore || quickFilterSummarySaving"
-                  @click="restoreQuickFilterSummaryDefaults"
-                >
-                  Restore defaults
-                </UButton>
-                <UButton
-                  color="primary"
-                  :loading="quickFilterSummarySaving"
-                  :disabled="!quickFilterSummaryCanSave"
-                  @click="saveQuickFilterSummaryConfig"
-                >
-                  Save changes
-                </UButton>
-              </div>
-            </div>
-          </div>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="flex items-center justify-between">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Most tracked products
-              </p>
-              <UBadge color="secondary" variant="soft" class="text-sm font-semibold">
-                {{ numberFormatter.format(productStats.length) }}
-              </UBadge>
-            </div>
-          </template>
-
-          <div v-if="productStats.length" class="space-y-4">
-            <UTable :data="productStats" :columns="productColumns" />
-          </div>
-          <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-            No product selections recorded yet.
-          </p>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="flex items-center justify-between">
-              <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-                Top vendors in saved filters
-              </p>
-              <UBadge color="primary" variant="soft" class="text-sm font-semibold">
-                {{ numberFormatter.format(vendorStats.length) }}
-              </UBadge>
-            </div>
-          </template>
-
-          <div v-if="vendorStats.length" class="space-y-4">
-            <UTable :data="vendorStats" :columns="vendorColumns" />
-          </div>
-          <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
-            No vendor data recorded yet.
-          </p>
         </UCard>
       </div>
     </UPageBody>

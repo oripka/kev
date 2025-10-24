@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defineEventHandler } from 'h3'
 import { getMetadata } from '../../utils/sqlite'
+import { requireAdminKey } from '../../utils/adminAuth'
 
 type ImportSourceStatus = {
   key: string
@@ -51,7 +52,9 @@ const loadCachedAt = async (fileName: string): Promise<string | null> => {
   }
 }
 
-export default defineEventHandler(async (): Promise<ImportStatusResponse> => {
+export default defineEventHandler(async (event): Promise<ImportStatusResponse> => {
+  requireAdminKey(event)
+
   const [kevCachedAt, enisaCachedAt] = await Promise.all([
     loadCachedAt('kev-feed.json'),
     loadCachedAt('enisa-feed.json')

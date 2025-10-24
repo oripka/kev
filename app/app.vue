@@ -17,11 +17,17 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     icon: "i-lucide-hourglass",
     active: route.path === "/vulns-last-two-weeks",
   },
-    {
+  {
     label: "My software",
     to: "/settings/software",
     icon: "i-lucide-monitor-cog",
     active: route.path.startsWith("/settings/software"),
+  },
+  {
+    label: "Settings",
+    to: "/settings",
+    icon: "i-lucide-sliders",
+    active: route.path === "/settings",
   },
   {
     label: "Market intel",

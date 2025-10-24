@@ -28,6 +28,7 @@ import { tables } from '../database/client'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 import { importMetasploitCatalog } from '../utils/metasploit'
 import { importMarketIntel } from '../utils/market'
+import { requireAdminKey } from '../utils/adminAuth'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -102,6 +103,15 @@ const isImportSourceKey = (value: string): value is ImportTaskKey => {
 }
 
 export default defineEventHandler(async event => {
+  requireAdminKey(event)
+
+  if (process.env.NODE_ENV !== 'development') {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Catalog import is restricted to development mode'
+    })
+  }
+
   const body = await readBody<{ mode?: ImportMode; source?: string }>(event).catch(
     () => ({}) as { mode?: ImportMode; source?: string }
   )

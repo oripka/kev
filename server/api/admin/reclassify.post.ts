@@ -9,8 +9,11 @@ import {
   startClassificationProgress,
   updateClassificationProgress
 } from '../../utils/classification-progress'
+import { requireAdminKey } from '../../utils/adminAuth'
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async event => {
+  requireAdminKey(event)
+
   const db = getDatabase()
 
   startClassificationProgress('Preparing catalog reclassification…', 0)
