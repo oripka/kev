@@ -53,6 +53,26 @@ const isUnknownProduct = (value: string): boolean =>
     value
   );
 
+export const isMeaningfulVendorLabel = (
+  value: string | null | undefined
+): boolean => {
+  const trimmed = cleanWhitespace(String(value ?? ""));
+  if (!trimmed) {
+    return false;
+  }
+  return !isAmbiguousVendor(trimmed);
+};
+
+export const isMeaningfulProductLabel = (
+  value: string | null | undefined
+): boolean => {
+  const trimmed = cleanWhitespace(String(value ?? ""));
+  if (!trimmed) {
+    return false;
+  }
+  return !isUnknownProduct(trimmed);
+};
+
 const normaliseOverrideHaystack = (
   value: Array<string | null | undefined>
 ): string => {

@@ -15,6 +15,10 @@ import type {
   KevProblemType,
   KevVersionRange
 } from '~/types'
+import {
+  isMeaningfulProductLabel,
+  isMeaningfulVendorLabel
+} from '~/utils/vendorProduct'
 
 const CVELIST_CACHE_DIR = join(process.cwd(), 'data', 'cache', 'cvelist')
 const CVELIST_INDEX_PATH = join(CVELIST_CACHE_DIR, 'cvelist-index.json')
@@ -287,18 +291,83 @@ export const enrichBaseEntryWithCvelist = async (
       preferredProductKey: base.productKey
     })
 
+    const productCandidates: KevAffectedProduct[] = []
     if (enrichment.primaryProduct) {
-      if (enrichment.primaryProduct.vendor) {
-        workingEntry.vendor = enrichment.primaryProduct.vendor
+      productCandidates.push(enrichment.primaryProduct)
+    }
+    for (const product of enrichment.affectedProducts) {
+      if (
+        !enrichment.primaryProduct ||
+        product.productKey !== enrichment.primaryProduct.productKey ||
+        product.vendorKey !== enrichment.primaryProduct.vendorKey
+      ) {
+        productCandidates.push(product)
       }
-      if (enrichment.primaryProduct.vendorKey) {
-        workingEntry.vendorKey = enrichment.primaryProduct.vendorKey
+    }
+
+    const pickCandidate = (
+      predicate: (product: KevAffectedProduct) => boolean
+    ): KevAffectedProduct | undefined => productCandidates.find(predicate)
+
+    const dualCandidate = pickCandidate(
+      candidate =>
+        isMeaningfulVendorLabel(candidate.vendor) &&
+        isMeaningfulProductLabel(candidate.product)
+    )
+
+    if (dualCandidate) {
+      if (!isMeaningfulVendorLabel(workingEntry.vendor)) {
+        workingEntry.vendor = dualCandidate.vendor
+        workingEntry.vendorKey = dualCandidate.vendorKey
       }
-      if (enrichment.primaryProduct.product) {
-        workingEntry.product = enrichment.primaryProduct.product
+      if (!isMeaningfulProductLabel(workingEntry.product)) {
+        workingEntry.product = dualCandidate.product
+        workingEntry.productKey = dualCandidate.productKey
       }
-      if (enrichment.primaryProduct.productKey) {
-        workingEntry.productKey = enrichment.primaryProduct.productKey
+    }
+
+    if (!isMeaningfulVendorLabel(workingEntry.vendor)) {
+      const vendorCandidate =
+        dualCandidate ?? pickCandidate(candidate => isMeaningfulVendorLabel(candidate.vendor))
+      if (vendorCandidate && isMeaningfulVendorLabel(vendorCandidate.vendor)) {
+        workingEntry.vendor = vendorCandidate.vendor
+        workingEntry.vendorKey = vendorCandidate.vendorKey
+      }
+    }
+
+    if (!isMeaningfulProductLabel(workingEntry.product)) {
+      const resolvedVendor = workingEntry.vendor
+      const vendorMeaningful = isMeaningfulVendorLabel(resolvedVendor)
+
+      let productCandidate: KevAffectedProduct | undefined
+
+      if (vendorMeaningful) {
+        const resolvedVendorKey = resolvedVendor.toLowerCase()
+        productCandidate = pickCandidate(
+          candidate =>
+            isMeaningfulProductLabel(candidate.product) &&
+            isMeaningfulVendorLabel(candidate.vendor) &&
+            candidate.vendor.toLowerCase() === resolvedVendorKey
+        )
+      }
+
+      if (!productCandidate) {
+        productCandidate = pickCandidate(candidate =>
+          isMeaningfulProductLabel(candidate.product)
+        )
+      }
+
+      if (productCandidate && isMeaningfulProductLabel(productCandidate.product)) {
+        workingEntry.product = productCandidate.product
+        workingEntry.productKey = productCandidate.productKey
+
+        if (
+          !vendorMeaningful &&
+          isMeaningfulVendorLabel(productCandidate.vendor)
+        ) {
+          workingEntry.vendor = productCandidate.vendor
+          workingEntry.vendorKey = productCandidate.vendorKey
+        }
       }
     }
 
