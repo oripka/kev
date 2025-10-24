@@ -10,6 +10,7 @@ export default defineNuxtConfig({
   ignore: [
     'data/**'
   ],
+  ssr: false,
   runtimeConfig: {
     admin: {
       apiKey: process.env.ADMIN_API_KEY ?? "",
