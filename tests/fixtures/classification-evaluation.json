@@ -985,7 +985,7 @@
   },
   {
     "id": "windows-print-spooler-client",
-    "title": "PrintNightmare execution is attributed to the client host",
+    "title": "PrintNightmare execution is attributed to the server host",
     "entry": {
       "cveId": "CVE-2021-34527",
       "vendor": "Microsoft",
@@ -1000,10 +1000,10 @@
     "expect": {
       "exploitLayers": {
         "includes": [
-          "RCE · Client-side Non-memory"
+          "RCE · Server-side Non-memory"
         ],
         "excludes": [
-          "RCE · Server-side Non-memory",
+          "RCE · Client-side Non-memory",
           "Mixed/Needs Review"
         ]
       },

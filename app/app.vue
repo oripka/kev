@@ -24,18 +24,17 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     active: route.path.startsWith("/settings/software"),
   },
   {
-    label: "Settings",
-    to: "/settings",
-    icon: "i-lucide-sliders",
-    active: route.path === "/settings",
-  },
-  {
     label: "Market intel",
     to: "/market-intel",
     icon: "i-lucide-dollar-sign",
     active: route.path === "/market-intel",
   },
-
+  {
+    label: "Settings",
+    to: "/settings",
+    icon: "i-lucide-sliders",
+    active: route.path === "/settings",
+  },
   {
     label: "Admin",
     to: "/admin",
