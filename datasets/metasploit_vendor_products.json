@@ -332,6 +332,16 @@
     ]
   },
   {
+    "vendor": "Appsmith",
+    "product": "Appsmith",
+    "cves": [
+      "CVE-2024-55963"
+    ],
+    "sources": [
+      "metasploit"
+    ]
+  },
+  {
     "vendor": "Artifex",
     "product": "Ghostscript",
     "cves": [
@@ -401,6 +411,17 @@
     ],
     "sources": [
       "kev"
+    ]
+  },
+  {
+    "vendor": "BentoML",
+    "product": "Runner Server",
+    "cves": [
+      "CVE-2025-27520",
+      "CVE-2025-32375"
+    ],
+    "sources": [
+      "metasploit"
     ]
   },
   {
@@ -1906,6 +1927,16 @@
     ]
   },
   {
+    "vendor": "Pandora FMS",
+    "product": "Pandora FMS",
+    "cves": [
+      "CVE-2024-12971"
+    ],
+    "sources": [
+      "metasploit"
+    ]
+  },
+  {
     "vendor": "Palo Alto Networks",
     "product": "Expedition",
     "cves": [
@@ -2562,6 +2593,16 @@
     ],
     "sources": [
       "kev"
+    ]
+  },
+  {
+    "vendor": "Xorcom",
+    "product": "CompletePBX",
+    "cves": [
+      "CVE-2025-30004"
+    ],
+    "sources": [
+      "metasploit"
     ]
   },
   {

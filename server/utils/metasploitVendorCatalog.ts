@@ -38,6 +38,31 @@ const GENERIC_PRODUCT_PATTERNS = [
   /\bsolutions?\b/i
 ]
 
+const GENERIC_KEYWORDS = new Set([
+  'application',
+  'applications',
+  'component',
+  'components',
+  'framework',
+  'manager',
+  'management',
+  'module',
+  'modules',
+  'platform',
+  'product',
+  'products',
+  'server',
+  'servers',
+  'service',
+  'services',
+  'software',
+  'solution',
+  'solutions',
+  'system',
+  'systems',
+  'task scheduler'
+])
+
 const cleanKeyword = (value: string): string =>
   value
     .toLowerCase()
@@ -57,6 +82,9 @@ const extractKeywordVariants = (vendor: string, product: string): string[] => {
     }
     const cleaned = cleanKeyword(text)
     if (!cleaned || !hasMeaningfulLength(cleaned)) {
+      return
+    }
+    if (GENERIC_KEYWORDS.has(cleaned)) {
       return
     }
     variants.add(cleaned)
