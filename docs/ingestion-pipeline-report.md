@@ -21,6 +21,8 @@ All network-bound importers share a filesystem cache keyed by feed name. The hel
 1. Page through ENISA’s API (or reuse cache), aggregating unique records by ENISA UUID and normalizing vendor/product labels.【F:server/utils/enisa.ts†L223-L304】
 2. Enrich and persist entries the same way as other sources, while storing ENISA-specific timestamps and metadata for change detection.【F:server/utils/enisa.ts†L308-L454】
 
+
+
 ### Metasploit modules
 1. Parse every exploit module, guess vendor/product pairs from module metadata, then normalize them with the shared helper before creating base entries tied to module paths and commits.【F:server/utils/metasploit.ts†L1162-L1224】
 2. After initial normalization, prefer catalogued vendor/product labels from KEV, historic, or ENISA imports when they exist so the community exploit data aligns with our canonical catalog keys.【F:server/utils/metasploit.ts†L1240-L1305】
@@ -74,3 +76,12 @@ Identity and deduplication across imports
 Raw source rows live in vulnerability_entries, where the primary key is a synthetic per-source identifier such as kev:CVE-2021-1234. Each importer wipes and repopulates its own slice of that table on every run, so a feed never inserts the same source entry twice in a single run.
 
 When we build the analytics catalog we merge those source entries by upper-cased CVE ID, yielding one consolidated catalog row per CVE regardless of how many feeds mention it. That’s why the downstream tables (and the UI) see a single record per vulnerability even though multiple importers contribute data.
+
+Why vendor/product labels go wrong
+Normalization only fixes “ambiguous” inputs. findVendorProductOverride refuses to apply curated overrides whenever the source strings look non-empty and non-generic, so a confidently wrong vendor (e.g., a misspelled or completely different company) sails through untouched.
+Vendor inference is extremely narrow. When the vendor string is blank, the helper can only infer a handful of families (Microsoft, Android, Apple). Everything else stays “Unknown,” which later stages promote to canonical catalog labels even when the upstream feed really did name the vendor, just not in that whitelist.
+Product cleanup erases context. The product normalizer strips vendor words, platform descriptors, version numbers, and generic phrases; if the remaining text is empty or numeric it snaps to the fallback “Unknown,” leaving us with a meaningless product label even when the original feed had more nuance.
+Caches perpetuate mistakes. Admin actions such as “Use cached feed / Reimport cached data” replay whatever vendor/product strings were captured during the last run, so a bad normalization result gets replayed until someone forces a fresh import.
+Cross-feed propagation locks in the mislabel. Importers like Metasploit look up any previously stored row for the CVE and adopt its vendor/product, so the first wrong label becomes the canonical label for every later source until an override or heuristic change corrects it.
+Reclassification can’t repair it. The reclassify admin action only rebuilds aggregate tables; it never re-runs normaliseVendorProduct, so tuning overrides or heuristics won’t touch already-ingested rows without a full import.
+Together, these behaviors explain how the current pipeline lands on incorrect vendor/product combinations and keeps serving them back to the catalog.
