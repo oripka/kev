@@ -98,6 +98,7 @@ const showRansomwareOnly = ref(false);
 const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
 const showHeatmap = ref(false);
+const showCompactTable = ref(false);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
@@ -3197,7 +3198,39 @@ const clearFilter = (
   filters[key] = null;
 };
 
+const truncateDescription = (value: string | null | undefined) => {
+  if (!value) {
+    return "No description provided.";
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length <= 120) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, 120)}…`;
+};
+
+const getEntryTitle = (entry: KevEntrySummary) =>
+  entry.vulnerabilityName?.trim() || entry.cveId;
+
 const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
+  if (showCompactTable.value) {
+    return [
+      {
+        id: "title",
+        header: "Title",
+        cell: ({ row }) => getEntryTitle(row.original),
+      },
+      {
+        id: "description",
+        header: "Description",
+        cell: ({ row }) => truncateDescription(row.original.description),
+      },
+    ];
+  }
+
   const createBadgeButton = (
     label: string,
     color: string,
@@ -4521,6 +4554,21 @@ const tableMeta = {
               </p>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-3">
+              <div class="flex items-center gap-2">
+                <USwitch
+                  v-model="showCompactTable"
+                  :disabled="isBusy || !results.length"
+                  aria-label="Toggle summary view for catalog table"
+                />
+                <div class="flex flex-col text-right leading-tight">
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                    Summary view
+                  </span>
+                  <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Show title and description only
+                  </span>
+                </div>
+              </div>
               <div class="flex items-center gap-2">
                 <USwitch
                   v-model="showHeatmap"
