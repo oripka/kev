@@ -148,7 +148,8 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     updatedAt: null,
     error: null,
     activeSources: [],
-    tasks: []
+    tasks: [],
+    events: []
   })
 
   const normaliseImportProgress = (
@@ -161,11 +162,13 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     }
 
     const tasks = Array.isArray(progress.tasks) ? progress.tasks : []
+    const events = Array.isArray(progress.events) ? progress.events : []
 
     return {
       ...base,
       ...progress,
-      tasks
+      tasks,
+      events
     }
   }
 

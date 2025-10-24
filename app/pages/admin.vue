@@ -6,6 +6,8 @@ import { useKevData } from "~/composables/useKevData";
 import { useDateDisplay } from "~/composables/useDateDisplay";
 import type {
   ClassificationProgress,
+  ImportProgressEvent,
+  ImportProgressEventStatus,
   ImportTaskKey,
   ImportTaskStatus,
 } from "~/types";
@@ -13,6 +15,7 @@ import type {
 type ImportSourceStatus = {
   key: string;
   label: string;
+  importKey: ImportTaskKey | null;
   catalogVersion: string | null;
   dateReleased: string | null;
   lastImportedAt: string | null;
@@ -64,15 +67,28 @@ const {
 });
 
 const importSources = computed(() => importStatusData.value?.sources ?? []);
+const importEvents = computed(() => importProgress.value.events ?? []);
 
 type FormattedImportSource = {
   key: string;
   label: string;
+  importKey: ImportTaskKey | null;
   versionLabel: string | null;
-  lastImportedLabel: string;
+  lastActionPrefix: string;
+  lastActionValue: string;
   cacheLabel: string;
   totalCountLabel: string | null;
   hasCache: boolean;
+  supportsImport: boolean;
+};
+
+type FormattedImportEvent = {
+  id: string;
+  timestampLabel: string;
+  message: string;
+  status: ImportProgressEventStatus;
+  badgeVariant: string;
+  taskLabel: string | null;
 };
 
 const { formatDate } = useDateDisplay();
@@ -95,7 +111,10 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
   importSources.value.map((source) => {
     const versionParts: string[] = [];
     if (source.catalogVersion) {
-      versionParts.push(`Version ${source.catalogVersion}`);
+      const versionLabel = source.key === "cvelist"
+        ? `Commit ${source.catalogVersion}`
+        : `Version ${source.catalogVersion}`;
+      versionParts.push(versionLabel);
     }
     if (source.dateReleased) {
       versionParts.push(`Released ${formatTimestamp(source.dateReleased)}`);
@@ -108,14 +127,14 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
     }
 
     const versionLabel = versionParts.length ? versionParts.join(" • ") : null;
-    const lastImportedLabel = formatOptionalTimestamp(
-      source.lastImportedAt,
-      "Never imported",
-    );
+    const lastActionPrefix = source.key === "cvelist" ? "Last refresh" : "Last import";
+    const lastActionFallback = source.key === "cvelist" ? "Never refreshed" : "Never imported";
+    const lastActionValue = formatOptionalTimestamp(source.lastImportedAt, lastActionFallback);
     const cacheTimestamp = source.cachedAt ?? source.lastImportedAt;
+    const cacheFallback = source.key === "cvelist" ? "No repository sync yet" : "No cached feed yet";
     const cacheLabel = formatOptionalTimestamp(
       cacheTimestamp,
-      "No cached feed yet",
+      cacheFallback,
     );
     const totalCountLabel =
       typeof source.totalCount === "number"
@@ -125,13 +144,54 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
     return {
       key: source.key,
       label: source.label,
+      importKey: source.importKey,
       versionLabel,
-      lastImportedLabel,
+      lastActionPrefix,
+      lastActionValue,
       cacheLabel,
       totalCountLabel,
       hasCache: Boolean(cacheTimestamp),
+      supportsImport: Boolean(source.importKey),
     } satisfies FormattedImportSource;
   }),
+);
+
+const eventBadgeVariants: Record<ImportProgressEventStatus, string> = {
+  pending: "neutral",
+  running: "primary",
+  complete: "success",
+  skipped: "neutral",
+  error: "error",
+  info: "neutral",
+};
+
+const eventStatusLabels: Record<ImportProgressEventStatus, string> = {
+  pending: "Pending",
+  running: "Running",
+  complete: "Complete",
+  skipped: "Skipped",
+  error: "Failed",
+  info: "Info",
+};
+
+const formattedImportEvents = computed<FormattedImportEvent[]>(() =>
+  importEvents.value
+    .slice()
+    .reverse()
+    .map((event: ImportProgressEvent) => {
+      const timestampLabel = formatOptionalTimestamp(event.timestamp, "Timestamp unavailable");
+      const badgeVariant = eventBadgeVariants[event.status] ?? "neutral";
+      const taskLabel = event.taskLabel ?? null;
+
+      return {
+        id: event.id,
+        timestampLabel,
+        message: event.message,
+        status: event.status,
+        badgeVariant,
+        taskLabel,
+      } satisfies FormattedImportEvent;
+    }),
 );
 
 const totalCachedEntries = computed(() => totalEntries.value);
@@ -648,9 +708,9 @@ const handleResetDatabase = async () => {
                       {{ source.versionLabel }}
                     </p>
                     <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                      Last import:
+                      {{ source.lastActionPrefix }}:
                       <span class="font-medium text-neutral-700 dark:text-neutral-200">
-                        {{ source.lastImportedLabel }}
+                        {{ source.lastActionValue }}
                       </span>
                     </p>
                     <p class="text-xs text-neutral-500 dark:text-neutral-400">
@@ -666,29 +726,37 @@ const handleResetDatabase = async () => {
                       {{ source.totalCountLabel }}
                     </p>
                   </div>
-                  <div class="flex flex-wrap gap-2">
-                    <UButton
-                      size="sm"
-                      color="primary"
-                      variant="soft"
-                      icon="i-lucide-cloud-download"
-                      :disabled="importing || !isDevEnvironment"
-                      :aria-label="`Fetch latest ${source.label}`"
-                      @click="() => handleImport(source.key as ImportTaskKey)"
+                  <div class="flex flex-wrap items-center gap-2">
+                    <template v-if="source.supportsImport && source.importKey">
+                      <UButton
+                        size="sm"
+                        color="primary"
+                        variant="soft"
+                        icon="i-lucide-cloud-download"
+                        :disabled="importing || !isDevEnvironment"
+                        :aria-label="`Fetch latest ${source.label}`"
+                        @click="() => handleImport(source.importKey as ImportTaskKey)"
+                      >
+                        Fetch latest
+                      </UButton>
+                      <UButton
+                        size="sm"
+                        color="neutral"
+                        variant="ghost"
+                        icon="i-lucide-hard-drive-download"
+                        :disabled="importing || !isDevEnvironment || !source.hasCache"
+                        :aria-label="`Use cached ${source.label}`"
+                        @click="() => handleCachedReimport(source.importKey as ImportTaskKey)"
+                      >
+                        Use cached feed
+                      </UButton>
+                    </template>
+                    <p
+                      v-else
+                      class="text-xs text-neutral-500 dark:text-neutral-400"
                     >
-                      Fetch latest
-                    </UButton>
-                    <UButton
-                      size="sm"
-                      color="neutral"
-                      variant="ghost"
-                      icon="i-lucide-hard-drive-download"
-                      :disabled="importing || !isDevEnvironment || !source.hasCache"
-                      :aria-label="`Use cached ${source.label}`"
-                      @click="() => handleCachedReimport(source.key as ImportTaskKey)"
-                    >
-                      Use cached feed
-                    </UButton>
+                      Refreshed automatically during catalog imports.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -810,6 +878,33 @@ const handleResetDatabase = async () => {
                           {{ task.progressLabel }}
                         </p>
                       </div>
+                    </div>
+                  </div>
+                  <div v-if="formattedImportEvents.length" class="mt-3 space-y-2">
+                    <p class="text-[0.65rem] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+                      Recent activity
+                    </p>
+                    <div
+                      v-for="event in formattedImportEvents"
+                      :key="event.id"
+                      class="rounded-md border border-neutral-200/80 bg-white/70 p-2 text-[0.72rem] dark:border-neutral-800 dark:bg-neutral-900/40"
+                    >
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="space-y-1">
+                          <p class="font-medium text-neutral-700 dark:text-neutral-100">
+                            {{ event.taskLabel ?? 'Catalog import' }}
+                          </p>
+                          <p class="text-[0.68rem] text-neutral-500 dark:text-neutral-400">
+                            {{ event.message }}
+                          </p>
+                        </div>
+                        <UBadge :color="event.badgeVariant" variant="soft" class="shrink-0 text-[0.65rem]">
+                          {{ eventStatusLabels[event.status] ?? 'Status' }}
+                        </UBadge>
+                      </div>
+                      <p class="mt-1 text-[0.65rem] text-neutral-400 dark:text-neutral-500">
+                        {{ event.timestampLabel }}
+                      </p>
                     </div>
                   </div>
                 </div>

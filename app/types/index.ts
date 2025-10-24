@@ -375,6 +375,18 @@ export type ImportTaskProgress = {
   total: number
 }
 
+export type ImportProgressEventStatus = ImportTaskStatus | 'info'
+
+export type ImportProgressEvent = {
+  id: string
+  timestamp: string
+  status: ImportProgressEventStatus
+  message: string
+  taskKey: ImportTaskKey | null
+  taskLabel: string | null
+  phase: ImportPhase | null
+}
+
 export type ImportProgress = {
   phase: ImportPhase
   completed: number
@@ -385,6 +397,7 @@ export type ImportProgress = {
   error: string | null
   activeSources: ImportTaskKey[]
   tasks: ImportTaskProgress[]
+  events: ImportProgressEvent[]
 }
 
 export type ClassificationPhase = 'idle' | 'preparing' | 'rebuilding' | 'complete' | 'error'

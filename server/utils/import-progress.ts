@@ -1,4 +1,10 @@
-import type { ImportTaskKey, ImportTaskProgress, ImportTaskStatus } from '~/types'
+import type {
+  ImportProgressEvent,
+  ImportProgressEventStatus,
+  ImportTaskKey,
+  ImportTaskProgress,
+  ImportTaskStatus
+} from '~/types'
 import { describeTaskKey } from '~/utils/exploitProductHints'
 
 type ImportPhase =
@@ -28,9 +34,16 @@ type ImportProgressState = {
   error: string | null
   activeSources: ImportTaskKey[]
   tasks: ImportTaskProgress[]
+  events: ImportProgressEvent[]
 }
 
 const TASK_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'market']
+const EVENT_LIMIT = 50
+
+type InternalImportProgressState = ImportProgressState & {
+  eventCounter: number
+  lastTaskMessages: Partial<Record<ImportTaskKey, string>>
+}
 
 const createTaskState = (
   key: ImportTaskKey,
@@ -68,39 +81,64 @@ const defaultState: ImportProgressState = {
   updatedAt: null,
   error: null,
   activeSources: [],
-  tasks: createTaskList([])
+  tasks: createTaskList([]),
+  events: []
 }
+
+const createInternalState = (): InternalImportProgressState => ({
+  ...defaultState,
+  eventCounter: 0,
+  lastTaskMessages: {}
+})
 
 declare global {
   // eslint-disable-next-line no-var
-  var __kevImportProgress: ImportProgressState | undefined
+  var __kevImportProgress: InternalImportProgressState | undefined
 }
 
-const getState = (): ImportProgressState => {
+const getState = (): InternalImportProgressState => {
   if (!globalThis.__kevImportProgress) {
-    globalThis.__kevImportProgress = { ...defaultState }
+    globalThis.__kevImportProgress = createInternalState()
   }
 
   return globalThis.__kevImportProgress
 }
 
-const commit = (patch: Partial<ImportProgressState>) => {
+const commit = (patch: Partial<InternalImportProgressState>) => {
   const state = getState()
   const timestamp = new Date().toISOString()
 
+  const nextPhase = patch.phase ?? state.phase
+  const resetState = nextPhase === 'idle'
+
+  const baseState: InternalImportProgressState = resetState
+    ? createInternalState()
+    : {
+        ...state,
+        updatedAt: timestamp,
+        startedAt:
+          nextPhase !== 'idle' && state.phase !== nextPhase
+            ? state.startedAt ?? timestamp
+            : state.startedAt,
+        phase: nextPhase,
+        completed: patch.completed ?? state.completed,
+        total: patch.total ?? state.total,
+        message: patch.message ?? state.message,
+        error: patch.error ?? state.error,
+        activeSources: patch.activeSources ?? state.activeSources,
+        tasks: patch.tasks ?? state.tasks,
+        events: patch.events ?? state.events,
+        eventCounter: patch.eventCounter ?? state.eventCounter,
+        lastTaskMessages: patch.lastTaskMessages ?? state.lastTaskMessages
+      }
+
   globalThis.__kevImportProgress = {
-    ...state,
-    ...patch,
-    updatedAt: timestamp,
-    startedAt:
-      patch.phase && patch.phase !== state.phase && patch.phase !== 'idle'
-        ? state.startedAt ?? timestamp
-        : patch.phase === 'idle'
-          ? null
-          : state.startedAt,
-    ...(patch.phase === 'idle'
-      ? { completed: 0, total: 0, error: null, message: '', activeSources: [], tasks: createTaskList([]) }
-      : {})
+    ...baseState,
+    ...(resetState
+      ? {}
+      : {
+          updatedAt: timestamp
+        })
   }
 }
 
@@ -132,13 +170,81 @@ const updateRemainingTasks = (status: ImportTaskStatus, message?: string) => {
 }
 
 export const resetImportProgress = () => {
-  globalThis.__kevImportProgress = { ...defaultState }
+  globalThis.__kevImportProgress = createInternalState()
+}
+
+type EventPayload = {
+  message: string
+  status: ImportProgressEventStatus
+  taskKey?: ImportTaskKey | null
+  phase?: ImportPhase | null
+}
+
+const pushEvent = ({ message, status, taskKey = null, phase = null }: EventPayload) => {
+  const state = getState()
+  const timestamp = new Date().toISOString()
+  const id = `${timestamp}-${state.eventCounter + 1}`
+  const resolvedTaskKey = taskKey ?? null
+  const taskLabel = resolvedTaskKey ? describeTaskKey(resolvedTaskKey) : null
+
+  const event: ImportProgressEvent = {
+    id,
+    timestamp,
+    message,
+    status,
+    taskKey: resolvedTaskKey,
+    taskLabel,
+    phase
+  }
+
+  const nextEvents = state.events.concat(event)
+  const trimmedEvents = nextEvents.length > EVENT_LIMIT ? nextEvents.slice(nextEvents.length - EVENT_LIMIT) : nextEvents
+
+  globalThis.__kevImportProgress = {
+    ...state,
+    events: trimmedEvents,
+    eventCounter: state.eventCounter + 1,
+    updatedAt: timestamp
+  }
+}
+
+const rememberTaskMessage = (key: ImportTaskKey, message: string | null) => {
+  const state = getState()
+  if (!message) {
+    if (state.lastTaskMessages[key]) {
+      delete state.lastTaskMessages[key]
+    }
+    return
+  }
+  state.lastTaskMessages[key] = message
+}
+
+const resetTaskMessages = () => {
+  const state = getState()
+  state.lastTaskMessages = {}
+}
+
+const shouldLogTaskMessage = (key: ImportTaskKey, message?: string, force = false) => {
+  const state = getState()
+  const trimmed = message?.trim() ?? ''
+  if (!trimmed && !force) {
+    return false
+  }
+  if (!force && state.lastTaskMessages[key] === trimmed) {
+    return false
+  }
+  rememberTaskMessage(key, trimmed || null)
+  return trimmed.length > 0 || force
 }
 
 export const startImportProgress = (
   message: string,
   sources: ImportTaskKey[] = TASK_ORDER
 ) => {
+  resetTaskMessages()
+  const state = getState()
+  state.events = []
+  state.eventCounter = 0
   commit({
     phase: 'preparing',
     message,
@@ -148,6 +254,7 @@ export const startImportProgress = (
     activeSources: sources.slice(),
     tasks: createTaskList(sources)
   })
+  pushEvent({ message, status: 'info', phase: 'preparing' })
 }
 
 export const setImportPhase = (phase: ImportPhase, payload: Partial<ImportProgressState> = {}) => {
@@ -173,6 +280,10 @@ export const updateImportProgress = (
 
 export const markTaskPending = (key: ImportTaskKey, message?: string) => {
   updateTask(key, { status: 'pending', message: message ?? '', completed: 0, total: 0 })
+  if (message) {
+    rememberTaskMessage(key, null)
+    pushEvent({ message, status: 'info', taskKey: key, phase: getState().phase })
+  }
 }
 
 export const markTaskRunning = (key: ImportTaskKey, message?: string) => {
@@ -183,6 +294,10 @@ export const markTaskRunning = (key: ImportTaskKey, message?: string) => {
     completed: existing?.completed ?? 0,
     total: existing?.total ?? 0
   })
+  const logMessage = message ?? existing?.message ?? describeTaskKey(key)
+  if (shouldLogTaskMessage(key, logMessage, true)) {
+    pushEvent({ message: logMessage, status: 'running', taskKey: key, phase: getState().phase })
+  }
 }
 
 export const markTaskProgress = (
@@ -198,6 +313,9 @@ export const markTaskProgress = (
     total,
     message: message ?? existing?.message ?? ''
   })
+  if (shouldLogTaskMessage(key, message)) {
+    pushEvent({ message: message ?? '', status: 'running', taskKey: key, phase: getState().phase })
+  }
 }
 
 export const markTaskSkipped = (key: ImportTaskKey, message?: string) => {
@@ -207,6 +325,9 @@ export const markTaskSkipped = (key: ImportTaskKey, message?: string) => {
     completed: 0,
     total: 0
   })
+  const eventMessage = message ?? 'Skipped this run'
+  rememberTaskMessage(key, null)
+  pushEvent({ message: eventMessage, status: 'skipped', taskKey: key, phase: getState().phase })
 }
 
 export const markTaskComplete = (key: ImportTaskKey, message?: string) => {
@@ -217,6 +338,9 @@ export const markTaskComplete = (key: ImportTaskKey, message?: string) => {
     completed: existing?.total ?? existing?.completed ?? 0,
     total: existing?.total ?? existing?.completed ?? 0
   })
+  const eventMessage = message ?? existing?.message ?? `Completed ${describeTaskKey(key)}`
+  rememberTaskMessage(key, null)
+  pushEvent({ message: eventMessage, status: 'complete', taskKey: key, phase: getState().phase })
 }
 
 export const markTaskError = (key: ImportTaskKey, message?: string) => {
@@ -225,6 +349,9 @@ export const markTaskError = (key: ImportTaskKey, message?: string) => {
     status: 'error',
     message: message ?? existing?.message ?? ''
   })
+  const eventMessage = message ?? existing?.message ?? `Error in ${describeTaskKey(key)}`
+  rememberTaskMessage(key, null)
+  pushEvent({ message: eventMessage, status: 'error', taskKey: key, phase: getState().phase })
 }
 
 export const completeImportProgress = (message: string) => {
@@ -235,6 +362,7 @@ export const completeImportProgress = (message: string) => {
     message,
     error: null
   })
+  pushEvent({ message, status: 'info', phase: 'complete' })
 }
 
 export const failImportProgress = (message: string) => {
@@ -244,8 +372,15 @@ export const failImportProgress = (message: string) => {
     message,
     error: message
   })
+  pushEvent({ message, status: 'error', phase: 'error' })
 }
 
 export const getImportProgress = (): ImportProgressState => {
-  return { ...getState(), tasks: getState().tasks.map(task => ({ ...task })) }
+  const state = getState()
+  const { eventCounter, lastTaskMessages, ...publicState } = state
+  return {
+    ...publicState,
+    tasks: publicState.tasks.map(task => ({ ...task })),
+    events: publicState.events.map(event => ({ ...event }))
+  }
 }

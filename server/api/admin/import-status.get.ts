@@ -3,10 +3,12 @@ import { join } from 'node:path'
 import { defineEventHandler } from 'h3'
 import { getMetadata } from '../../utils/sqlite'
 import { requireAdminKey } from '../../utils/adminAuth'
+import type { ImportTaskKey } from '~/types'
 
 type ImportSourceStatus = {
   key: string
   label: string
+  importKey: ImportTaskKey | null
   catalogVersion: string | null
   dateReleased: string | null
   lastImportedAt: string | null
@@ -60,6 +62,8 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
     loadCachedAt('enisa-feed.json')
   ])
 
+  const cvelistLastCommit = normaliseString(getMetadata('cvelist.lastCommit'))
+  const cvelistLastRefreshAt = normaliseString(getMetadata('cvelist.lastRefreshAt'))
   const kevEntryCount = parseNumber(getMetadata('entryCount') ?? getMetadata('catalog.entryCount'))
   const marketLastImportedAt = normaliseString(getMetadata('market.lastImportAt'))
   const marketCachedAt = normaliseString(getMetadata('market.cachedAt'))
@@ -70,8 +74,21 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
   return {
     sources: [
       {
+        key: 'cvelist',
+        label: 'CVEList vendor catalogue',
+        importKey: null,
+        catalogVersion: cvelistLastCommit ? cvelistLastCommit.slice(0, 12) : null,
+        dateReleased: null,
+        lastImportedAt: cvelistLastRefreshAt,
+        cachedAt: cvelistLastRefreshAt,
+        totalCount: null,
+        programCount: null,
+        latestCaptureAt: null
+      },
+      {
         key: 'kev',
         label: 'CISA KEV catalog',
+        importKey: 'kev',
         catalogVersion: normaliseString(getMetadata('catalogVersion')),
         dateReleased: normaliseString(getMetadata('dateReleased')),
         lastImportedAt: normaliseString(getMetadata('lastImportAt')),
@@ -83,6 +100,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
       {
         key: 'enisa',
         label: 'ENISA exploited catalog',
+        importKey: 'enisa',
         catalogVersion: normaliseString(getMetadata('enisa.lastUpdatedAt')),
         dateReleased: null,
         lastImportedAt: normaliseString(getMetadata('enisa.lastImportAt')),
@@ -94,6 +112,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
       {
         key: 'historic',
         label: 'Historic exploit dataset',
+        importKey: 'historic',
         catalogVersion: null,
         dateReleased: null,
         lastImportedAt: normaliseString(getMetadata('historic.lastImportAt')),
@@ -105,6 +124,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
       {
         key: 'metasploit',
         label: 'Metasploit',
+        importKey: 'metasploit',
         catalogVersion: normaliseString(getMetadata('metasploit.lastCommit')),
         dateReleased: null,
         lastImportedAt: normaliseString(getMetadata('metasploit.lastImportAt')),
@@ -116,6 +136,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
       {
         key: 'market',
         label: 'Market intelligence dataset',
+        importKey: 'market',
         catalogVersion: null,
         dateReleased: null,
         lastImportedAt: marketLastImportedAt,
