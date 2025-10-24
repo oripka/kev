@@ -3249,7 +3249,25 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
       {
         id: "description",
         header: "Description",
-        cell: ({ row }) => truncateDescription(row.original.description),
+        cell: ({ row }) =>
+          h(
+            "p",
+            {
+              class:
+                "max-w-xs break-words text-wrap text-sm",
+            },
+           truncateDescription(row.original.description),
+          ),
+      },
+      {
+        id: "vendor",
+        header: "Vendor",
+        cell: ({ row }) => row.original.vendor,
+      },
+      {
+        id: "product",
+        header: "Product",
+        cell: ({ row }) => row.original.product,
       },
     ];
   }
