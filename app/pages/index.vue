@@ -99,6 +99,7 @@ const showInternetExposedOnly = ref(false);
 const showTrendLines = ref(false);
 const showHeatmap = ref(false);
 const showCompactTable = ref(false);
+const showFilterPanel = ref(true);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(true);
@@ -156,6 +157,20 @@ const sortDirectionItems: SelectMenuItem<SortDirection>[] = [
   { label: "Descending", value: "desc" },
   { label: "Ascending", value: "asc" },
 ];
+
+const filterPanelToggleLabel = computed(() =>
+  showFilterPanel.value ? "Expand table" : "Show filters",
+);
+
+const filterPanelToggleIcon = computed(() =>
+  showFilterPanel.value ? "i-lucide-sidebar-close" : "i-lucide-sidebar-open",
+);
+
+const filterPanelToggleAriaLabel = computed(() =>
+  showFilterPanel.value
+    ? "Hide filters and expand table view"
+    : "Show filters panel",
+);
 
 const sortBadgeLabelMap: Record<SortOption, string> = {
   publicationDate: "Published",
@@ -3601,7 +3616,7 @@ const tableMeta = {
 
 <template>
   <div class="grid grid-cols-12">
-    <div class="col-span-3 ml-8 mt-36">
+    <div v-if="showFilterPanel" class="col-span-3 ml-8 mt-36">
       <UCard>
         <template #header>
           <span class="text-xl font-bold text-neutral-900 dark:text-neutral-50">
@@ -4518,8 +4533,16 @@ const tableMeta = {
       </UCard>
     </div>
 
-    <div class="col-span-9 mx-auto w-full px-12">
-      <div class="sticky top-24 z-50 flex justify-center w-full">
+    <div
+      :class="[
+        showFilterPanel ? 'col-span-9' : 'col-span-12',
+        'mx-auto w-full px-12',
+      ]"
+    >
+      <div
+        class="sticky top-24 z-50 flex w-full"
+        :class="showFilterPanel ? 'justify-center' : 'justify-start'"
+      >
         <QuickFilterSummary
           :quick-stat-items="quickStatItems"
           :active-filters="activeFilters"
@@ -4554,6 +4577,18 @@ const tableMeta = {
               </p>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-3">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                class="whitespace-nowrap"
+                :icon="filterPanelToggleIcon"
+                :aria-pressed="!showFilterPanel"
+                :aria-label="filterPanelToggleAriaLabel"
+                @click="showFilterPanel = !showFilterPanel"
+              >
+                {{ filterPanelToggleLabel }}
+              </UButton>
               <div class="flex items-center gap-2">
                 <USwitch
                   v-model="showCompactTable"
