@@ -85,7 +85,7 @@ Create `server/utils/cvelist-parser.ts` to expose pure functions that accept raw
    - Add JSON columns for denormalised data:
      - `affectedProducts` (JSON string array of `{ vendor, product, vendorKey, productKey, versions, platforms }`).
      - `problemTypes` (JSON array of `{ cweId, description, source }`).
-   - Backfill existing rows with empty arrays to maintain NOT NULL constraints (or make the new columns nullable with sensible defaults).
+   - We jsut overwrite / reimport everything again...Dont': Backfill existing rows with empty arrays to maintain NOT NULL constraints (or make the new columns nullable with sensible defaults).
 
 2. **New join table for multi-product relationships**
    - `vulnerability_entry_impacts` with columns:
