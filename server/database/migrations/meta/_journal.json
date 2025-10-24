@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1760961307231,
-      "tag": "0000_cynical_eternity",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1760978244920,
-      "tag": "0001_closed_skin",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1761026865533,
-      "tag": "0002_eminent_eternity",
+      "when": 1761296378405,
+      "tag": "0000_fuzzy_wonder_man",
       "breakpoints": true
     }
   ]
