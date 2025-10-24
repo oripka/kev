@@ -159,5 +159,6 @@ Create `server/utils/cvelist-parser.ts` to expose pure functions that accept raw
 - [ ] `server/utils/cvelist-parser.ts` with unit tests and fixtures.
 - [ ] Database migration adding CVEList columns and the impacts join table.
 - [ ] Import pipeline updates (KEV, ENSISA, historic, Metasploit enrichment).
+- [ ] Make sure to srufacne this in the admin ui as well
 - [ ] Classification updates for problem types/CWEs.
 - [ ] Documentation updates describing the new dependency & cache location.
