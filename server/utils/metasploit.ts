@@ -1077,33 +1077,6 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
     }
   }
 
-  if (metadata.targets.length) {
-    const joinedTargets = metadata.targets.join(' ').toLowerCase()
-    if (joinedTargets.includes('windows')) {
-      if (vendorContext.includes('microsoft')) {
-        return { vendor: 'Microsoft', product: 'Windows' }
-      }
-    }
-    if (joinedTargets.includes('linux')) {
-      return { vendor: 'Linux', product: 'Linux' }
-    }
-    if (joinedTargets.includes('mac os') || joinedTargets.includes('macos')) {
-      return { vendor: 'Apple', product: 'macOS' }
-    }
-    if (joinedTargets.includes('ios')) {
-      return { vendor: 'Apple', product: 'iOS' }
-    }
-    if (joinedTargets.includes('android')) {
-      return { vendor: 'Google', product: 'Android' }
-    }
-    if (joinedTargets.includes('solaris')) {
-      return { vendor: 'Oracle', product: 'Solaris' }
-    }
-    if (joinedTargets.includes('aix')) {
-      return { vendor: 'IBM', product: 'AIX' }
-    }
-  }
-
   return { vendor: null, product: null }
 }
 
