@@ -7,9 +7,11 @@ import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { getCachedData } from './cache'
 import { setMetadata } from './sqlite'
 import {
+  CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
   type VulnerabilityImpactRecord
 } from './cvelist'
+import { mapWithConcurrency } from './concurrency'
 import {
   markTaskComplete,
   markTaskError,
@@ -307,27 +309,29 @@ export const importEnisaCatalog = async (
       message: 'Enriching ENISA entries with classification data'
     })
 
-    let cvelistHits = 0
-    let cvelistMisses = 0
-
-    const cvelistResults = await Promise.all(
-      baseEntries.map(async base => {
+    const cvelistResults = await mapWithConcurrency(
+      baseEntries,
+      CVELIST_ENRICHMENT_CONCURRENCY,
+      async base => {
         try {
-          const result = await enrichBaseEntryWithCvelist(base, {
+          return await enrichBaseEntryWithCvelist(base, {
             preferCache: allowStale
           })
-          if (result.hit) {
-            cvelistHits += 1
-          } else {
-            cvelistMisses += 1
-          }
-          return result
         } catch {
-          cvelistMisses += 1
           return { entry: base, impacts: [], hit: false }
         }
-      })
+      }
     )
+
+    let cvelistHits = 0
+    let cvelistMisses = 0
+    for (const result of cvelistResults) {
+      if (result.hit) {
+        cvelistHits += 1
+      } else {
+        cvelistMisses += 1
+      }
+    }
 
     if (cvelistHits > 0 || cvelistMisses > 0) {
       const message = `ENISA CVEList enrichment (${cvelistHits} hits, ${cvelistMisses} misses)`

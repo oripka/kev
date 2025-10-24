@@ -1,8 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import { createTaskQueue } from './concurrency'
 
 export const CVELIST_REPO_DIR = join(process.cwd(), 'data', 'cache', 'cvelist', 'cvelistV5')
+
+const READ_CONCURRENCY = 16
+const runReadTask = createTaskQueue(READ_CONCURRENCY)
 
 const NORMALISED_WHITESPACE = /\s+/g
 
@@ -443,16 +447,18 @@ export const resolveCvePath = (cveId: string): string => {
 }
 
 export const readCveRecord = async (cveId: string): Promise<Record<string, unknown>> => {
-  const path = join(CVELIST_REPO_DIR, resolveCvePath(cveId))
-  const contents = await readFile(path, 'utf8').catch(error => {
-    throw new Error(`Unable to read CVE ${cveId}: ${(error as Error).message}`)
+  return await runReadTask(async () => {
+    const path = join(CVELIST_REPO_DIR, resolveCvePath(cveId))
+    const contents = await readFile(path, 'utf8').catch(error => {
+      throw new Error(`Unable to read CVE ${cveId}: ${(error as Error).message}`)
+    })
+    try {
+      const parsed = JSON.parse(contents) as Record<string, unknown>
+      return parsed
+    } catch (error) {
+      throw new Error(`Invalid JSON for CVE ${cveId}: ${(error as Error).message}`)
+    }
   })
-  try {
-    const parsed = JSON.parse(contents) as Record<string, unknown>
-    return parsed
-  } catch (error) {
-    throw new Error(`Invalid JSON for CVE ${cveId}: ${(error as Error).message}`)
-  }
 }
 
 export const summariseCveRecord = (

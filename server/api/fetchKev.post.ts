@@ -30,11 +30,13 @@ import { importMetasploitCatalog } from '../utils/metasploit'
 import { importMarketIntel } from '../utils/market'
 import { requireAdminKey } from '../utils/adminAuth'
 import {
+  CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
   syncCvelistRepo,
   type EnrichBaseEntryResult,
   type VulnerabilityImpactRecord
 } from '../utils/cvelist'
+import { mapWithConcurrency } from '../utils/concurrency'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -363,11 +365,10 @@ export default defineEventHandler(async event => {
       setImportPhase('enriching', { message: 'Enriching KEV entries with classification data' })
       markTaskProgress('kev', 0, baseEntries.length, 'Enriching KEV entries')
 
-      let cvelistHits = 0
-      let cvelistMisses = 0
-
-      const enrichedResults = await Promise.all(
-        baseEntries.map(async base => {
+      const enrichedResults = await mapWithConcurrency(
+        baseEntries,
+        CVELIST_ENRICHMENT_CONCURRENCY,
+        async base => {
           const metrics = cvssMetrics.get(base.cveId)
           const enrichedBase: KevBaseEntry = {
             ...base,
@@ -387,16 +388,20 @@ export default defineEventHandler(async event => {
             enrichmentResult = { entry: enrichedBase, impacts: [], hit: false }
           }
 
-          if (enrichmentResult.hit) {
-            cvelistHits += 1
-          } else {
-            cvelistMisses += 1
-          }
-
           const entry = enrichEntry(enrichmentResult.entry)
-          return { entry, impacts: enrichmentResult.impacts }
-        })
+          return { entry, impacts: enrichmentResult.impacts, hit: enrichmentResult.hit }
+        }
       )
+
+      let cvelistHits = 0
+      let cvelistMisses = 0
+      for (const result of enrichedResults) {
+        if (result.hit) {
+          cvelistHits += 1
+        } else {
+          cvelistMisses += 1
+        }
+      }
 
       if (cvelistHits > 0 || cvelistMisses > 0) {
         const message = `CVEList enrichment processed (${cvelistHits} hits, ${cvelistMisses} misses)`

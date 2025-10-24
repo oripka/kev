@@ -20,6 +20,7 @@ const CVELIST_CACHE_DIR = join(process.cwd(), 'data', 'cache', 'cvelist')
 const CVELIST_INDEX_PATH = join(CVELIST_CACHE_DIR, 'cvelist-index.json')
 const CVELIST_REPO_URL = 'https://github.com/CVEProject/cvelistV5.git'
 const CVELIST_BRANCH = 'main'
+export const CVELIST_ENRICHMENT_CONCURRENCY = 8
 
 type PersistedCache = {
   commit: string | null
