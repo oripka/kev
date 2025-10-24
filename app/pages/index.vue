@@ -3236,7 +3236,15 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
       {
         id: "title",
         header: "Title",
-        cell: ({ row }) => getEntryTitle(row.original),
+        cell: ({ row }) =>
+          h(
+            "p",
+            {
+              class:
+                "max-w-xs break-words text-wrap text-sm font-semibold text-neutral-900 dark:text-neutral-50",
+            },
+            getEntryTitle(row.original),
+          ),
       },
       {
         id: "description",
@@ -4600,7 +4608,7 @@ const tableMeta = {
                     Summary view
                   </span>
                   <span class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Show title and description only
+                    Dense
                   </span>
                 </div>
               </div>
