@@ -1,3 +1,5 @@
+import { vendorProductOverrides } from "~/constants/vendorProductOverrides";
+
 export type NormalisedName = {
   label: string;
   key: string;
@@ -13,6 +15,14 @@ export type NormalisedVendorProduct = {
 
 const DEFAULT_VENDOR = "Unknown";
 const DEFAULT_PRODUCT = "Unknown";
+
+export type VendorProductContext = {
+  vulnerabilityName?: string | null;
+  description?: string | null;
+  cveId?: string | null;
+  aliases?: string[];
+  extraTags?: string[];
+};
 
 const toTitleCase = (value: string) =>
   value
@@ -37,6 +47,65 @@ const ambiguousVendorPatterns: RegExp[] = [
 
 const isAmbiguousVendor = (value: string): boolean =>
   ambiguousVendorPatterns.some((pattern) => pattern.test(value));
+
+const isUnknownProduct = (value: string): boolean =>
+  /^(?:n\/?a|none|unknown|unspecified|not\s+applicable|not\s+available)$/i.test(
+    value
+  );
+
+const normaliseOverrideHaystack = (
+  value: Array<string | null | undefined>
+): string => {
+  const joined = value
+    .map((item) => cleanWhitespace(String(item ?? "")))
+    .filter(Boolean)
+    .join("\n");
+
+  return cleanWhitespace(joined);
+};
+
+const findVendorProductOverride = (
+  input: { vendor?: string | null; product?: string | null },
+  context?: VendorProductContext
+): { vendor: string; product: string } | null => {
+  const vendorSource = cleanWhitespace(String(input.vendor ?? ""));
+  const productSource = cleanWhitespace(String(input.product ?? ""));
+
+  const vendorAmbiguous =
+    !vendorSource ||
+    vendorSource === DEFAULT_VENDOR ||
+    isAmbiguousVendor(vendorSource);
+  const productAmbiguous =
+    !productSource ||
+    productSource === DEFAULT_PRODUCT ||
+    isUnknownProduct(productSource);
+
+  if (!vendorAmbiguous && !productAmbiguous) {
+    return null;
+  }
+
+  const haystack = normaliseOverrideHaystack([
+    vendorSource,
+    productSource,
+    context?.vulnerabilityName,
+    context?.description,
+    context?.cveId,
+    ...(context?.aliases ?? []),
+    ...(context?.extraTags ?? []),
+  ]);
+
+  if (!haystack) {
+    return null;
+  }
+
+  for (const override of vendorProductOverrides) {
+    if (override.pattern.test(haystack)) {
+      return { vendor: override.vendor, product: override.product };
+    }
+  }
+
+  return null;
+};
 
 const inferVendorFromProduct = (value: string | null | undefined): string | null => {
   const cleaned = cleanWhitespace(value ?? "");
@@ -461,10 +530,22 @@ export const normaliseVendorProduct = (
     product?: string | null;
   },
   fallbackVendor = DEFAULT_VENDOR,
-  fallbackProduct = DEFAULT_PRODUCT
+  fallbackProduct = DEFAULT_PRODUCT,
+  context?: VendorProductContext
 ): NormalisedVendorProduct => {
-  const originalVendor = input.vendor ?? fallbackVendor;
-  const originalProduct = input.product ?? fallbackProduct;
+  let originalVendor = input.vendor ?? fallbackVendor;
+  let originalProduct = input.product ?? fallbackProduct;
+
+  const override = findVendorProductOverride(
+    { vendor: originalVendor, product: originalProduct },
+    context
+  );
+
+  if (override) {
+    originalVendor = override.vendor;
+    originalProduct = override.product;
+  }
+
   const vendorSource = cleanWhitespace(originalVendor ?? "");
   const ambiguousVendor = !vendorSource || isAmbiguousVendor(vendorSource);
 

@@ -10,6 +10,10 @@ This report documents how vendor and product identifiers are normalized across t
 * When the vendor field is missing or ambiguous ("N/A", "Unknown", "Multiple vendors"), the helper infers a vendor from the product text (e.g., product strings that contain "Windows" become “Microsoft”).
 * A canonical `vendorKey` slug is generated from the normalized label to provide a stable join key across imports.
 
+### Regex fallback catalog
+* A curated set of regex overrides backs up the inference step when upstream feeds label the vendor and product as “Unknown.” The catalog currently covers IGEL OS, Appsmith, VMware ESXi/vCenter, Netis routers, BeyondTrust PRA/RS, Cleo MFT tools, pyLoad, CyberPanel, Zimbra, Microsoft Windows/Office, Sophos XG Firewall, and other repeatedly exploited entries that arrive without vendor attribution.【F:app/constants/vendorProductOverrides.ts†L1-L116】
+* During normalization the helper inspects the vulnerability title, description, CVE ID, and any extra aliases. If a regex matches, the override replaces the ambiguous vendor/product before slugging, ensuring downstream analytics pick up the correct vendor even when CVEList publishes “n/a.”【F:app/utils/vendorProduct.ts†L1-L118】【F:app/utils/vendorProduct.ts†L458-L507】【F:server/api/fetchKev.post.ts†L200-L228】
+
 These behaviors ensure that feeds already align on the base vendor name—so "Microsoft Windows" and "Windows" both normalize to the same vendor identifier.【F:app/utils/vendorProduct.ts†L1-L171】【F:app/utils/vendorProduct.ts†L458-L506】
 
 ### Product normalization

@@ -223,10 +223,19 @@ export default defineEventHandler(async event => {
 
         const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => {
           const cveId = item.cveID
-          const normalised = normaliseVendorProduct({
-            vendor: item.vendorProject,
-            product: item.product
-          })
+          const normalised = normaliseVendorProduct(
+            {
+              vendor: item.vendorProject,
+              product: item.product
+            },
+            undefined,
+            undefined,
+            {
+              vulnerabilityName: item.vulnerabilityName,
+              description: item.shortDescription,
+              cveId
+            }
+          )
           return {
             id: `kev:${cveId}`,
             sources: ['kev'],
