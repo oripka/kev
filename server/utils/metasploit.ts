@@ -855,25 +855,6 @@ const parseModuleFile = async (filePath: string, repoRoot: string): Promise<Modu
   }
 }
 
-const PLATFORM_VENDOR_MAP: Record<string, { vendor: string; product: string }> = {
-  windows: { vendor: 'Microsoft', product: 'Windows' },
-  win: { vendor: 'Microsoft', product: 'Windows' },
-  linux: { vendor: 'Linux', product: 'Linux' },
-  unix: { vendor: 'Unix', product: 'Unix' },
-  osx: { vendor: 'Apple', product: 'macOS' },
-  macos: { vendor: 'Apple', product: 'macOS' },
-  mac: { vendor: 'Apple', product: 'macOS' },
-  ios: { vendor: 'Apple', product: 'iOS' },
-  android: { vendor: 'Google', product: 'Android' },
-  solaris: { vendor: 'Oracle', product: 'Solaris' },
-  aix: { vendor: 'IBM', product: 'AIX' },
-  hpux: { vendor: 'Hewlett Packard Enterprise', product: 'HP-UX' },
-  freebsd: { vendor: 'FreeBSD Project', product: 'FreeBSD' },
-  netbsd: { vendor: 'NetBSD Project', product: 'NetBSD' },
-  openbsd: { vendor: 'OpenBSD', product: 'OpenBSD' },
-  junos: { vendor: 'Juniper Networks', product: 'Junos' }
-}
-
 const NAME_SUFFIX_PATTERNS = [
   ' remote code execution vulnerability',
   ' remote command execution vulnerability',
@@ -1093,39 +1074,6 @@ const guessVendorProduct = (metadata: ModuleMetadata): { vendor: string | null; 
     const aliasDerived = deriveVendorProductFromName(alias)
     if (aliasDerived) {
       return aliasDerived
-    }
-  }
-
-  const findMapping = (token: string | undefined): { vendor: string; product: string } | null => {
-    if (!token) {
-      return null
-    }
-    const mapping = PLATFORM_VENDOR_MAP[token.toLowerCase()]
-    if (!mapping) {
-      return null
-    }
-    if (mapping.vendor === 'Microsoft' && !vendorContext.includes('microsoft')) {
-      return null
-    }
-    return mapping
-  }
-
-  for (const platform of metadata.platforms) {
-    const mapping = findMapping(platform)
-    if (mapping) {
-      return mapping
-    }
-  }
-
-  const pathSegments = metadata.path
-    .split('/')
-    .map(segment => segment.trim().toLowerCase())
-    .filter(Boolean)
-
-  for (const segment of pathSegments) {
-    const mapping = findMapping(segment)
-    if (mapping) {
-      return mapping
     }
   }
 
