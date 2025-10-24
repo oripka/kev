@@ -1293,6 +1293,10 @@ const handleDetailQuickFilter = (update: QuickFilterUpdate) => {
   closeDetails();
 };
 
+const handleCatalogHeatmapQuickFilter = (update: QuickFilterUpdate) => {
+  applyQuickFilters(update);
+};
+
 const handleTrendQuickFilter = (update: QuickFilterUpdate) => {
   applyQuickFilters(update);
   showTrendSlideover.value = false;
@@ -1657,6 +1661,12 @@ const matchingResultsLabel = computed(() =>
 const showCatalogEmptyState = computed(
   () => !isBusy.value && results.value.length === 0
 );
+
+watch(showCatalogEmptyState, (value) => {
+  if (value) {
+    showHeatmap.value = false;
+  }
+});
 
 const hasMatchesOutsideYearRange = computed(() => {
   if (!showCatalogEmptyState.value) {
@@ -4508,15 +4518,32 @@ const tableMeta = {
                 Explore the filtered entries and launch the classification audit when you spot anomalies.
               </p>
             </div>
-            <UButton
-              color="neutral"
-              variant="outline"
-              icon="i-lucide-sparkles"
-              :disabled="isBusy || !results.length"
-              @click="showClassificationReviewSlideover = true"
-            >
-              LLM classification audit
-            </UButton>
+            <div class="flex flex-wrap items-center justify-end gap-3">
+              <div class="flex items-center gap-2">
+                <USwitch
+                  v-model="showHeatmap"
+                  :disabled="isBusy || !results.length"
+                  aria-label="Toggle heatmap view for catalog results"
+                />
+                <div class="flex flex-col text-right leading-tight">
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                    Heatmap view
+                  </span>
+                  <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                    {{ showHeatmap ? 'Vendor & product spotlight' : 'Tabular breakdown' }}
+                  </span>
+                </div>
+              </div>
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-sparkles"
+                :disabled="isBusy || !results.length"
+                @click="showClassificationReviewSlideover = true"
+              >
+                LLM classification audit
+              </UButton>
+            </div>
           </div>
         </template>
         <div>
@@ -4532,13 +4559,20 @@ const tableMeta = {
           >
             {{ catalogEmptyMessage }}
           </div>
-          <UTable
-            v-else
-            :data="results"
-            :columns="columns"
-            :meta="tableMeta"
-            @select="handleTableSelect"
-          />
+          <div v-else>
+            <CatalogHeatmapView
+              v-if="showHeatmap"
+              :entries="results"
+              @quick-filter="handleCatalogHeatmapQuickFilter"
+            />
+            <UTable
+              v-else
+              :data="results"
+              :columns="columns"
+              :meta="tableMeta"
+              @select="handleTableSelect"
+            />
+          </div>
         </div>
       </UCard>
 
