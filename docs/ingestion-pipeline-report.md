@@ -31,6 +31,7 @@ Market data piggybacks on the same orchestrator: `/api/fetchKev` delegates to `i
 ## Classification and catalog assembly
 *Classification pipeline.* After CVEList enrichment each entry passes through `enrichEntry`, which assigns domain categories, exploit layers, vulnerability classes, and an `internetExposed` flag that drive the downstream filters and badges.【F:server/api/fetchKev.post.ts†L374-L552】【F:app/utils/classification.ts†L2997-L3009】
 
+
 *Catalog rebuild.* Every import (and the standalone reclassify job) calls `rebuildCatalog` and `rebuildProductCatalog` to collapse `vulnerabilityEntries` into analytics-friendly tables and materialized product summaries.【F:server/api/fetchKev.post.ts†L622-L695】【F:server/api/admin/reclassify.post.ts†L19-L52】 Because the reclassify endpoint only rebuilds these aggregates, it cannot incorporate new heuristics unless the underlying entries themselves are refreshed through a full import run.【F:server/api/admin/reclassify.post.ts†L19-L58】
 
 ## Admin actions and their effects
@@ -57,3 +58,5 @@ Given the shared helper and caching behaviour, we recommend:
 - Prioritizing full *Import latest data* runs immediately after updating vendor/product overrides or classification heuristics so corrected labels propagate to every source.
 - Expanding the inference logic (or adding curated mappings) for the vendors and product families that are currently misclassified, especially those without strong keyword cues.
 - Enhancing the reclassify endpoint to reload raw entries and rerun normalization so data-quality fixes can be rolled out without lengthy imports.
+
+
