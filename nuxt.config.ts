@@ -7,6 +7,9 @@ export default defineNuxtConfig({
   hub: {
     database: true,
   },
+  ignore: [
+    'data/**'
+  ],
   runtimeConfig: {
     admin: {
       apiKey: process.env.ADMIN_API_KEY ?? "",
