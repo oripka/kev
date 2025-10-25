@@ -3,6 +3,7 @@ import { join, relative } from 'node:path'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
+import { matchExploitProduct } from '~/utils/exploitProductHints'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
@@ -21,6 +22,7 @@ import {
 } from './import-progress'
 import { ensureDir, runGit, syncSparseRepo } from './git'
 import { mapWithConcurrency } from './concurrency'
+import { matchVendorProductByTitle } from './metasploitVendorCatalog'
 
 const METASPLOIT_REPO_URL = 'https://github.com/rapid7/metasploit-framework.git'
 const METASPLOIT_BRANCH = 'master'
@@ -866,11 +868,35 @@ const createBaseEntries = (
   const notes = createNotes(metadata)
   return cveIds.map(cveId => {
     const aliasList = unique([cveId, ...aliases])
+    const contextSegments = [
+      metadata.name,
+      metadata.description,
+      moduleId,
+      modulePath,
+      ...aliasList,
+      ...references
+    ].filter((segment): segment is string => typeof segment === 'string' && segment.length > 0)
+    const catalogHint = matchVendorProductByTitle(contextSegments)
+    const joinedContext = contextSegments.join(' ')
+    const exploitHint = matchExploitProduct(joinedContext)
+    const resolvedHint = catalogHint ?? exploitHint
+    const hintInput = resolvedHint
+      ? { vendor: resolvedHint.vendor, product: resolvedHint.product }
+      : { vendor: null, product: null }
+    const extraTags = [modulePath, sourceUrl].filter(
+      (value): value is string => typeof value === 'string' && value.length > 0
+    )
     const normalised = normaliseVendorProduct(
-      { vendor: null, product: null },
+      hintInput,
       undefined,
       undefined,
-      undefined,
+      {
+        vulnerabilityName: metadata.name,
+        description: metadata.description,
+        cveId,
+        aliases: aliasList,
+        extraTags
+      },
       { allowOverrides: false, allowInference: false }
     )
     return {
@@ -1287,4 +1313,3 @@ export const importMetasploitCatalog = async (
     throw error instanceof Error ? error : new Error(message)
   }
 }
-
