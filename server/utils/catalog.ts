@@ -1,6 +1,10 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { lookupCveName } from '~/utils/cveToNameMap'
-import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import {
+  isMeaningfulProductLabel,
+  isMeaningfulVendorLabel,
+  normaliseVendorProduct
+} from '~/utils/vendorProduct'
 import type {
   CatalogSource,
   KevEntry,
@@ -380,8 +384,20 @@ const toStandardEntry = (
   )
   const affectedProducts = parseJsonObjectArray<KevAffectedProduct>(row.affected_products)
   const problemTypes = parseJsonObjectArray<KevProblemType>(row.problem_types)
-  const vendorKey = row.vendor_key ?? normalised.vendor.key
-  const productKey = row.product_key ?? normalised.product.key
+  const vendorKey =
+    !row.vendor_key ||
+    row.vendor_key === 'unknown' ||
+    row.vendor_key === 'vendor-unknown' ||
+    !isMeaningfulVendorLabel(row.vendor)
+      ? normalised.vendor.key
+      : row.vendor_key
+  const productKey =
+    !row.product_key ||
+    row.product_key === 'unknown__unknown' ||
+    (row.product_key?.endsWith('__product-unknown') ?? false) ||
+    !isMeaningfulProductLabel(row.product)
+      ? normalised.product.key
+      : row.product_key
 
   return {
     id: row.id,
