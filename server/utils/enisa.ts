@@ -314,9 +314,7 @@ export const importEnisaCatalog = async (
       CVELIST_ENRICHMENT_CONCURRENCY,
       async base => {
         try {
-          return await enrichBaseEntryWithCvelist(base, {
-            preferCache: allowStale
-          })
+          return await enrichBaseEntryWithCvelist(base)
         } catch {
           return { entry: base, impacts: [], hit: false }
         }

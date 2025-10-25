@@ -1247,7 +1247,7 @@ const walkRubyFiles = async (dir: string): Promise<string[]> => {
 
 export const importMetasploitCatalog = async (
   db: DrizzleDatabase,
-  options: { useCachedRepository?: boolean; offline?: boolean } = {}
+  options: { useCachedRepository?: boolean; offline?: boolean; reprocessCachedEntries?: boolean } = {}
 ): Promise<{ imported: number; commit: string | null; modules: number }> => {
   markTaskRunning('metasploit', 'Synchronising Metasploit catalog')
 
@@ -1356,7 +1356,9 @@ export const importMetasploitCatalog = async (
       return { imported: 0, commit, modules: processedModules.size }
     }
 
-    const preferCache = options.offline ?? false
+    const offline = options.offline ?? false
+    const reprocessCachedEntries = options.reprocessCachedEntries ?? false
+    const preferCache = offline && !reprocessCachedEntries
 
     const cvelistResults = await mapWithConcurrency(
       baseEntries,

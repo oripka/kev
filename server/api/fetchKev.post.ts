@@ -31,6 +31,7 @@ import { importMarketIntel } from '../utils/market'
 import { requireAdminKey } from '../utils/adminAuth'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
+  clearCvelistMemoryCache,
   enrichBaseEntryWithCvelist,
   syncCvelistRepo,
   type EnrichBaseEntryResult,
@@ -128,6 +129,10 @@ export default defineEventHandler(async event => {
   const forceRefresh = mode === 'force'
   const allowStale = mode === 'cache'
   const rawSource = typeof body?.source === 'string' ? body.source.toLowerCase() : 'all'
+
+  if (allowStale) {
+    clearCvelistMemoryCache()
+  }
 
   const sourcesToImport: ImportTaskKey[] =
     rawSource === 'all'
@@ -390,9 +395,7 @@ export default defineEventHandler(async event => {
           let enrichmentResult: EnrichBaseEntryResult
 
           try {
-            enrichmentResult = await enrichBaseEntryWithCvelist(enrichedBase, {
-              preferCache: allowStale
-            })
+            enrichmentResult = await enrichBaseEntryWithCvelist(enrichedBase)
           } catch {
             enrichmentResult = { entry: enrichedBase, impacts: [], hit: false }
           }
@@ -571,7 +574,7 @@ export default defineEventHandler(async event => {
 
     let historicSummary = { imported: 0 }
     if (shouldImport('historic')) {
-      historicSummary = await importHistoricCatalog(db, { allowStale })
+      historicSummary = await importHistoricCatalog(db)
       historicImported = historicSummary.imported
     } else {
       markTaskSkipped('historic', 'Skipped this run')
@@ -590,7 +593,8 @@ export default defineEventHandler(async event => {
     if (shouldImport('metasploit')) {
       metasploitSummary = await importMetasploitCatalog(db, {
         useCachedRepository: allowStale,
-        offline: allowStale
+        offline: allowStale,
+        reprocessCachedEntries: allowStale
       })
       metasploitImported = metasploitSummary.imported
       metasploitCommit = metasploitSummary.commit ?? metasploitCommit

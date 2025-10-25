@@ -130,15 +130,10 @@ const collectDimensionRecords = (
   return records
 }
 
-type HistoricImportOptions = {
-  allowStale?: boolean
-}
-
 export const importHistoricCatalog = async (
   db: DrizzleDatabase,
-  options: HistoricImportOptions = {}
+  _options: Record<string, never> = {}
 ): Promise<{ imported: number }> => {
-  const { allowStale = false } = options
   markTaskRunning('historic', 'Loading historic exploit dataset')
 
   try {
@@ -178,9 +173,7 @@ export const importHistoricCatalog = async (
       CVELIST_ENRICHMENT_CONCURRENCY,
       async base => {
         try {
-          return await enrichBaseEntryWithCvelist(base, {
-            preferCache: allowStale
-          })
+          return await enrichBaseEntryWithCvelist(base)
         } catch {
           return { entry: base, impacts: [], hit: false }
         }
