@@ -244,6 +244,13 @@ export const matchVendorProductByTitle = (
 
   for (const hint of loadCatalogHints()) {
     if (hint.keywords.some(keyword => containsKeywordWithBoundaries(lower, keyword))) {
+      if (
+        hint.vendor === 'Microsoft' &&
+        hint.product === 'Windows' &&
+        !/\bmicrosoft\b/.test(lower)
+      ) {
+        continue
+      }
       return { vendor: hint.vendor, product: hint.product }
     }
   }
