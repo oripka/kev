@@ -16,6 +16,11 @@ export type NormalisedVendorProduct = {
 const DEFAULT_VENDOR = "Unknown";
 const DEFAULT_PRODUCT = "Unknown";
 
+export type NormaliseVendorProductOptions = {
+  allowOverrides?: boolean;
+  allowInference?: boolean;
+};
+
 export type VendorProductContext = {
   vulnerabilityName?: string | null;
   description?: string | null;
@@ -551,19 +556,22 @@ export const normaliseVendorProduct = (
   },
   fallbackVendor = DEFAULT_VENDOR,
   fallbackProduct = DEFAULT_PRODUCT,
-  context?: VendorProductContext
+  context?: VendorProductContext,
+  options: NormaliseVendorProductOptions = {}
 ): NormalisedVendorProduct => {
   let originalVendor = input.vendor ?? fallbackVendor;
   let originalProduct = input.product ?? fallbackProduct;
 
-  const override = findVendorProductOverride(
-    { vendor: originalVendor, product: originalProduct },
-    context
-  );
+  if (options.allowOverrides !== false) {
+    const override = findVendorProductOverride(
+      { vendor: originalVendor, product: originalProduct },
+      context
+    );
 
-  if (override) {
-    originalVendor = override.vendor;
-    originalProduct = override.product;
+    if (override) {
+      originalVendor = override.vendor;
+      originalProduct = override.product;
+    }
   }
 
   const vendorSource = cleanWhitespace(originalVendor ?? "");
@@ -571,9 +579,13 @@ export const normaliseVendorProduct = (
 
   let vendorLabel = normaliseVendorLabel(originalVendor ?? fallbackVendor);
   if (vendorLabel === DEFAULT_VENDOR || ambiguousVendor) {
-    const inferredVendor = inferVendorFromProduct(originalProduct);
-    if (inferredVendor) {
-      vendorLabel = normaliseVendorLabel(inferredVendor);
+    if (options.allowInference !== false) {
+      const inferredVendor = inferVendorFromProduct(originalProduct);
+      if (inferredVendor) {
+        vendorLabel = normaliseVendorLabel(inferredVendor);
+      } else if (ambiguousVendor) {
+        vendorLabel = DEFAULT_VENDOR;
+      }
     } else if (ambiguousVendor) {
       vendorLabel = DEFAULT_VENDOR;
     }

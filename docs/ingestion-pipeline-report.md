@@ -24,8 +24,8 @@ All network-bound importers share a filesystem cache keyed by feed name. The hel
 
 
 ### Metasploit modules
-1. Parse every exploit module, guess vendor/product pairs from module metadata, then normalize them with the shared helper before creating base entries tied to module paths and commits.【F:server/utils/metasploit.ts†L1162-L1224】
-2. After initial normalization, prefer catalogued vendor/product labels from KEV, historic, or ENISA imports when they exist so the community exploit data aligns with our canonical catalog keys.【F:server/utils/metasploit.ts†L1240-L1305】
+1. Parse every exploit module and build base entries with explicit `Unknown` vendor/product placeholders; the importer disables overrides and keyword inference so module metadata never drives attribution on its own.【F:server/utils/metasploit.ts†L856-L898】【F:app/utils/vendorProduct.ts†L15-L120】
+2. After seeding those placeholders, prefer vendor/product labels already stored for the same CVE by KEV, historic, or ENISA imports so the community exploit data inherits canonical catalog keys from authoritative feeds.【F:server/utils/metasploit.ts†L913-L988】
 
 ### Market intelligence snapshots
 Market data piggybacks on the same orchestrator: `/api/fetchKev` delegates to `importMarketIntel`, recording offer/program/product counts alongside other feeds so catalog rebuilds stay in sync with the rest of the ingest cycle.【F:server/api/fetchKev.post.ts†L589-L695】
@@ -87,16 +87,8 @@ Reclassification can’t repair it. The reclassify admin action only rebuilds ag
 Together, these behaviors explain how the current pipeline lands on incorrect vendor/product combinations and keeps serving them back to the catalog.
 
 ### Metasploit platform bias
-Metasploit modules are especially prone to this issue because our importer guesses vendor/product pairs from a mix of module metadata, platform tags, and repository paths. The `guessVendorProduct` helper scans the module’s name, description, targets, aliases, and relative path when assembling hints, so platform tokens often dominate when no explicit product is present.【F:server/utils/metasploit.ts†L1035-L1078】 Historically those platform cues fed into a `PLATFORM_VENDOR_MAP` shortcut that collapsed `windows`, `linux`, `macos`, and similar strings to the corresponding platform vendor before normalisation, so any module that only named its runtime environment defaulted to Microsoft, Linux, or Apple regardless of the actual supplier.
-
-Once the importer produces a non-empty vendor/product, `normaliseVendorProduct` treats it as authoritative. Because overrides only trigger when the incoming strings are blank or generic (“Unknown,” “N/A,” etc.), an inferred `Microsoft` label is never challenged, even if the module title clearly names a third-party product.【F:app/utils/vendorProduct.ts†L49-L96】【F:app/utils/vendorProduct.ts†L101-L131】 Downstream catalog merges then preserve that first non-default vendor and product, so later sources that name the real vendor cannot overwrite the Microsoft guess without a full cache reset.【F:server/utils/catalog.ts†L486-L511】
-
-The result is a systemic bias toward Microsoft (and other platform vendors) for any Metasploit module that runs on Windows, even when the actual vulnerability belongs to Commvault, Pandora, Samsung, or another vendor. The same risk applies to Linux/macOS modules because the heuristic works identically for those platform tokens. Tightening the Metasploit heuristics (e.g., only applying platform mappings when the surrounding text names the vendor, or when no proper noun is present) and allowing overrides to re-evaluate non-ambiguous guesses would prevent these cascaded mislabels.
+Metasploit modules previously overfit to platform tokens because the importer tried to infer vendors directly from module metadata. The new pipeline leaves vendor and product fields as explicit `Unknown` placeholders during base entry creation, so platform words like “Windows” or “Linux” cannot seed Microsoft- or Apple-branded records on their own.【F:server/utils/metasploit.ts†L856-L988】 Only CVE-linked records from other feeds may override those placeholders, eliminating the self-reinforcing bias toward platform vendors.
 
 ### Mitigation deployed
 
-To eliminate the implicit vendor bias we removed the `PLATFORM_VENDOR_MAP` shortcut entirely so the importer no longer infers vendors from platform tokens embedded in module paths, `metadata.platforms`, or target lists. Instead, `guessVendorProduct` now only trusts catalog matches, exploit-product hints, module names, or aliases that explicitly mention a vendor/product pairing; otherwise it leaves the fields null and lets downstream enrichment decide.【F:server/utils/metasploit.ts†L1035-L1080】 This prevents Windows/Linux/macOS tokens from collapsing unrelated software back to the platform vendor when Metasploit metadata omits the true supplier.
-
-Clear the CVEList in-memory cache when replaying cached imports and always rerun CVEList enrichment for KEV entries instead of reusing cached summaries, ensuring cached replays pick up the latest heuristics.
-Reprocess historic and ENISA cached datasets through CVEList enrichment so classifier and override updates immediately propagate from cached payloads.
-Extend the Metasploit importer to accept a cached-replay flag, keeping offline repository usage while forcing fresh CVEList enrichment during cache-mode runs.
+`normaliseVendorProduct` now accepts options that disable curated overrides and vendor inference. The Metasploit importer opts into this strict mode, ensuring module text never triggers heuristic attribution while still allowing other sources to provide authoritative vendor/product pairs later in the run.【F:app/utils/vendorProduct.ts†L15-L130】【F:server/utils/metasploit.ts†L856-L988】
