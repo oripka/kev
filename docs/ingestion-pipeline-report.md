@@ -96,3 +96,7 @@ The result is a systemic bias toward Microsoft (and other platform vendors) for 
 ### Mitigation deployed
 
 To eliminate the implicit vendor bias we removed the `PLATFORM_VENDOR_MAP` shortcut entirely so the importer no longer infers vendors from platform tokens embedded in module paths, `metadata.platforms`, or target lists. Instead, `guessVendorProduct` now only trusts catalog matches, exploit-product hints, module names, or aliases that explicitly mention a vendor/product pairing; otherwise it leaves the fields null and lets downstream enrichment decide.【F:server/utils/metasploit.ts†L1035-L1080】 This prevents Windows/Linux/macOS tokens from collapsing unrelated software back to the platform vendor when Metasploit metadata omits the true supplier.
+
+Clear the CVEList in-memory cache when replaying cached imports and always rerun CVEList enrichment for KEV entries instead of reusing cached summaries, ensuring cached replays pick up the latest heuristics.
+Reprocess historic and ENISA cached datasets through CVEList enrichment so classifier and override updates immediately propagate from cached payloads.
+Extend the Metasploit importer to accept a cached-replay flag, keeping offline repository usage while forcing fresh CVEList enrichment during cache-mode runs.
