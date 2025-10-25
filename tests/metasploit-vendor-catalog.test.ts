@@ -18,4 +18,10 @@ describe("matchVendorProductByTitle", () => {
 
     expect(matchVendorProductByTitle(text)).toBeNull();
   });
+
+  it("does not treat partial word matches as catalog hits", () => {
+    const text = "Unauthenticated exploitation of a WordPress plugin leads to RCE";
+
+    expect(matchVendorProductByTitle(text)).toBeNull();
+  });
 });

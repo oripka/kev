@@ -73,6 +73,36 @@ const cleanKeyword = (value: string): string =>
 
 const hasMeaningfulLength = (keyword: string): boolean => keyword.length >= 4 || /\d/.test(keyword)
 
+const isAlphaNumeric = (value: string): boolean => /[a-z0-9]/i.test(value)
+
+const containsKeywordWithBoundaries = (text: string, keyword: string): boolean => {
+  if (!keyword) {
+    return false
+  }
+
+  let startIndex = 0
+  while (startIndex <= text.length) {
+    const matchIndex = text.indexOf(keyword, startIndex)
+    if (matchIndex === -1) {
+      break
+    }
+
+    const beforeChar = matchIndex > 0 ? text.charAt(matchIndex - 1) : ''
+    const afterPosition = matchIndex + keyword.length
+    const afterChar = afterPosition < text.length ? text.charAt(afterPosition) : ''
+    const hasValidPrefix = !beforeChar || !isAlphaNumeric(beforeChar)
+    const hasValidSuffix = !afterChar || !isAlphaNumeric(afterChar)
+
+    if (hasValidPrefix && hasValidSuffix) {
+      return true
+    }
+
+    startIndex = matchIndex + 1
+  }
+
+  return false
+}
+
 const extractKeywordVariants = (vendor: string, product: string): string[] => {
   const variants = new Set<string>()
 
@@ -213,7 +243,7 @@ export const matchVendorProductByTitle = (
   const lower = joined.toLowerCase()
 
   for (const hint of loadCatalogHints()) {
-    if (hint.keywords.some(keyword => lower.includes(keyword))) {
+    if (hint.keywords.some(keyword => containsKeywordWithBoundaries(lower, keyword))) {
       return { vendor: hint.vendor, product: hint.product }
     }
   }
