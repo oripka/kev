@@ -7,7 +7,7 @@ const props = defineProps<{
   hasActiveFilters: boolean;
   hasActiveFilterChips: boolean;
   searchInput: string;
-  selectedSource: "all" | "kev" | "enisa" | "historic" | "metasploit";
+  selectedSource: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc";
   yearRange: [number, number];
   yearSliderMin: number;
   yearSliderMax: number;
@@ -24,7 +24,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "update:open", value: boolean): void;
   (event: "update:search-input", value: string): void;
-  (event: "update:selected-source", value: "all" | "kev" | "enisa" | "historic" | "metasploit"): void;
+  (
+    event: "update:selected-source",
+    value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
+  ): void;
   (event: "update:year-range", value: [number, number]): void;
   (event: "update:cvss-range", value: [number, number]): void;
   (event: "update:epss-range", value: [number, number]): void;
@@ -47,7 +50,8 @@ const hasSearchTerm = computed(() => searchModel.value.trim().length > 0);
 
 const selectedSource = computed({
   get: () => props.selectedSource,
-  set: (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => emit("update:selected-source", value),
+  set: (value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc") =>
+    emit("update:selected-source", value),
 });
 
 const yearRange = computed({
@@ -88,15 +92,21 @@ const clearSearch = () => {
   searchModel.value = "";
 };
 
-const sourceLabels: Record<"all" | "kev" | "enisa" | "historic" | "metasploit", string> = {
+const sourceLabels: Record<
+  "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
+  string
+> = {
   all: "All sources",
   kev: "CISA KEV",
   enisa: "ENISA",
   historic: "Historic dataset",
   metasploit: "Metasploit",
+  poc: "GitHub PoCs",
 };
 
-const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => {
+const selectSource = (
+  value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
+) => {
   selectedSource.value = value;
 };
 </script>
@@ -150,14 +160,22 @@ const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit"
           <UFormField label="Data source">
             <div class="flex flex-wrap gap-2">
               <UButton
-                v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit']"
+                v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit', 'poc']"
                 :key="option"
                 size="sm"
                 :color="selectedSource === option ? 'primary' : 'neutral'"
                 :variant="selectedSource === option ? 'solid' : 'outline'"
-                @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit')"
+                @click="
+                  selectSource(
+                    option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit' | 'poc',
+                  )
+                "
               >
-                {{ sourceLabels[option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit'] }}
+                {{
+                  sourceLabels[
+                    option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit' | 'poc'
+                  ]
+                }}
               </UButton>
             </div>
           </UFormField>

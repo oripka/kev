@@ -27,6 +27,7 @@ import { getDatabase, getMetadata } from '../utils/sqlite'
 import { tables } from '../database/client'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 import { importMetasploitCatalog } from '../utils/metasploit'
+import { importGithubPocCatalog } from '../utils/github-poc'
 import { importMarketIntel } from '../utils/market'
 import { requireAdminKey } from '../utils/adminAuth'
 import {
@@ -105,7 +106,7 @@ const ONE_DAY_MS = 86_400_000
 
 type ImportMode = 'auto' | 'force' | 'cache'
 
-const IMPORT_SOURCE_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'market']
+const IMPORT_SOURCE_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'poc', 'market']
 
 const isImportSourceKey = (value: string): value is ImportTaskKey => {
   return IMPORT_SOURCE_ORDER.includes(value as ImportTaskKey)
@@ -165,6 +166,7 @@ export default defineEventHandler(async event => {
   let historicImported = 0
   let enisaImported = 0
   let metasploitImported = 0
+  let pocImported = 0
   let marketImported = 0
   let marketOfferCount = 0
   let marketProgramCount = 0
@@ -269,6 +271,7 @@ export default defineEventHandler(async event => {
             dateUpdated: null,
             exploitedSince: item.dateAdded ?? null,
             sourceUrl: null,
+            pocUrl: null,
             references: [],
             aliases: cveId ? [cveId] : [],
             metasploitModulePath: null,
@@ -475,6 +478,7 @@ export default defineEventHandler(async event => {
               dateUpdated: entry.dateUpdated,
               exploitedSince: entry.exploitedSince,
               sourceUrl: entry.sourceUrl ?? null,
+              pocUrl: entry.pocUrl ?? null,
               referenceLinks: toJson(entry.references),
               aliases: toJson(entry.aliases),
               affectedProducts: toJson(entry.affectedProducts),
@@ -603,6 +607,18 @@ export default defineEventHandler(async event => {
       markTaskSkipped('metasploit', 'Skipped this run')
     }
 
+    let pocSummary = { imported: 0, cachedAt: null as string | null }
+    if (shouldImport('poc')) {
+      pocSummary = await importGithubPocCatalog(db, {
+        ttlMs: ONE_DAY_MS,
+        forceRefresh,
+        allowStale
+      })
+      pocImported = pocSummary.imported
+    } else {
+      markTaskSkipped('poc', 'Skipped this run')
+    }
+
     let marketSummary = {
       imported: 0,
       offerCount: 0,
@@ -631,6 +647,7 @@ export default defineEventHandler(async event => {
       historicImported +
       enisaImported +
       metasploitImported +
+      pocImported +
       marketImported
 
     const segments: string[] = []
@@ -650,6 +667,9 @@ export default defineEventHandler(async event => {
           ? `${base} across ${metasploitModules.toLocaleString()} modules`
         : base
       segments.push(withModules)
+    }
+    if (shouldImport('poc')) {
+      segments.push(`${pocImported.toLocaleString()} GitHub PoC entries`)
     }
     if (shouldImport('market')) {
       const base = `${marketOfferCount.toLocaleString()} market intelligence offers`
@@ -685,6 +705,7 @@ export default defineEventHandler(async event => {
       metasploitImported: metasploitSummary.imported,
       metasploitModules: metasploitSummary.modules,
       metasploitCommit: metasploitSummary.commit,
+      pocImported: pocSummary.imported,
       marketImported: marketSummary.imported,
       marketOfferCount: marketSummary.offerCount,
       marketProgramCount: marketSummary.programCount,

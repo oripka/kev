@@ -7,7 +7,13 @@ export type Range = {
 
 export type CvssSeverity = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 
-export type CatalogSource = 'kev' | 'enisa' | 'historic' | 'metasploit' | 'market'
+export type CatalogSource =
+  | 'kev'
+  | 'enisa'
+  | 'historic'
+  | 'metasploit'
+  | 'poc'
+  | 'market'
 
 export type MarketProgramType = 'exploit-broker' | 'bug-bounty' | 'other'
 
@@ -119,6 +125,7 @@ export type KevEntry = {
   dateUpdated: string | null
   exploitedSince: string | null
   sourceUrl: string | null
+  pocUrl: string | null
   references: string[]
   aliases: string[]
   metasploitModulePath: string | null
@@ -352,12 +359,14 @@ export type ImportPhase =
   | 'fetchingEnisa'
   | 'fetchingHistoric'
   | 'fetchingMetasploit'
+  | 'fetchingPoc'
   | 'fetchingMarket'
   | 'enriching'
   | 'saving'
   | 'savingEnisa'
   | 'savingHistoric'
   | 'savingMetasploit'
+  | 'savingPoc'
   | 'savingMarket'
   | 'complete'
   | 'error'

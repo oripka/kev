@@ -222,11 +222,15 @@ const priceSliderReady = computed(() => {
   );
 });
 
-const selectedSource = ref<"all" | "kev" | "enisa" | "historic" | "metasploit">("all");
+const selectedSource = ref<
+  "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc"
+>("all");
 const selectedMarketProgramType = ref<MarketProgramType | null>(null);
 const isFiltering = ref(false);
 
-const selectSource = (value: "all" | "kev" | "enisa" | "historic" | "metasploit") => {
+const selectSource = (
+  value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
+) => {
   selectedSource.value = value;
 };
 
@@ -511,7 +515,8 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
     sourceParam === "kev" ||
     sourceParam === "enisa" ||
     sourceParam === "historic" ||
-    sourceParam === "metasploit"
+    sourceParam === "metasploit" ||
+    sourceParam === "poc"
   ) {
     resolvedSource = sourceParam;
   }
@@ -1264,6 +1269,7 @@ const createDetailPlaceholder = (entry: KevEntrySummary): KevEntryDetail => ({
   dateUpdated: null,
   exploitedSince: null,
   sourceUrl: null,
+  pocUrl: null,
   references: [],
   aliases: [],
   metasploitModulePath: null,
@@ -3764,12 +3770,16 @@ const tableMeta = {
                   <UFormField label="Data source">
                     <div class="flex flex-wrap gap-2">
                       <UButton
-                        v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit']"
+                        v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit', 'poc']"
                         :key="option"
                         size="sm"
                         :color="selectedSource === option ? 'primary' : 'neutral'"
                         :variant="selectedSource === option ? 'solid' : 'outline'"
-                        @click="selectSource(option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit')"
+                        @click="
+                          selectSource(
+                            option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit' | 'poc',
+                          )
+                        "
                       >
                         {{ option === "all" ? "All sources" : catalogSourceLabels[option as CatalogSource] }}
                       </UButton>

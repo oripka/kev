@@ -232,6 +232,7 @@ const createDetailPlaceholder = (entry: KevEntrySummary): KevEntryDetail => ({
   dateUpdated: null,
   exploitedSince: null,
   sourceUrl: null,
+  pocUrl: null,
   references: [],
   aliases: [],
   metasploitModulePath: null,

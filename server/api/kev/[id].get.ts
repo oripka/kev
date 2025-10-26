@@ -338,6 +338,7 @@ export default defineEventHandler(async event => {
         ce.date_updated_ts,
         ce.exploited_since,
         ce.source_url,
+        ce.poc_url,
         ce.reference_links,
         ce.aliases,
         ce.metasploit_module_path,

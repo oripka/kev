@@ -41,6 +41,7 @@ export const catalogEntries = sqliteTable(
     dateUpdatedTs: integer('date_updated_ts'),
     exploitedSince: text('exploited_since'),
     sourceUrl: text('source_url'),
+    pocUrl: text('poc_url'),
     referenceLinks: text('reference_links').notNull(),
     aliases: text('aliases').notNull(),
     metasploitModulePath: text('metasploit_module_path'),
@@ -53,7 +54,8 @@ export const catalogEntries = sqliteTable(
     hasSourceKev: integer('has_source_kev').notNull().default(0),
     hasSourceEnisa: integer('has_source_enisa').notNull().default(0),
     hasSourceHistoric: integer('has_source_historic').notNull().default(0),
-    hasSourceMetasploit: integer('has_source_metasploit').notNull().default(0)
+    hasSourceMetasploit: integer('has_source_metasploit').notNull().default(0),
+    hasSourcePoc: integer('has_source_poc').notNull().default(0)
   },
   table => ({
     vendorKeyIdx: index('idx_catalog_entries_vendor_key').on(table.vendorKey),
@@ -111,6 +113,7 @@ export const vulnerabilityEntries = sqliteTable('vulnerability_entries', {
   dateUpdated: text('date_updated'),
   exploitedSince: text('exploited_since'),
   sourceUrl: text('source_url'),
+  pocUrl: text('poc_url'),
   referenceLinks: text('reference_links'),
   aliases: text('aliases'),
   affectedProducts: text('affected_products').notNull().default('[]'),

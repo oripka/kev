@@ -57,9 +57,10 @@ const loadCachedAt = async (fileName: string): Promise<string | null> => {
 export default defineEventHandler(async (event): Promise<ImportStatusResponse> => {
   requireAdminKey(event)
 
-  const [kevCachedAt, enisaCachedAt] = await Promise.all([
+  const [kevCachedAt, enisaCachedAt, pocCachedAt] = await Promise.all([
     loadCachedAt('kev-feed.json'),
-    loadCachedAt('enisa-feed.json')
+    loadCachedAt('enisa-feed.json'),
+    loadCachedAt('github-poc-feed.json')
   ])
 
   const cvelistLastCommit = normaliseString(getMetadata('cvelist.lastCommit'))
@@ -130,6 +131,18 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         lastImportedAt: normaliseString(getMetadata('metasploit.lastImportAt')),
         cachedAt: null,
         totalCount: parseNumber(getMetadata('metasploit.totalCount')),
+        programCount: null,
+        latestCaptureAt: null
+      },
+      {
+        key: 'poc',
+        label: 'GitHub PoC feed',
+        importKey: 'poc',
+        catalogVersion: null,
+        dateReleased: null,
+        lastImportedAt: normaliseString(getMetadata('poc.lastImportAt')),
+        cachedAt: pocCachedAt ?? normaliseString(getMetadata('poc.cachedAt')),
+        totalCount: parseNumber(getMetadata('poc.totalCount')),
         programCount: null,
         latestCaptureAt: null
       },

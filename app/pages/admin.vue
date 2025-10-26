@@ -34,6 +34,7 @@ const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
   historic: "historic entries",
   enisa: "ENISA entries",
   metasploit: "Metasploit entries",
+  poc: "GitHub PoC entries",
   market: "market intelligence offers",
 };
 
@@ -207,6 +208,7 @@ const importSummaryMessage = computed(() => {
     historic: summary.historicImported,
     enisa: summary.enisaImported,
     metasploit: summary.metasploitImported,
+    poc: summary.pocImported,
     market: summary.marketImported,
   };
 
@@ -362,6 +364,7 @@ const importProgressPercent = computed(() => {
     phase === "fetchingEnisa" ||
     phase === "fetchingHistoric" ||
     phase === "fetchingMetasploit" ||
+    phase === "fetchingPoc" ||
     phase === "fetchingMarket"
   ) {
     return 60;
@@ -371,6 +374,7 @@ const importProgressPercent = computed(() => {
     phase === "savingEnisa" ||
     phase === "savingHistoric" ||
     phase === "savingMetasploit" ||
+    phase === "savingPoc" ||
     phase === "savingMarket"
   ) {
     return total === 0 ? 90 : Math.min(100, Math.round((completed / total) * 100));

@@ -48,6 +48,7 @@ type VulnerabilityEntryRow = {
   date_updated: string | null
   exploited_since: string | null
   source_url: string | null
+  poc_url: string | null
   reference_links: string | null
   aliases: string | null
   vendor_key: string | null
@@ -111,6 +112,7 @@ export type CatalogEntryRow = {
   date_updated_ts: number | null
   exploited_since: string | null
   source_url: string | null
+  poc_url: string | null
   reference_links: string
   aliases: string
   metasploit_module_path: string | null
@@ -124,6 +126,7 @@ export type CatalogEntryRow = {
   has_source_enisa: number
   has_source_historic: number
   has_source_metasploit: number
+  has_source_poc: number
 }
 
 export type CatalogSummaryRow = {
@@ -365,7 +368,7 @@ const getEntryCategories = (
 const toStandardEntry = (
   row: VulnerabilityEntryRow,
   categories: EntryCategories,
-  source: 'kev' | 'historic' | 'metasploit'
+  source: 'kev' | 'historic' | 'metasploit' | 'poc'
 ): KevEntry => {
   const cveId = normaliseCve(row.cve_id ?? row.id)
   const notes = parseJsonArray(row.notes)
@@ -428,6 +431,7 @@ const toStandardEntry = (
     dateUpdated: row.updated_at ?? null,
     exploitedSince: row.exploited_since ?? row.date_added ?? null,
     sourceUrl: row.source_url ?? null,
+    pocUrl: row.poc_url ?? null,
     references: parseJsonArray(row.reference_links),
     aliases: aliasList.length ? aliasList : [cveId],
     affectedProducts,
@@ -455,6 +459,11 @@ const toMetasploitEntry = (
   row: VulnerabilityEntryRow,
   categories: EntryCategories
 ): KevEntry => toStandardEntry(row, categories, 'metasploit')
+
+const toPocEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry => toStandardEntry(row, categories, 'poc')
 
 const toEnisaEntry = (
   row: VulnerabilityEntryRow,
@@ -557,6 +566,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   const dateUpdated = pickLatestString(existing.dateUpdated, incoming.dateUpdated)
   const exploitedSince = pickEarliestString(existing.exploitedSince, incoming.exploitedSince)
   const sourceUrl = existing.sourceUrl ?? incoming.sourceUrl ?? null
+  const pocUrl = existing.pocUrl ?? incoming.pocUrl ?? null
   const references = mergeUniqueStrings(existing.references, incoming.references)
   const aliases = mergeUniqueStrings(existing.aliases, incoming.aliases).map(alias => alias.toUpperCase())
 
@@ -609,6 +619,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     dateUpdated,
     exploitedSince,
     sourceUrl,
+    pocUrl,
     references,
     aliases,
     affectedProducts,
@@ -626,7 +637,8 @@ const buildCatalogEntries = (
   kevEntries: KevEntry[],
   enisaEntries: KevEntry[],
   historicEntries: KevEntry[],
-  metasploitEntries: KevEntry[]
+  metasploitEntries: KevEntry[],
+  pocEntries: KevEntry[]
 ): KevEntry[] => {
   const merged = new Map<string, KevEntry>()
 
@@ -650,6 +662,7 @@ const buildCatalogEntries = (
   enisaEntries.forEach(add)
   historicEntries.forEach(add)
   metasploitEntries.forEach(add)
+  pocEntries.forEach(add)
 
   const entries = Array.from(merged.values())
   entries.sort(sortByChronology)
@@ -749,6 +762,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
         date_updated,
         exploited_since,
         source_url,
+        poc_url,
         reference_links,
         aliases,
         affected_products,
@@ -811,7 +825,17 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
     .filter(row => row.source === 'metasploit')
     .map(row => toMetasploitEntry(row, getEntryCategories(row.id, categoryMap)))
 
-  const catalogEntries = buildCatalogEntries(kevEntries, enisaEntries, historicEntries, metasploitEntries)
+  const pocEntries = entryRows
+    .filter(row => row.source === 'poc')
+    .map(row => toPocEntry(row, getEntryCategories(row.id, categoryMap)))
+
+  const catalogEntries = buildCatalogEntries(
+    kevEntries,
+    enisaEntries,
+    historicEntries,
+    metasploitEntries,
+    pocEntries
+  )
 
   db.transaction(tx => {
     tx.delete(tables.catalogEntryDimensions).run()
@@ -829,6 +853,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
       const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
       const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
       const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
+      const hasSourcePoc = toBooleanFlag(entry.sources.includes('poc'))
 
       tx
         .insert(tables.catalogEntries)
@@ -862,6 +887,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           dateUpdatedTs,
           exploitedSince: entry.exploitedSince,
           sourceUrl: entry.sourceUrl,
+          pocUrl: entry.pocUrl,
           referenceLinks: toJson(entry.references),
           aliases: toJson(entry.aliases),
           metasploitModulePath: entry.metasploitModulePath,
@@ -874,7 +900,8 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           hasSourceKev,
           hasSourceEnisa,
           hasSourceHistoric,
-          hasSourceMetasploit
+          hasSourceMetasploit,
+          hasSourcePoc
         })
         .run()
 
@@ -1113,6 +1140,7 @@ export const catalogRowToEntry = (
     dateUpdated: row.date_updated,
     exploitedSince: row.exploited_since,
     sourceUrl: row.source_url,
+    pocUrl: row.poc_url,
     references,
     aliases,
     domainCategories,
