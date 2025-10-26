@@ -33,6 +33,7 @@ type CatalogQuery = {
   startYear?: number
   endYear?: number
   wellKnownOnly?: boolean
+  publicExploitOnly?: boolean
   source?: CatalogSource
   cvssMin?: number
   cvssMax?: number
@@ -182,6 +183,11 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.ransomwareOnly = true
   }
 
+  const publicExploitOnly = raw['publicExploitOnly']
+  if (publicExploitOnly === 'true' || publicExploitOnly === '1' || publicExploitOnly === true) {
+    filters.publicExploitOnly = true
+  }
+
   const internetExposedOnly = raw['internetExposedOnly']
   if (
     internetExposedOnly === 'true' ||
@@ -321,6 +327,10 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
     conditions.push(eq(ce.hasSourceMetasploit, 1))
   } else if (filters.source === 'poc') {
     conditions.push(eq(ce.hasSourcePoc, 1))
+  }
+
+  if (filters.publicExploitOnly) {
+    conditions.push(sql`(${ce.hasSourceMetasploit} = 1 OR ${ce.hasSourcePoc} = 1)`)
   }
 
   if (filters.internetExposedOnly) {

@@ -19,6 +19,7 @@ export type QuickFilterUpdate = {
   showWellKnownOnly?: boolean;
   showRansomwareOnly?: boolean;
   showInternetExposedOnly?: boolean;
+  showPublicExploitOnly?: boolean;
   showOwnedOnly?: boolean;
   cvssRange?: [number, number];
   epssRange?: [number, number];
@@ -32,6 +33,7 @@ export type ActiveFilterKey =
   | "search"
   | "wellKnown"
   | "internet"
+  | "publicExploit"
   | "ransomware"
   | "yearRange"
   | "source"

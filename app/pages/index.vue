@@ -96,6 +96,7 @@ const debouncedSearch = ref("");
 const showWellKnownOnly = ref(false);
 const showRansomwareOnly = ref(false);
 const showInternetExposedOnly = ref(false);
+const showPublicExploitOnly = ref(false);
 const showTrendLines = ref(false);
 const showHeatmap = ref(false);
 const showCompactTable = ref(false);
@@ -553,6 +554,7 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
   updateBooleanFlag(showWellKnownOnly, "wellKnownOnly", false);
   updateBooleanFlag(showRansomwareOnly, "ransomwareOnly", false);
   updateBooleanFlag(showInternetExposedOnly, "internetExposedOnly", false);
+  updateBooleanFlag(showPublicExploitOnly, "publicExploitOnly", false);
 
   const ownedOnly =
     parseQueryBoolean(getValue("ownedOnly")) ??
@@ -720,6 +722,10 @@ const routeQueryState = computed<Record<string, string>>(() => {
     query.ransomwareOnly = "true";
   }
 
+  if (showPublicExploitOnly.value) {
+    query.publicExploitOnly = "true";
+  }
+
   if (showInternetExposedOnly.value) {
     query.internetExposedOnly = "true";
   }
@@ -871,6 +877,7 @@ const filterParams = computed(() => {
     endYear,
     wellKnownOnly: showWellKnownOnly.value ? true : undefined,
     ransomwareOnly: showRansomwareOnly.value ? true : undefined,
+    publicExploitOnly: showPublicExploitOnly.value ? true : undefined,
     ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
     internetExposedOnly: showInternetExposedOnly.value ? true : undefined,
   };
@@ -1026,6 +1033,7 @@ const filterParamsWithoutYear = computed(() => {
     product: filters.product || undefined,
     wellKnownOnly: showWellKnownOnly.value ? true : undefined,
     ransomwareOnly: showRansomwareOnly.value ? true : undefined,
+    publicExploitOnly: showPublicExploitOnly.value ? true : undefined,
     ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
     internetExposedOnly: showInternetExposedOnly.value ? true : undefined,
     limit: 1,
@@ -1179,6 +1187,7 @@ const hasActiveFilters = computed(() => {
       hasDomainFilters ||
       hasTrackedFilter ||
       showWellKnownOnly.value ||
+      showPublicExploitOnly.value ||
       showInternetExposedOnly.value ||
       hasCustomYearRange.value ||
       hasCvssFilter ||
@@ -1629,6 +1638,7 @@ const resetFilters = () => {
   debouncedSearch.value = "";
   showWellKnownOnly.value = false;
   showInternetExposedOnly.value = false;
+  showPublicExploitOnly.value = false;
   showOwnedOnly.value = false;
   showAllResults.value = true;
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
@@ -2285,6 +2295,13 @@ const matchesPresetState = (update: QuickFilterUpdate) => {
   }
 
   if (
+    typeof update.showPublicExploitOnly === "boolean" &&
+    showPublicExploitOnly.value !== update.showPublicExploitOnly
+  ) {
+    return false;
+  }
+
+  if (
     typeof update.showInternetExposedOnly === "boolean" &&
     showInternetExposedOnly.value !== update.showInternetExposedOnly
   ) {
@@ -2722,6 +2739,14 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     });
   }
 
+  if (showPublicExploitOnly.value) {
+    items.push({
+      key: "publicExploit",
+      label: "Focus",
+      value: "Public exploit coverage",
+    });
+  }
+
   if (showInternetExposedOnly.value) {
     items.push({
       key: "internet",
@@ -2950,6 +2975,7 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     showWellKnownOnly: nextWellKnownOnly,
     showRansomwareOnly: nextRansomwareOnly,
     showInternetExposedOnly: nextInternetExposedOnly,
+    showPublicExploitOnly: nextPublicExploitOnly,
     showOwnedOnly: nextOwnedOnly,
     cvssRange: nextCvssRange,
     epssRange: nextEpssRange,
@@ -3015,6 +3041,10 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     showRansomwareOnly.value = nextRansomwareOnly;
   }
 
+  if (typeof nextPublicExploitOnly === "boolean") {
+    showPublicExploitOnly.value = nextPublicExploitOnly;
+  }
+
   if (typeof nextInternetExposedOnly === "boolean") {
     showInternetExposedOnly.value = nextInternetExposedOnly;
   }
@@ -3065,6 +3095,7 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
   if (
     typeof nextWellKnownOnly === "boolean" ||
     typeof nextRansomwareOnly === "boolean" ||
+    typeof nextPublicExploitOnly === "boolean" ||
     typeof nextInternetExposedOnly === "boolean" ||
     typeof nextOwnedOnly === "boolean"
   ) {
@@ -3146,6 +3177,7 @@ const clearFilter = (
     | "cvssRange"
     | "epssRange"
     | "internet"
+    | "publicExploit"
     | "ransomware"
     | "owned"
 ) => {
@@ -3203,6 +3235,11 @@ const clearFilter = (
 
   if (key === "ransomware") {
     showRansomwareOnly.value = false;
+    return;
+  }
+
+  if (key === "publicExploit") {
+    showPublicExploitOnly.value = false;
     return;
   }
 
@@ -4422,6 +4459,19 @@ const tableMeta = {
                   </p>
                 </div>
                 <USwitch v-model="showRansomwareOnly" />
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p
+                    class="text-sm font-medium text-neutral-700 dark:text-neutral-200"
+                  >
+                    Public exploit coverage
+                  </p>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Surface CVEs with Metasploit modules or published GitHub PoCs.
+                  </p>
+                </div>
+                <USwitch v-model="showPublicExploitOnly" />
               </div>
               <div class="flex items-center justify-between gap-3">
                 <div>

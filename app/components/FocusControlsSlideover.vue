@@ -8,6 +8,7 @@ const props = defineProps<{
   showWellKnownOnly: boolean;
   showRansomwareOnly: boolean;
   showInternetExposedOnly: boolean;
+  showPublicExploitOnly: boolean;
   trackedProductCount: number;
 }>();
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{
   (event: "update:show-well-known-only", value: boolean): void;
   (event: "update:show-ransomware-only", value: boolean): void;
   (event: "update:show-internet-exposed-only", value: boolean): void;
+  (event: "update:show-public-exploit-only", value: boolean): void;
 }>();
 
 const open = computed({
@@ -42,6 +44,11 @@ const showRansomwareOnly = computed({
 const showInternetExposedOnly = computed({
   get: () => props.showInternetExposedOnly,
   set: (value: boolean) => emit("update:show-internet-exposed-only", value),
+});
+
+const showPublicExploitOnly = computed({
+  get: () => props.showPublicExploitOnly,
+  set: (value: boolean) => emit("update:show-public-exploit-only", value),
 });
 </script>
 
@@ -87,6 +94,15 @@ const showInternetExposedOnly = computed({
               </p>
             </div>
             <USwitch v-model="showRansomwareOnly" />
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Public exploit coverage</p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                Surface CVEs with Metasploit modules or published GitHub PoCs.
+              </p>
+            </div>
+            <USwitch v-model="showPublicExploitOnly" />
           </div>
           <div class="flex items-center justify-between gap-3">
             <div>

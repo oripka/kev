@@ -11,9 +11,10 @@ const METASPLOIT_METADATA_URL =
 
 const currentFile = fileURLToPath(import.meta.url);
 const repoRoot = dirname(dirname(currentFile));
-const dataDir = join(repoRoot, 'datasets');
-const metasploitTitlesPath = join(dataDir, 'metasploit_exploit_titles.json');
-const metasploitVendorsPath = join(dataDir, 'metasploit_vendor_products.json');
+const cacheDir = join(repoRoot, 'data', 'cache');
+const datasetsDir = join(repoRoot, 'datasets');
+const metasploitTitlesPath = join(cacheDir, 'metasploit_exploit_titles.json');
+const metasploitVendorsPath = join(datasetsDir, 'metasploit_vendor_products.json');
 const kevPath = join(repoRoot, 'kev.json');
 const historicPath = join(repoRoot, 'historic.json');
 
@@ -193,7 +194,7 @@ const buildVendorProductCatalog = (metasploitEntries, cveMap) => {
 };
 
 const main = async () => {
-  await mkdir(dataDir, { recursive: true });
+  await Promise.all([mkdir(cacheDir, { recursive: true }), mkdir(datasetsDir, { recursive: true })]);
 
   let metasploitEntries;
   if (args.has('--refresh') || !existsSync(metasploitTitlesPath)) {
