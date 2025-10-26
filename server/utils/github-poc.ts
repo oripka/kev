@@ -179,7 +179,21 @@ export const importGithubPocCatalog = async (
       : 'Downloaded GitHub PoC feed'
     markTaskProgress('poc', 0, 0, cacheMessage)
 
-    const parsed = pocDatasetSchema.safeParse(dataset.data)
+    let payload: unknown = dataset.data
+
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload)
+      } catch (error) {
+        throw new Error(
+          `GitHub PoC feed cache is corrupted and could not be parsed as JSON: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        )
+      }
+    }
+
+    const parsed = pocDatasetSchema.safeParse(payload)
     if (!parsed.success) {
       throw new Error('GitHub PoC feed has an invalid format')
     }
