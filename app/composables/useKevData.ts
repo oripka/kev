@@ -26,6 +26,11 @@ type NormalisedQuery = Record<string, string>
 type ImportSummary = {
   imported: number
   kevImported: number
+  kevNewCount: number
+  kevUpdatedCount: number
+  kevSkippedCount: number
+  kevRemovedCount: number
+  kevImportStrategy: ImportStrategy
   historicImported: number
   enisaImported: number
   metasploitImported: number
@@ -46,10 +51,12 @@ type ImportSummary = {
 }
 
 type ImportMode = 'auto' | 'force' | 'cache'
+type ImportStrategy = 'full' | 'incremental'
 
 type ImportOptions = {
   mode?: ImportMode
   source?: ImportTaskKey | 'all'
+  strategy?: ImportStrategy
 }
 
 type UseKevDataResult = {
@@ -260,6 +267,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   const importLatest = async (options: ImportOptions = {}) => {
     const mode: ImportMode = options.mode ?? 'auto'
     const source = options.source ?? 'all'
+    const strategy: ImportStrategy = options.strategy ?? 'full'
     importing.value = true
     importError.value = null
 
@@ -270,7 +278,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
 
       const response = await $fetch<ImportSummary>('/api/fetchKev', {
         method: 'POST',
-        body: { mode, source }
+        body: { mode, source, strategy }
       })
 
       lastImportSummary.value = response

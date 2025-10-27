@@ -25,8 +25,18 @@ type ImportSourceStatus = {
   latestCaptureAt: string | null;
 };
 
+type KevImportSummary = {
+  lastImportedAt: string | null;
+  newCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  removedCount: number;
+  strategy: "full" | "incremental";
+};
+
 type AdminImportStatusResponse = {
   sources: ImportSourceStatus[];
+  kevSummary: KevImportSummary | null;
 };
 
 const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
@@ -61,7 +71,7 @@ const {
   error: importStatusError,
   refresh: refreshImportStatuses,
 } = await useFetch<AdminImportStatusResponse>("/api/admin/import-status", {
-  default: () => ({ sources: [] }),
+  default: () => ({ sources: [], kevSummary: null }),
   headers: {
     "cache-control": "no-store",
   },
@@ -69,6 +79,7 @@ const {
 
 const importSources = computed(() => importStatusData.value?.sources ?? []);
 const importEvents = computed(() => importProgress.value.events ?? []);
+const kevSummaryFromStatus = computed(() => importStatusData.value?.kevSummary ?? null);
 
 type FormattedImportSource = {
   key: string;
@@ -90,6 +101,13 @@ type FormattedImportEvent = {
   status: ImportProgressEventStatus;
   badgeVariant: string;
   taskLabel: string | null;
+};
+
+type KevSummaryBadge = {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
 };
 
 const { formatDate } = useDateDisplay();
@@ -195,6 +213,46 @@ const formattedImportEvents = computed<FormattedImportEvent[]>(() =>
     }),
 );
 
+const resolvedKevImportSummary = computed<KevImportSummary | null>(() => {
+  const summary = lastImportSummary.value;
+  if (summary && summary.sources.includes("kev")) {
+    return {
+      lastImportedAt: summary.importedAt,
+      newCount: summary.kevNewCount,
+      updatedCount: summary.kevUpdatedCount,
+      skippedCount: summary.kevSkippedCount,
+      removedCount: summary.kevRemovedCount,
+      strategy: summary.kevImportStrategy,
+    } satisfies KevImportSummary;
+  }
+  return kevSummaryFromStatus.value;
+});
+
+const kevImportSummaryDescription = computed(() => {
+  const summary = resolvedKevImportSummary.value;
+  if (!summary) {
+    return null;
+  }
+  const strategyLabel = summary.strategy === "incremental" ? "incremental update" : "full import";
+  const timestamp = summary.lastImportedAt ? formatTimestamp(summary.lastImportedAt) : null;
+  return timestamp ? `Last KEV ${strategyLabel} on ${timestamp}` : `Last KEV ${strategyLabel}`;
+});
+
+const kevSummaryBadges = computed<KevSummaryBadge[]>(() => {
+  const summary = resolvedKevImportSummary.value;
+  if (!summary) {
+    return [];
+  }
+  return [
+    { key: "new", label: "New", value: summary.newCount, color: "success" },
+    { key: "updated", label: "Updated", value: summary.updatedCount, color: "primary" },
+    { key: "unchanged", label: "Unchanged", value: summary.skippedCount, color: "neutral" },
+    { key: "removed", label: "Removed", value: summary.removedCount, color: "error" },
+  ];
+});
+
+const hasKevImportSummary = computed(() => Boolean(resolvedKevImportSummary.value));
+
 const totalCachedEntries = computed(() => totalEntries.value);
 
 const importSummaryMessage = computed(() => {
@@ -256,6 +314,27 @@ const importSummaryMessage = computed(() => {
   }
 
   if (summary.sources.includes("kev")) {
+    if (summary.kevImportStrategy === "incremental") {
+      const kevChanges: string[] = [];
+      if (summary.kevNewCount > 0) {
+        kevChanges.push(`${summary.kevNewCount.toLocaleString()} new`);
+      }
+      if (summary.kevUpdatedCount > 0) {
+        kevChanges.push(`${summary.kevUpdatedCount.toLocaleString()} updated`);
+      }
+      if (summary.kevSkippedCount > 0) {
+        kevChanges.push(`${summary.kevSkippedCount.toLocaleString()} unchanged`);
+      }
+      if (summary.kevRemovedCount > 0) {
+        kevChanges.push(`${summary.kevRemovedCount.toLocaleString()} removed`);
+      }
+      if (kevChanges.length) {
+        messageParts.push(`Incremental KEV update touched ${kevChanges.join(", ")}.`);
+      } else {
+        messageParts.push("Incremental KEV update detected no changes.");
+      }
+    }
+
     const kevDetails: string[] = [];
     if (summary.catalogVersion) {
       kevDetails.push(`catalog version ${summary.catalogVersion}`);
@@ -328,6 +407,18 @@ const handleImport = async (source: ImportTaskKey | "all" = "all") => {
 
   try {
     await importLatest({ mode: "force", source });
+  } finally {
+    await refreshImportStatuses();
+  }
+};
+
+const handleIncrementalKevImport = async () => {
+  if (!isDevEnvironment) {
+    return;
+  }
+
+  try {
+    await importLatest({ mode: "force", source: "kev", strategy: "incremental" });
   } finally {
     await refreshImportStatuses();
   }
@@ -673,6 +764,25 @@ const handleResetDatabase = async () => {
               >
                 {{ importSummaryMessage }}
               </p>
+              <div
+                v-if="hasKevImportSummary && kevSummaryBadges.length"
+                class="space-y-1 text-xs text-neutral-500 dark:text-neutral-400"
+              >
+                <p>
+                  {{ kevImportSummaryDescription }}.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                  <UBadge
+                    v-for="badge in kevSummaryBadges"
+                    :key="badge.key"
+                    :color="badge.color"
+                    variant="soft"
+                    class="text-[11px] font-semibold"
+                  >
+                    {{ badge.label }} {{ numberFormatter.format(badge.value) }}
+                  </UBadge>
+                </div>
+              </div>
               <UAlert
                 v-if="!isDevEnvironment"
                 color="neutral"
@@ -742,6 +852,18 @@ const handleResetDatabase = async () => {
                         @click="() => handleImport(source.importKey as ImportTaskKey)"
                       >
                         Fetch latest
+                      </UButton>
+                      <UButton
+                        v-if="source.importKey === 'kev'"
+                        size="sm"
+                        color="success"
+                        variant="soft"
+                        icon="i-lucide-sparkles"
+                        :disabled="importing || !isDevEnvironment"
+                        aria-label="Run incremental KEV update"
+                        @click="handleIncrementalKevImport"
+                      >
+                        Incremental update
                       </UButton>
                       <UButton
                         size="sm"

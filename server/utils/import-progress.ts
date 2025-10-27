@@ -386,3 +386,11 @@ export const getImportProgress = (): ImportProgressState => {
     events: publicState.events.map(event => ({ ...event }))
   }
 }
+
+export const publishTaskEvent = (
+  key: ImportTaskKey,
+  message: string,
+  status: ImportProgressEventStatus = 'info'
+) => {
+  pushEvent({ message, status, taskKey: key, phase: getState().phase })
+}

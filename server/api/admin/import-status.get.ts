@@ -18,8 +18,18 @@ type ImportSourceStatus = {
   latestCaptureAt: string | null
 }
 
+type KevImportSummary = {
+  lastImportedAt: string | null
+  newCount: number
+  updatedCount: number
+  skippedCount: number
+  removedCount: number
+  strategy: 'full' | 'incremental'
+}
+
 type ImportStatusResponse = {
   sources: ImportSourceStatus[]
+  kevSummary: KevImportSummary | null
 }
 
 const CACHE_DIR = join(process.cwd(), 'data', 'cache')
@@ -66,6 +76,13 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
   const cvelistLastCommit = normaliseString(getMetadata('cvelist.lastCommit'))
   const cvelistLastRefreshAt = normaliseString(getMetadata('cvelist.lastRefreshAt'))
   const kevEntryCount = parseNumber(getMetadata('entryCount') ?? getMetadata('catalog.entryCount'))
+  const kevLastImportedAt = normaliseString(getMetadata('lastImportAt'))
+  const kevNewCount = parseNumber(getMetadata('kev.lastNewCount')) ?? 0
+  const kevUpdatedCount = parseNumber(getMetadata('kev.lastUpdatedCount')) ?? 0
+  const kevSkippedCount = parseNumber(getMetadata('kev.lastSkippedCount')) ?? 0
+  const kevRemovedCount = parseNumber(getMetadata('kev.lastRemovedCount')) ?? 0
+  const kevStrategyRaw = normaliseString(getMetadata('kev.lastImportStrategy'))
+  const kevStrategy: 'full' | 'incremental' = kevStrategyRaw === 'incremental' ? 'incremental' : 'full'
   const marketLastImportedAt = normaliseString(getMetadata('market.lastImportAt'))
   const marketCachedAt = normaliseString(getMetadata('market.cachedAt'))
   const marketOfferCount = parseNumber(getMetadata('market.offerCount'))
@@ -92,7 +109,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'kev',
         catalogVersion: normaliseString(getMetadata('catalogVersion')),
         dateReleased: normaliseString(getMetadata('dateReleased')),
-        lastImportedAt: normaliseString(getMetadata('lastImportAt')),
+        lastImportedAt: kevLastImportedAt,
         cachedAt: kevCachedAt,
         totalCount: kevEntryCount,
         programCount: null,
@@ -158,6 +175,16 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         programCount: marketProgramCount,
         latestCaptureAt: marketLastCaptureAt
       }
-    ]
+    ],
+    kevSummary: kevLastImportedAt
+      ? {
+          lastImportedAt: kevLastImportedAt,
+          newCount: kevNewCount,
+          updatedCount: kevUpdatedCount,
+          skippedCount: kevSkippedCount,
+          removedCount: kevRemovedCount,
+          strategy: kevStrategy
+        }
+      : null
   }
 })
