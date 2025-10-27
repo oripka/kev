@@ -501,6 +501,7 @@ const queryEntries = (
       due_date: ce.dueDate,
       date_added: ce.dateAdded,
       date_published: ce.datePublished,
+      poc_published_at: ce.pocPublishedAt,
       ransomware_use: ce.ransomwareUse,
       cvss_score: ce.cvssScore,
       cvss_severity: ce.cvssSeverity,

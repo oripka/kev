@@ -702,6 +702,14 @@ const timelineStats = computed(() => {
                     Not available
                   </p>
                 </div>
+                <div>
+                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    PoC published
+                  </p>
+                  <p class="text-base text-neutral-900 dark:text-neutral-100">
+                    {{ props.entry.pocPublishedAt ? formatDate(props.entry.pocPublishedAt, { fallback: props.entry.pocPublishedAt, preserveInputOnError: true }) : "Not available" }}
+                  </p>
+                </div>
                 <div class="space-y-1 col-span-2">
                   <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                     CVSS

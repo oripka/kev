@@ -325,11 +325,18 @@ export const importGithubPocCatalog = async (
 
     const enrichedEntries = enrichmentResults.map(result => enrichEntry(result.entry))
 
+    const historyCandidates = new Map<string, { cveId: string; referenceDate: string | null }>()
+    for (const entry of enrichedEntries) {
+      if (!historyCandidates.has(entry.cveId)) {
+        historyCandidates.set(entry.cveId, {
+          cveId: entry.cveId,
+          referenceDate: resolveDateAdded(entry, datasetTimestamp)
+        })
+      }
+    }
+
     const publishDates = await resolvePocPublishDates(
-      enrichedEntries.map(entry => ({
-        cveId: entry.cveId,
-        referenceDate: resolveDateAdded(entry, datasetTimestamp)
-      })),
+      Array.from(historyCandidates.values()),
       {
         useCachedRepository: options.allowStale ?? dataset.cacheHit,
         lookbackDays: POC_HISTORY_LOOKBACK_DAYS
@@ -396,6 +403,7 @@ export const importGithubPocCatalog = async (
             exploitedSince: entry.exploitedSince,
             sourceUrl: entry.sourceUrl,
             pocUrl: entry.pocUrl,
+            pocPublishedAt: entry.pocPublishedAt,
             referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
             affectedProducts: toJson(entry.affectedProducts),

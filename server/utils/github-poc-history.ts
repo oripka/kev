@@ -6,7 +6,8 @@ import { ensureDir, runGit, syncSparseRepo } from './git'
 
 const SOURCE_REPO_URL = 'https://github.com/0xMarcio/cve.git'
 const REPO_DIR = join(process.cwd(), 'data', 'cache', 'github-poc-repo')
-const CACHE_PATH = join(process.cwd(), 'data', 'cache', 'github-poc-published.json')
+const CACHE_DIR = join(process.cwd(), 'data', 'cache')
+const CACHE_PATH = join(CACHE_DIR, 'github-poc-published.json')
 const HISTORY_CONCURRENCY = 4
 const DEFAULT_LOOKBACK_DAYS = 365
 
@@ -33,7 +34,7 @@ const loadCache = async (): Promise<PublishCache> => {
 }
 
 const persistCache = async (cache: PublishCache) => {
-  await ensureDir(CACHE_PATH)
+  await ensureDir(CACHE_DIR)
   await writeFile(CACHE_PATH, JSON.stringify(cache, null, 2), 'utf8')
 }
 
