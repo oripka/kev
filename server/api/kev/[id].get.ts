@@ -13,7 +13,7 @@ import type {
   KevTimelineEventType,
 } from '~/types'
 
-const catalogSourceValues: CatalogSource[] = ['kev', 'enisa', 'historic', 'metasploit']
+const catalogSourceValues: CatalogSource[] = ['kev', 'enisa', 'historic', 'metasploit', 'poc']
 
 const toCatalogSource = (value: string | null | undefined): CatalogSource | null => {
   if (typeof value !== 'string') {
@@ -267,6 +267,18 @@ const buildTimelineEvents = (entry: KevEntry, rows: TimelineRow[]): KevEntryTime
       continue
     }
 
+    if (source === 'poc') {
+      const timestamp =
+        row.poc_published_at ?? row.date_added ?? row.exploited_since ?? row.date_published ?? null
+      const pocUrl = row.poc_url ?? null
+
+      addEvent('poc_published', timestamp, {
+        ...base,
+        ...(pocUrl ? { url: pocUrl } : {}),
+      })
+      continue
+    }
+
     if (source === 'historic') {
       const timestamp = row.date_added ?? row.exploited_since ?? row.date_published ?? null
       addEvent('historic_reference', timestamp, base)
@@ -339,6 +351,7 @@ export default defineEventHandler(async event => {
         ce.exploited_since,
         ce.source_url,
         ce.poc_url,
+        ce.poc_published_at,
         ce.reference_links,
         ce.aliases,
         ce.metasploit_module_path,

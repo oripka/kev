@@ -11,6 +11,7 @@ import { setMetadata } from './sqlite'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
+  flushCvelistCache,
   type VulnerabilityImpactRecord
 } from './cvelist'
 import { mapWithConcurrency } from './concurrency'
@@ -101,6 +102,7 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
     exploitedSince: dateAdded || null,
     sourceUrl: null,
     pocUrl: null,
+    pocPublishedAt: null,
     references: [],
     aliases: [cveId.toUpperCase()],
     metasploitModulePath: null,
@@ -181,6 +183,8 @@ export const importHistoricCatalog = async (
       }
     )
 
+    await flushCvelistCache()
+
     let cvelistHits = 0
     let cvelistMisses = 0
     for (const result of cvelistResults) {
@@ -249,9 +253,10 @@ export const importHistoricCatalog = async (
             datePublished: entry.datePublished,
             dateUpdated: entry.dateUpdated,
             exploitedSince: entry.exploitedSince,
-            sourceUrl: entry.sourceUrl,
-            pocUrl: entry.pocUrl,
-            referenceLinks: toJson(entry.references),
+          sourceUrl: entry.sourceUrl,
+          pocUrl: entry.pocUrl,
+          pocPublishedAt: entry.pocPublishedAt,
+          referenceLinks: toJson(entry.references),
             aliases: toJson(entry.aliases),
             affectedProducts: toJson(entry.affectedProducts),
             problemTypes: toJson(entry.problemTypes),

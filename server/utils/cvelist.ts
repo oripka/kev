@@ -54,6 +54,8 @@ const loadPersistedCache = async () => {
   return persistedCache
 }
 
+let cacheDirty = false
+
 const persistCache = async () => {
   if (!persistedCache) {
     return
@@ -61,6 +63,7 @@ const persistCache = async () => {
   await ensureDir(CVELIST_CACHE_DIR)
   const serialised = JSON.stringify(persistedCache, null, 2)
   await writeFile(CVELIST_INDEX_PATH, serialised, 'utf8')
+  cacheDirty = false
 }
 
 const normaliseVersionRange = (version: NormalisedVersion): KevVersionRange => ({
@@ -448,7 +451,7 @@ export const syncCvelistRepo = async (
 
   if (persistedCache && result.commit && persistedCache.commit !== result.commit) {
     persistedCache.commit = result.commit
-    await persistCache()
+    cacheDirty = true
   }
 
   if (result.commit) {
@@ -490,7 +493,7 @@ export const loadCvelistRecord = async (
       if (cache.commit === undefined) {
         cache.commit = null
       }
-      await persistCache()
+      cacheDirty = true
     }
 
     return summary
@@ -501,4 +504,12 @@ export const loadCvelistRecord = async (
 
 export const clearCvelistMemoryCache = () => {
   inMemoryCache.clear()
+}
+
+export const flushCvelistCache = async () => {
+  if (cacheDirty) {
+    await persistCache().catch(() => {
+      // Swallow persist errors; cache will rebuild on next run.
+    })
+  }
 }

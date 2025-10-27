@@ -12,6 +12,7 @@ import { mapWithConcurrency } from './concurrency'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
+  flushCvelistCache,
   type VulnerabilityImpactRecord
 } from './cvelist'
 import {
@@ -19,8 +20,13 @@ import {
   markTaskError,
   markTaskProgress,
   markTaskRunning,
-  setImportPhase
+  setImportPhase,
+  updateImportProgress
 } from './import-progress'
+import { resolvePocPublishDates } from './github-poc-history'
+
+const POC_ENRICHMENT_CONCURRENCY = Math.max(16, CVELIST_ENRICHMENT_CONCURRENCY)
+const POC_HISTORY_LOOKBACK_DAYS = 365
 
 const SOURCE_URL = 'https://raw.githubusercontent.com/0xMarcio/cve/main/docs/CVE_list.json'
 const SOURCE_REPO_URL = 'https://github.com/0xMarcio/cve/tree/main'
@@ -65,6 +71,29 @@ const normaliseLinks = (links: string[]): string[] => {
 
 const toJson = (value: unknown): string => JSON.stringify(value ?? [])
 
+const cvePattern = /cve-\d{4}-\d{4,}/i
+
+const filterMeaningfulPocLinks = (cveId: string, links: string[]): string[] => {
+  const lowerCve = cveId.toLowerCase()
+  return links.filter(link => {
+    try {
+      const url = new URL(link)
+      const host = url.hostname.toLowerCase()
+      if (host === 'github.com' || host.endsWith('.github.com')) {
+        const path = url.pathname.toLowerCase()
+        const search = url.search.toLowerCase()
+        if (path.includes(lowerCve) || search.includes(lowerCve)) {
+          return true
+        }
+        return cvePattern.test(path)
+      }
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 const toBaseEntry = (
   item: z.infer<typeof pocEntrySchema>,
   datasetTimestamp: string
@@ -79,8 +108,13 @@ const toBaseEntry = (
     return null
   }
 
+  const filteredLinks = filterMeaningfulPocLinks(cveId, pocLinks)
+  if (!filteredLinks.length) {
+    return null
+  }
+
   const description = item.desc?.trim() ?? ''
-  const primaryPocUrl = pocLinks[0] ?? null
+  const primaryPocUrl = filteredLinks[0] ?? null
   const normalised = normaliseVendorProduct(
     { vendor: undefined, product: undefined },
     undefined,
@@ -92,7 +126,7 @@ const toBaseEntry = (
     }
   )
 
-  const references = Array.from(new Set([...pocLinks, SOURCE_REPO_URL]))
+  const references = Array.from(new Set([...filteredLinks, SOURCE_REPO_URL]))
 
   return {
     id: `poc:${cveId}`,
@@ -118,8 +152,8 @@ const toBaseEntry = (
     cvssSeverity: null,
     epssScore: null,
     assigner: null,
-    datePublished: datasetTimestamp || null,
-    dateUpdated: datasetTimestamp || null,
+    datePublished: null,
+    dateUpdated: null,
     exploitedSince: null,
     sourceUrl: primaryPocUrl ?? SOURCE_REPO_URL,
     pocUrl: primaryPocUrl,
@@ -127,7 +161,8 @@ const toBaseEntry = (
     aliases: [cveId],
     metasploitModulePath: null,
     metasploitModulePublishedAt: null,
-    internetExposed: false
+    internetExposed: false,
+    pocPublishedAt: null
   }
 }
 
@@ -140,6 +175,25 @@ type ImportOptions = {
 type ImportSummary = {
   imported: number
   cachedAt: string | null
+}
+
+const resolveDateAdded = (entry: KevBaseEntry, fallback: string): string => {
+  const candidates = [
+    entry.pocPublishedAt,
+    entry.exploitedSince,
+    entry.datePublished,
+    entry.dateUpdated,
+    entry.dateAdded,
+    fallback
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate
+    }
+  }
+
+  return ''
 }
 
 export const importGithubPocCatalog = async (
@@ -203,27 +257,47 @@ export const importGithubPocCatalog = async (
       .map(entry => toBaseEntry(entry, datasetTimestamp))
       .filter((entry): entry is KevBaseEntry => entry !== null)
 
+    markTaskProgress(
+      'poc',
+      0,
+      0,
+      `Filtered GitHub PoC feed to ${baseEntries.length.toLocaleString('en-US')} CVEs with actionable links`
+    )
+
+    const totalEnrichment = baseEntries.length
+
     setImportPhase('enriching', {
       message: 'Enriching GitHub PoC entries with CVE data',
       completed: 0,
-      total: baseEntries.length
+      total: totalEnrichment
     })
 
     markTaskProgress(
       'poc',
       0,
-      baseEntries.length,
+      totalEnrichment,
       'Enriching GitHub PoC entries with CVE data'
     )
 
     const enrichmentResults = await mapWithConcurrency(
       baseEntries,
-      CVELIST_ENRICHMENT_CONCURRENCY,
+      POC_ENRICHMENT_CONCURRENCY,
       async base => {
         try {
-          return await enrichBaseEntryWithCvelist(base)
+          return await enrichBaseEntryWithCvelist(base, {
+            preferCache: dataset.cacheHit
+          })
         } catch {
           return { entry: base, impacts: [], hit: false }
+        }
+      },
+      {
+        onProgress(completed, total) {
+          if (total === 0) {
+            return
+          }
+          updateImportProgress('enriching', completed, total)
+          markTaskProgress('poc', completed, total)
         }
       }
     )
@@ -249,7 +323,33 @@ export const importGithubPocCatalog = async (
       markTaskProgress('poc', 0, 0, message)
     }
 
-    const entries = enrichmentResults.map(result => enrichEntry(result.entry))
+    const enrichedEntries = enrichmentResults.map(result => enrichEntry(result.entry))
+
+    const publishDates = await resolvePocPublishDates(
+      enrichedEntries.map(entry => ({
+        cveId: entry.cveId,
+        referenceDate: resolveDateAdded(entry, datasetTimestamp)
+      })),
+      {
+        useCachedRepository: options.allowStale ?? dataset.cacheHit,
+        lookbackDays: POC_HISTORY_LOOKBACK_DAYS
+      }
+    )
+
+    await flushCvelistCache()
+
+    const entries = enrichedEntries.map(entry => {
+      const pocPublishedAt = publishDates.get(entry.cveId) ?? entry.pocPublishedAt ?? null
+      const withPublish = {
+        ...entry,
+        pocPublishedAt
+      }
+      const resolvedDate = resolveDateAdded(withPublish, datasetTimestamp)
+      return {
+        ...withPublish,
+        dateAdded: resolvedDate
+      }
+    })
 
     setImportPhase('savingPoc', {
       message: 'Saving GitHub PoC entries to the local cache',

@@ -11,6 +11,7 @@ import { setMetadata } from './sqlite'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
+  flushCvelistCache,
   type VulnerabilityImpactRecord
 } from './cvelist'
 import {
@@ -927,7 +928,8 @@ const createBaseEntries = (
       dateUpdated: null,
       exploitedSince: metadata.disclosureDate,
       sourceUrl,
-      pocUrl: null,
+    pocUrl: null,
+    pocPublishedAt: null,
       references,
       aliases: aliasList,
       metasploitModulePath: modulePath,
@@ -1164,6 +1166,7 @@ export const importMetasploitCatalog = async (
         }
       }
     )
+    await flushCvelistCache()
 
     let cvelistHits = 0
     let cvelistMisses = 0
@@ -1237,6 +1240,7 @@ export const importMetasploitCatalog = async (
             exploitedSince: entry.exploitedSince,
             sourceUrl: entry.sourceUrl,
             pocUrl: entry.pocUrl,
+            pocPublishedAt: entry.pocPublishedAt,
             referenceLinks: JSON.stringify(entry.references),
             aliases: JSON.stringify(entry.aliases),
             affectedProducts: JSON.stringify(entry.affectedProducts),

@@ -217,6 +217,14 @@ const timelineMeta: Record<KevTimelineEventType | "default", TimelineMeta> = {
       return modulePath ? `Module path: ${modulePath}` : "Exploit available in Metasploit.";
     },
   },
+  poc_published: {
+    icon: "i-lucide-flask-conical",
+    title: () => "Proof of concept published",
+    description: event => {
+      const label = getSourceLabel(event.source);
+      return label ? `PoC listed by ${label}.` : "PoC published in monitored feeds.";
+    },
+  },
   historic_reference: {
     icon: "i-lucide-archive",
     title: () => "Historic exploitation noted",
@@ -314,6 +322,19 @@ const sortedTimelineEvents = computed<KevEntryTimelineEvent[]>(() => {
         timestamp: entry.metasploitModulePublishedAt,
         source: "metasploit",
         ...(metadata ? { metadata } : {}),
+      });
+    }
+  }
+
+  if (entry.pocPublishedAt) {
+    const hasPocEvent = events.some(event => event.type === "poc_published");
+    if (!hasPocEvent) {
+      events.push({
+        id: `poc_published:${entry.pocPublishedAt}`,
+        type: "poc_published",
+        timestamp: entry.pocPublishedAt,
+        source: "poc",
+        url: entry.pocUrl,
       });
     }
   }
@@ -656,6 +677,29 @@ const timelineStats = computed(() => {
                   </p>
                   <p class="text-base text-neutral-900 dark:text-neutral-100">
                     {{ props.entry.ransomwareUse || 'Not specified' }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    Proof of concept
+                  </p>
+                  <template v-if="props.entry.pocUrl">
+                    <UButton
+                      as="a"
+                      :href="props.entry.pocUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      color="primary"
+                      variant="link"
+                      size="md"
+                      class="!h-auto !p-0 text-left text-base font-semibold"
+                    >
+                      View PoC
+                      <UIcon name="i-lucide-external-link" class="ml-1 h-4 w-4" />
+                    </UButton>
+                  </template>
+                  <p v-else class="text-base text-neutral-500 dark:text-neutral-400">
+                    Not available
                   </p>
                 </div>
                 <div class="space-y-1 col-span-2">

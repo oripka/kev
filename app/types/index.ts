@@ -37,6 +37,7 @@ export type KevTimelineEventType =
   | 'kev_listed'
   | 'enisa_listed'
   | 'metasploit_module'
+  | 'poc_published'
   | 'historic_reference'
   | 'exploitation_observed'
   | 'custom'
@@ -126,6 +127,7 @@ export type KevEntry = {
   exploitedSince: string | null
   sourceUrl: string | null
   pocUrl: string | null
+  pocPublishedAt: string | null
   references: string[]
   aliases: string[]
   metasploitModulePath: string | null
@@ -194,6 +196,7 @@ export type KevEntrySummary = Pick<
   | 'internetExposed'
   | 'aliases'
   | 'marketSignals'
+  | 'pocPublishedAt'
 >
 
 export type KevCountDatum = {

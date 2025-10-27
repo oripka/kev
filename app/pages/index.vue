@@ -103,7 +103,7 @@ const showCompactTable = ref(false);
 const showFilterPanel = ref(true);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
-const showAllResults = ref(true);
+const showAllResults = ref(false);
 const showMySoftwareSlideover = ref(false);
 const showClassificationReviewSlideover = ref(false);
 
@@ -190,7 +190,7 @@ const sortBadgeText = computed(
 );
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
-const maxEntryLimit = 10_000;
+const maxEntryLimit = 25;
 const cvssRange = ref<[number, number]>([
   defaultCvssRange[0],
   defaultCvssRange[1],

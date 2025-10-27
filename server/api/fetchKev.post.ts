@@ -35,6 +35,7 @@ import {
   clearCvelistMemoryCache,
   enrichBaseEntryWithCvelist,
   syncCvelistRepo,
+  flushCvelistCache,
   type EnrichBaseEntryResult,
   type VulnerabilityImpactRecord
 } from '../utils/cvelist'
@@ -272,6 +273,7 @@ export default defineEventHandler(async event => {
             exploitedSince: item.dateAdded ?? null,
             sourceUrl: null,
             pocUrl: null,
+            pocPublishedAt: null,
             references: [],
             aliases: cveId ? [cveId] : [],
             metasploitModulePath: null,
@@ -379,8 +381,14 @@ export default defineEventHandler(async event => {
         })
       }
 
-      setImportPhase('enriching', { message: 'Enriching KEV entries with classification data' })
-      markTaskProgress('kev', 0, baseEntries.length, 'Enriching KEV entries')
+      const totalEnrichment = baseEntries.length
+
+      setImportPhase('enriching', {
+        message: 'Enriching KEV entries with classification data',
+        completed: 0,
+        total: totalEnrichment
+      })
+      markTaskProgress('kev', 0, totalEnrichment, 'Enriching KEV entries')
 
       const enrichedResults = await mapWithConcurrency(
         baseEntries,
@@ -405,8 +413,19 @@ export default defineEventHandler(async event => {
 
           const entry = enrichEntry(enrichmentResult.entry)
           return { entry, impacts: enrichmentResult.impacts, hit: enrichmentResult.hit }
+        },
+        {
+          onProgress(completed, total) {
+            if (total === 0) {
+              return
+            }
+            updateImportProgress('enriching', completed, total)
+            markTaskProgress('kev', completed, total)
+          }
         }
       )
+
+      await flushCvelistCache()
 
       let cvelistHits = 0
       let cvelistMisses = 0
@@ -479,6 +498,7 @@ export default defineEventHandler(async event => {
               exploitedSince: entry.exploitedSince,
               sourceUrl: entry.sourceUrl ?? null,
               pocUrl: entry.pocUrl ?? null,
+              pocPublishedAt: entry.pocPublishedAt ?? null,
               referenceLinks: toJson(entry.references),
               aliases: toJson(entry.aliases),
               affectedProducts: toJson(entry.affectedProducts),

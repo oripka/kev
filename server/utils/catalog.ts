@@ -49,6 +49,7 @@ type VulnerabilityEntryRow = {
   exploited_since: string | null
   source_url: string | null
   poc_url: string | null
+  poc_published_at: string | null
   reference_links: string | null
   aliases: string | null
   vendor_key: string | null
@@ -113,6 +114,7 @@ export type CatalogEntryRow = {
   exploited_since: string | null
   source_url: string | null
   poc_url: string | null
+  poc_published_at: string | null
   reference_links: string
   aliases: string
   metasploit_module_path: string | null
@@ -142,6 +144,7 @@ export type CatalogSummaryRow = {
   due_date: string | null
   date_added: string | null
   date_published: string | null
+  poc_published_at: string | null
   ransomware_use: string | null
   cvss_score: number | null
   cvss_severity: string | null
@@ -432,6 +435,7 @@ const toStandardEntry = (
     exploitedSince: row.exploited_since ?? row.date_added ?? null,
     sourceUrl: row.source_url ?? null,
     pocUrl: row.poc_url ?? null,
+    pocPublishedAt: row.poc_published_at ?? null,
     references: parseJsonArray(row.reference_links),
     aliases: aliasList.length ? aliasList : [cveId],
     affectedProducts,
@@ -567,6 +571,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
   const exploitedSince = pickEarliestString(existing.exploitedSince, incoming.exploitedSince)
   const sourceUrl = existing.sourceUrl ?? incoming.sourceUrl ?? null
   const pocUrl = existing.pocUrl ?? incoming.pocUrl ?? null
+  const pocPublishedAt = pickEarliestString(existing.pocPublishedAt, incoming.pocPublishedAt)
   const references = mergeUniqueStrings(existing.references, incoming.references)
   const aliases = mergeUniqueStrings(existing.aliases, incoming.aliases).map(alias => alias.toUpperCase())
 
@@ -620,6 +625,7 @@ const mergeEntry = (existing: KevEntry, incoming: KevEntry): KevEntry => {
     exploitedSince,
     sourceUrl,
     pocUrl,
+    pocPublishedAt,
     references,
     aliases,
     affectedProducts,
@@ -763,6 +769,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
         exploited_since,
         source_url,
         poc_url,
+        poc_published_at,
         reference_links,
         aliases,
         affected_products,
@@ -888,6 +895,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
           exploitedSince: entry.exploitedSince,
           sourceUrl: entry.sourceUrl,
           pocUrl: entry.pocUrl,
+          pocPublishedAt: entry.pocPublishedAt,
           referenceLinks: toJson(entry.references),
           aliases: toJson(entry.aliases),
           metasploitModulePath: entry.metasploitModulePath,
@@ -1141,6 +1149,7 @@ export const catalogRowToEntry = (
     exploitedSince: row.exploited_since,
     sourceUrl: row.source_url,
     pocUrl: row.poc_url,
+    pocPublishedAt: row.poc_published_at,
     references,
     aliases,
     domainCategories,
@@ -1184,6 +1193,7 @@ export const catalogRowToSummary = (
     dueDate: row.due_date ?? null,
     dateAdded: row.date_added ?? '',
     datePublished: row.date_published ?? null,
+    pocPublishedAt: row.poc_published_at ?? null,
     ransomwareUse: row.ransomware_use,
     cvssScore: typeof row.cvss_score === 'number' ? row.cvss_score : null,
     cvssSeverity:
