@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import type { CatalogSource } from "~/types";
 import type { ActiveFilter } from "~/types/dashboard";
 
 const props = defineProps<{
@@ -7,7 +8,7 @@ const props = defineProps<{
   hasActiveFilters: boolean;
   hasActiveFilterChips: boolean;
   searchInput: string;
-  selectedSource: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc";
+  selectedSources: CatalogSource[];
   yearRange: [number, number];
   yearSliderMin: number;
   yearSliderMax: number;
@@ -24,10 +25,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "update:open", value: boolean): void;
   (event: "update:search-input", value: string): void;
-  (
-    event: "update:selected-source",
-    value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
-  ): void;
+  (event: "update:selected-sources", value: CatalogSource[]): void;
   (event: "update:year-range", value: [number, number]): void;
   (event: "update:cvss-range", value: [number, number]): void;
   (event: "update:epss-range", value: [number, number]): void;
@@ -48,11 +46,41 @@ const searchModel = computed({
 
 const hasSearchTerm = computed(() => searchModel.value.trim().length > 0);
 
-const selectedSource = computed({
-  get: () => props.selectedSource,
-  set: (value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc") =>
-    emit("update:selected-source", value),
+const selectableSources: CatalogSource[] = [
+  "kev",
+  "enisa",
+  "historic",
+  "metasploit",
+  "poc",
+];
+
+const selectedSources = computed({
+  get: () => props.selectedSources,
+  set: (value: CatalogSource[]) => emit("update:selected-sources", value),
 });
+
+const hasSourceSelection = computed(() => selectedSources.value.length > 0);
+
+const toggleSource = (value: CatalogSource | "all") => {
+  if (value === "all") {
+    selectedSources.value = [];
+    return;
+  }
+
+  const next = new Set(selectedSources.value);
+  if (next.has(value)) {
+    next.delete(value);
+  } else {
+    next.add(value);
+  }
+
+  selectedSources.value = selectableSources.filter((source) =>
+    next.has(source),
+  );
+};
+
+const isSourceSelected = (value: CatalogSource) =>
+  selectedSources.value.includes(value);
 
 const yearRange = computed({
   get: () => props.yearRange,
@@ -92,10 +120,7 @@ const clearSearch = () => {
   searchModel.value = "";
 };
 
-const sourceLabels: Record<
-  "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
-  string
-> = {
+const sourceLabels: Record<"all" | CatalogSource, string> = {
   all: "All sources",
   kev: "CISA KEV",
   enisa: "ENISA",
@@ -105,9 +130,9 @@ const sourceLabels: Record<
 };
 
 const selectSource = (
-  value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
+  value: "all" | CatalogSource,
 ) => {
-  selectedSource.value = value;
+  toggleSource(value);
 };
 </script>
 
@@ -163,8 +188,20 @@ const selectSource = (
                 v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit', 'poc']"
                 :key="option"
                 size="sm"
-                :color="selectedSource === option ? 'primary' : 'neutral'"
-                :variant="selectedSource === option ? 'solid' : 'outline'"
+                :color="
+                  option === 'all'
+                    ? hasSourceSelection ? 'neutral' : 'primary'
+                    : isSourceSelected(option as CatalogSource)
+                      ? 'primary'
+                      : 'neutral'
+                "
+                :variant="
+                  option === 'all'
+                    ? hasSourceSelection ? 'outline' : 'solid'
+                    : isSourceSelected(option as CatalogSource)
+                      ? 'solid'
+                      : 'outline'
+                "
                 @click="
                   selectSource(
                     option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit' | 'poc',

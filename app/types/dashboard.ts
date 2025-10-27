@@ -13,6 +13,7 @@ export type FilterState = {
 export type QuickFilterUpdate = {
   filters?: Partial<Record<FilterKey, string | null>>;
   source?: CatalogSource | "all";
+  sources?: CatalogSource[];
   year?: number;
   yearRange?: [number, number];
   search?: string;

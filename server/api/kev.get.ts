@@ -1,5 +1,5 @@
 import { getQuery } from 'h3'
-import { and, asc, desc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import type {
   CatalogSource,
@@ -35,6 +35,7 @@ type CatalogQuery = {
   wellKnownOnly?: boolean
   publicExploitOnly?: boolean
   source?: CatalogSource
+  sources?: CatalogSource[]
   cvssMin?: number
   cvssMax?: number
   epssMin?: number
@@ -197,15 +198,43 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.internetExposedOnly = true
   }
 
-  const source = getString('source')
-  if (
-    source === 'kev' ||
-    source === 'enisa' ||
-    source === 'historic' ||
-    source === 'metasploit' ||
-    source === 'poc'
-  ) {
-    filters.source = source
+  const normaliseSource = (value: string | undefined): CatalogSource | null => {
+    if (!value) {
+      return null
+    }
+    const lower = value.toLowerCase()
+    if (
+      lower === 'kev' ||
+      lower === 'enisa' ||
+      lower === 'historic' ||
+      lower === 'metasploit' ||
+      lower === 'poc'
+    ) {
+      return lower as CatalogSource
+    }
+    return null
+  }
+
+  const sourceItems = getList('source')
+  const resolvedSources = Array.from(
+    new Set(
+      (sourceItems ?? [])
+        .map(item => normaliseSource(item))
+        .filter((item): item is CatalogSource => item !== null)
+    )
+  )
+
+  if (resolvedSources.length > 0) {
+    filters.sources = resolvedSources
+    if (resolvedSources.length === 1) {
+      filters.source = resolvedSources[0]
+    }
+  } else {
+    const singleSource = normaliseSource(getString('source'))
+    if (singleSource) {
+      filters.source = singleSource
+      filters.sources = [singleSource]
+    }
   }
 
   const marketProgramType = getString('marketProgramType') as MarketProgramType | undefined
@@ -317,16 +346,36 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
     )
   }
 
-  if (filters.source === 'kev') {
-    conditions.push(eq(ce.hasSourceKev, 1))
-  } else if (filters.source === 'enisa') {
-    conditions.push(eq(ce.hasSourceEnisa, 1))
-  } else if (filters.source === 'historic') {
-    conditions.push(eq(ce.hasSourceHistoric, 1))
-  } else if (filters.source === 'metasploit') {
-    conditions.push(eq(ce.hasSourceMetasploit, 1))
-  } else if (filters.source === 'poc') {
-    conditions.push(eq(ce.hasSourcePoc, 1))
+  const sourceList = filters.sources ?? (filters.source ? [filters.source] : [])
+  if (sourceList.length) {
+    const sourceConditions = sourceList
+      .map((source): Condition | null => {
+        if (source === 'kev') {
+          return eq(ce.hasSourceKev, 1)
+        }
+        if (source === 'enisa') {
+          return eq(ce.hasSourceEnisa, 1)
+        }
+        if (source === 'historic') {
+          return eq(ce.hasSourceHistoric, 1)
+        }
+        if (source === 'metasploit') {
+          return eq(ce.hasSourceMetasploit, 1)
+        }
+        if (source === 'poc') {
+          return eq(ce.hasSourcePoc, 1)
+        }
+        return null
+      })
+      .filter((condition): condition is Condition => condition !== null)
+
+    if (sourceConditions.length === 1) {
+      conditions.push(sourceConditions[0])
+    } else if (sourceConditions.length > 1) {
+      conditions.push(
+        or(...(sourceConditions as [Condition, Condition, ...Condition[]]))
+      )
+    }
   }
 
   if (filters.publicExploitOnly) {

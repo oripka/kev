@@ -307,17 +307,74 @@ const priceSliderReady = computed(() => {
   );
 });
 
-const selectedSource = ref<
-  "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc"
->("all");
+const selectableSources: CatalogSource[] = [
+  "kev",
+  "enisa",
+  "historic",
+  "metasploit",
+  "poc",
+];
+
+const selectedSources = ref<CatalogSource[]>([]);
+const hasSourceSelection = computed(() => selectedSources.value.length > 0);
+const updateSelectedSources = (values: Iterable<CatalogSource>) => {
+  const allowed = new Set<CatalogSource>();
+
+  for (const value of values) {
+    if (selectableSources.includes(value)) {
+      allowed.add(value);
+    }
+  }
+
+  selectedSources.value = selectableSources.filter((source) =>
+    allowed.has(source),
+  );
+};
+
+const clearSelectedSources = () => {
+  selectedSources.value = [];
+};
+
+const toggleSourceSelection = (value: CatalogSource | "all") => {
+  if (value === "all") {
+    clearSelectedSources();
+    return;
+  }
+
+  const next = new Set(selectedSources.value);
+  if (next.has(value)) {
+    next.delete(value);
+  } else {
+    next.add(value);
+  }
+
+  updateSelectedSources(next);
+};
+
+const selectSource = (value: "all" | CatalogSource) => {
+  toggleSourceSelection(value);
+};
+
+const addSourceSelection = (value: CatalogSource) => {
+  if (!selectableSources.includes(value)) {
+    return;
+  }
+
+  if (selectedSources.value.includes(value)) {
+    return;
+  }
+
+  updateSelectedSources([...selectedSources.value, value]);
+};
+
+const setSourceSelection = (values: CatalogSource[]) => {
+  updateSelectedSources(values);
+};
+
+const isSourceSelected = (value: CatalogSource) =>
+  selectedSources.value.includes(value);
 const selectedMarketProgramType = ref<MarketProgramType | null>(null);
 const isFiltering = ref(false);
-
-const selectSource = (
-  value: "all" | "kev" | "enisa" | "historic" | "metasploit" | "poc",
-) => {
-  selectedSource.value = value;
-};
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -595,19 +652,21 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
   }
 
   const sourceParam = extractQueryString(getValue("source"));
-  let resolvedSource: typeof selectedSource.value = "all";
-  if (
-    sourceParam === "kev" ||
-    sourceParam === "enisa" ||
-    sourceParam === "historic" ||
-    sourceParam === "metasploit" ||
-    sourceParam === "poc"
-  ) {
-    resolvedSource = sourceParam;
-  }
+  const resolvedSources = sourceParam
+    ? sourceParam
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter((value): value is CatalogSource =>
+          selectableSources.includes(value as CatalogSource),
+        )
+    : [];
 
-  if (selectedSource.value !== resolvedSource) {
-    selectedSource.value = resolvedSource;
+  const currentSources = selectedSources.value;
+  if (
+    resolvedSources.length !== currentSources.length ||
+    resolvedSources.some((value) => !currentSources.includes(value))
+  ) {
+    setSourceSelection(resolvedSources);
   }
 
   const marketProgramTypeParam = extractQueryString(getValue("marketProgramType"));
@@ -790,8 +849,8 @@ const routeQueryState = computed<Record<string, string>>(() => {
     }
   }
 
-  if (selectedSource.value !== "all") {
-    query.source = selectedSource.value;
+  if (selectedSources.value.length) {
+    query.source = selectedSources.value.join(",");
   }
 
   if (selectedMarketProgramType.value) {
@@ -970,8 +1029,8 @@ const filterParams = computed(() => {
     params.products = trackedProductKeys.value.join(",");
   }
 
-  if (selectedSource.value !== "all") {
-    params.source = selectedSource.value;
+  if (selectedSources.value.length) {
+    params.source = selectedSources.value.join(",");
   }
 
   if (selectedMarketProgramType.value) {
@@ -1204,7 +1263,7 @@ const hasActiveFilters = computed(() => {
   const hasEpssFilter =
     epssRange.value[0] > defaultEpssRange[0] ||
     epssRange.value[1] < defaultEpssRange[1];
-  const hasSourceFilter = selectedSource.value !== "all";
+  const hasSourceFilter = selectedSources.value.length > 0;
   const hasTrackedFilter = showOwnedOnlyEffective.value;
   const hasMarketProgramFilter = Boolean(selectedMarketProgramType.value);
 
@@ -1744,7 +1803,7 @@ const resetFilters = () => {
   showAllResults.value = true;
   cvssRange.value = [defaultCvssRange[0], defaultCvssRange[1]];
   epssRange.value = [defaultEpssRange[0], defaultEpssRange[1]];
-  selectedSource.value = "all";
+  clearSelectedSources();
   selectedMarketProgramType.value = null;
   resetYearRange();
   if (priceSliderReady.value) {
@@ -2358,8 +2417,27 @@ const matchesPresetState = (update: QuickFilterUpdate) => {
     }
   }
 
-  if (update.source && selectedSource.value !== update.source) {
-    return false;
+  if (Array.isArray(update.sources)) {
+    const target = update.sources.filter((value): value is CatalogSource =>
+      selectableSources.includes(value),
+    );
+    const current = selectedSources.value;
+
+    if (target.length !== current.length) {
+      return false;
+    }
+
+    if (target.some((value) => !current.includes(value))) {
+      return false;
+    }
+  } else if (update.source) {
+    if (update.source === "all") {
+      if (selectedSources.value.length) {
+        return false;
+      }
+    } else if (!selectedSources.value.includes(update.source)) {
+      return false;
+    }
   }
 
   if (Array.isArray(update.yearRange)) {
@@ -2875,9 +2953,15 @@ const activeFilters = computed<ActiveFilter[]>(() => {
     });
   }
 
-  if (selectedSource.value !== "all") {
-    const label = catalogSourceLabels[selectedSource.value as CatalogSource];
-    items.push({ key: "source", label: "Source", value: label });
+  if (selectedSources.value.length) {
+    const labels = selectedSources.value.map(
+      (source) => catalogSourceLabels[source],
+    );
+    items.push({
+      key: "source",
+      label: "Source",
+      value: labels.join(", "),
+    });
   }
 
   if (selectedMarketProgramType.value) {
@@ -3070,6 +3154,7 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
   const {
     filters: filterUpdates,
     source,
+    sources: sourceList,
     year,
     yearRange: yearRangeUpdate,
     search,
@@ -3105,8 +3190,20 @@ const applyQuickFilters = (update: QuickFilterUpdate) => {
     }
   }
 
+  if (Array.isArray(sourceList)) {
+    if (sourceList.length) {
+      setSourceSelection(sourceList);
+    } else {
+      clearSelectedSources();
+    }
+  }
+
   if (source) {
-    selectedSource.value = source;
+    if (source === "all") {
+      clearSelectedSources();
+    } else {
+      addSourceSelection(source as CatalogSource);
+    }
   }
 
   if (Array.isArray(yearRangeUpdate) && yearRangeUpdate.length === 2) {
@@ -3303,7 +3400,7 @@ const clearFilter = (
   }
 
   if (key === "source") {
-    selectedSource.value = "all";
+    clearSelectedSources();
     return;
   }
 
@@ -3481,7 +3578,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           badgeRowChildren.push(
             createBadgeButton(label, color, () => applyQuickFilters({ source }), {
               ariaLabel: `Filter catalog by ${label} source`,
-              isActive: selectedSource.value === source,
+              isActive: isSourceSelected(source),
             })
           );
         }
@@ -3911,8 +4008,20 @@ const tableMeta = {
                         v-for="option in ['all', 'kev', 'enisa', 'historic', 'metasploit', 'poc']"
                         :key="option"
                         size="sm"
-                        :color="selectedSource === option ? 'primary' : 'neutral'"
-                        :variant="selectedSource === option ? 'solid' : 'outline'"
+                        :color="
+                          option === 'all'
+                            ? hasSourceSelection ? 'neutral' : 'primary'
+                            : isSourceSelected(option as CatalogSource)
+                              ? 'primary'
+                              : 'neutral'
+                        "
+                        :variant="
+                          option === 'all'
+                            ? hasSourceSelection ? 'outline' : 'solid'
+                            : isSourceSelected(option as CatalogSource)
+                              ? 'solid'
+                              : 'outline'
+                        "
                         @click="
                           selectSource(
                             option as 'all' | 'kev' | 'enisa' | 'historic' | 'metasploit' | 'poc',
