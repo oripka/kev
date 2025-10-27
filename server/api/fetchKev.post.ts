@@ -31,6 +31,7 @@ import { importMetasploitCatalog } from '../utils/metasploit'
 import { importGithubPocCatalog } from '../utils/github-poc'
 import { importMarketIntel } from '../utils/market'
 import { requireAdminKey } from '../utils/adminAuth'
+import { normaliseStoredSeverity } from '../utils/importDiff'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   clearCvelistMemoryCache,
@@ -76,23 +77,6 @@ const toNotes = (raw: unknown): string[] => {
 }
 
 const toJson = (value: unknown): string => JSON.stringify(value ?? [])
-
-const normaliseStoredSeverity = (value: unknown): KevEntry['cvssSeverity'] | null => {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  switch (value) {
-    case 'None':
-    case 'Low':
-    case 'Medium':
-    case 'High':
-    case 'Critical':
-      return value
-    default:
-      return null
-  }
-}
 
 const SOURCE_URL =
   'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json'
@@ -175,9 +159,29 @@ export default defineEventHandler(async event => {
   let kevRemovedCount = 0
   let kevImportStrategy: ImportStrategy = 'full'
   let historicImported = 0
+  let historicNewCount = 0
+  let historicUpdatedCount = 0
+  let historicSkippedCount = 0
+  let historicRemovedCount = 0
+  let historicImportStrategy: ImportStrategy = 'full'
   let enisaImported = 0
+  let enisaNewCount = 0
+  let enisaUpdatedCount = 0
+  let enisaSkippedCount = 0
+  let enisaRemovedCount = 0
+  let enisaImportStrategy: ImportStrategy = 'full'
   let metasploitImported = 0
+  let metasploitNewCount = 0
+  let metasploitUpdatedCount = 0
+  let metasploitSkippedCount = 0
+  let metasploitRemovedCount = 0
+  let metasploitImportStrategy: ImportStrategy = 'full'
   let pocImported = 0
+  let pocNewCount = 0
+  let pocUpdatedCount = 0
+  let pocSkippedCount = 0
+  let pocRemovedCount = 0
+  let pocImportStrategy: ImportStrategy = 'full'
   let marketImported = 0
   let marketOfferCount = 0
   let marketProgramCount = 0
@@ -1062,45 +1066,103 @@ export default defineEventHandler(async event => {
     }
     }
 
-    let historicSummary = { imported: 0 }
+    let historicSummary = {
+      imported: 0,
+      total: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy: 'full' as ImportStrategy
+    }
     if (shouldImport('historic')) {
-      historicSummary = await importHistoricCatalog(db)
+      historicSummary = await importHistoricCatalog(db, { strategy })
       historicImported = historicSummary.imported
+      historicNewCount = historicSummary.newCount
+      historicUpdatedCount = historicSummary.updatedCount
+      historicSkippedCount = historicSummary.skippedCount
+      historicRemovedCount = historicSummary.removedCount
+      historicImportStrategy = historicSummary.strategy
     } else {
       markTaskSkipped('historic', 'Skipped this run')
     }
 
-    let enisaSummary = { imported: 0, lastUpdated: enisaLastUpdated ?? null }
+    let enisaSummary = {
+      imported: 0,
+      total: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy: 'full' as ImportStrategy,
+      lastUpdated: enisaLastUpdated ?? null
+    }
     if (shouldImport('enisa')) {
-      enisaSummary = await importEnisaCatalog(db, { ttlMs: ONE_DAY_MS, forceRefresh, allowStale })
+      enisaSummary = await importEnisaCatalog(db, { ttlMs: ONE_DAY_MS, forceRefresh, allowStale, strategy })
       enisaImported = enisaSummary.imported
+      enisaNewCount = enisaSummary.newCount
+      enisaUpdatedCount = enisaSummary.updatedCount
+      enisaSkippedCount = enisaSummary.skippedCount
+      enisaRemovedCount = enisaSummary.removedCount
+      enisaImportStrategy = enisaSummary.strategy
       enisaLastUpdated = enisaSummary.lastUpdated ?? enisaLastUpdated ?? null
     } else {
       markTaskSkipped('enisa', 'Skipped this run')
     }
 
-    let metasploitSummary = { imported: 0, commit: metasploitCommit, modules: metasploitModules }
+    let metasploitSummary = {
+      imported: 0,
+      total: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy: 'full' as ImportStrategy,
+      commit: metasploitCommit,
+      modules: metasploitModules
+    }
     if (shouldImport('metasploit')) {
       metasploitSummary = await importMetasploitCatalog(db, {
         useCachedRepository: allowStale,
         offline: allowStale,
-        reprocessCachedEntries: allowStale
+        reprocessCachedEntries: allowStale,
+        strategy
       })
       metasploitImported = metasploitSummary.imported
+      metasploitNewCount = metasploitSummary.newCount
+      metasploitUpdatedCount = metasploitSummary.updatedCount
+      metasploitSkippedCount = metasploitSummary.skippedCount
+      metasploitRemovedCount = metasploitSummary.removedCount
+      metasploitImportStrategy = metasploitSummary.strategy
       metasploitCommit = metasploitSummary.commit ?? metasploitCommit
       metasploitModules = metasploitSummary.modules
     } else {
       markTaskSkipped('metasploit', 'Skipped this run')
     }
 
-    let pocSummary = { imported: 0, cachedAt: null as string | null }
+    let pocSummary = {
+      imported: 0,
+      total: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy: 'full' as ImportStrategy,
+      cachedAt: null as string | null
+    }
     if (shouldImport('poc')) {
       pocSummary = await importGithubPocCatalog(db, {
         ttlMs: ONE_DAY_MS,
         forceRefresh,
-        allowStale
+        allowStale,
+        strategy
       })
       pocImported = pocSummary.imported
+      pocNewCount = pocSummary.newCount
+      pocUpdatedCount = pocSummary.updatedCount
+      pocSkippedCount = pocSummary.skippedCount
+      pocRemovedCount = pocSummary.removedCount
+      pocImportStrategy = pocSummary.strategy
     } else {
       markTaskSkipped('poc', 'Skipped this run')
     }
@@ -1159,21 +1221,93 @@ export default defineEventHandler(async event => {
       }
     }
     if (shouldImport('historic')) {
-      segments.push(`${historicImported.toLocaleString()} historic entries`)
+      if (historicImportStrategy === 'incremental') {
+        const parts: string[] = []
+        if (historicNewCount > 0) {
+          parts.push(`${historicNewCount.toLocaleString()} new`)
+        }
+        if (historicUpdatedCount > 0) {
+          parts.push(`${historicUpdatedCount.toLocaleString()} updated`)
+        }
+        if (historicSkippedCount > 0) {
+          parts.push(`${historicSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (historicRemovedCount > 0) {
+          parts.push(`${historicRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = parts.length ? ` (${parts.join(', ')})` : ''
+        segments.push(`${historicImported.toLocaleString()} historic entries${detail}`)
+      } else {
+        segments.push(`${historicImported.toLocaleString()} historic entries`)
+      }
     }
     if (shouldImport('enisa')) {
-      segments.push(`${enisaImported.toLocaleString()} ENISA entries`)
+      if (enisaImportStrategy === 'incremental') {
+        const parts: string[] = []
+        if (enisaNewCount > 0) {
+          parts.push(`${enisaNewCount.toLocaleString()} new`)
+        }
+        if (enisaUpdatedCount > 0) {
+          parts.push(`${enisaUpdatedCount.toLocaleString()} updated`)
+        }
+        if (enisaSkippedCount > 0) {
+          parts.push(`${enisaSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (enisaRemovedCount > 0) {
+          parts.push(`${enisaRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = parts.length ? ` (${parts.join(', ')})` : ''
+        segments.push(`${enisaImported.toLocaleString()} ENISA entries${detail}`)
+      } else {
+        segments.push(`${enisaImported.toLocaleString()} ENISA entries`)
+      }
     }
     if (shouldImport('metasploit')) {
       const base = `${metasploitImported.toLocaleString()} Metasploit entries`
       const withModules =
         metasploitModules > 0
           ? `${base} across ${metasploitModules.toLocaleString()} modules`
-        : base
-      segments.push(withModules)
+          : base
+      if (metasploitImportStrategy === 'incremental') {
+        const parts: string[] = []
+        if (metasploitNewCount > 0) {
+          parts.push(`${metasploitNewCount.toLocaleString()} new`)
+        }
+        if (metasploitUpdatedCount > 0) {
+          parts.push(`${metasploitUpdatedCount.toLocaleString()} updated`)
+        }
+        if (metasploitSkippedCount > 0) {
+          parts.push(`${metasploitSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (metasploitRemovedCount > 0) {
+          parts.push(`${metasploitRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = parts.length ? ` (${parts.join(', ')})` : ''
+        segments.push(`${withModules}${detail}`)
+      } else {
+        segments.push(withModules)
+      }
     }
     if (shouldImport('poc')) {
-      segments.push(`${pocImported.toLocaleString()} GitHub PoC entries`)
+      if (pocImportStrategy === 'incremental') {
+        const parts: string[] = []
+        if (pocNewCount > 0) {
+          parts.push(`${pocNewCount.toLocaleString()} new`)
+        }
+        if (pocUpdatedCount > 0) {
+          parts.push(`${pocUpdatedCount.toLocaleString()} updated`)
+        }
+        if (pocSkippedCount > 0) {
+          parts.push(`${pocSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (pocRemovedCount > 0) {
+          parts.push(`${pocRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = parts.length ? ` (${parts.join(', ')})` : ''
+        segments.push(`${pocImported.toLocaleString()} GitHub PoC entries${detail}`)
+      } else {
+        segments.push(`${pocImported.toLocaleString()} GitHub PoC entries`)
+      }
     }
     if (shouldImport('market')) {
       const base = `${marketOfferCount.toLocaleString()} market intelligence offers`
@@ -1210,11 +1344,31 @@ export default defineEventHandler(async event => {
       kevRemovedCount,
       kevImportStrategy,
       historicImported: historicSummary.imported,
+      historicNewCount,
+      historicUpdatedCount,
+      historicSkippedCount,
+      historicRemovedCount,
+      historicImportStrategy,
       enisaImported: enisaSummary.imported,
+      enisaNewCount,
+      enisaUpdatedCount,
+      enisaSkippedCount,
+      enisaRemovedCount,
+      enisaImportStrategy,
       metasploitImported: metasploitSummary.imported,
+      metasploitNewCount,
+      metasploitUpdatedCount,
+      metasploitSkippedCount,
+      metasploitRemovedCount,
+      metasploitImportStrategy,
       metasploitModules: metasploitSummary.modules,
       metasploitCommit: metasploitSummary.commit,
       pocImported: pocSummary.imported,
+      pocNewCount,
+      pocUpdatedCount,
+      pocSkippedCount,
+      pocRemovedCount,
+      pocImportStrategy,
       marketImported: marketSummary.imported,
       marketOfferCount: marketSummary.offerCount,
       marketProgramCount: marketSummary.programCount,

@@ -12,6 +12,8 @@ import type {
   ImportTaskStatus,
 } from "~/types";
 
+type ImportStrategy = "full" | "incremental";
+
 type ImportSourceStatus = {
   key: string;
   label: string;
@@ -31,12 +33,13 @@ type KevImportSummary = {
   updatedCount: number;
   skippedCount: number;
   removedCount: number;
-  strategy: "full" | "incremental";
+  strategy: ImportStrategy;
 };
 
 type AdminImportStatusResponse = {
   sources: ImportSourceStatus[];
   kevSummary: KevImportSummary | null;
+  sourceSummaries: Partial<Record<ImportTaskKey, SourceSummary>>;
 };
 
 const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
@@ -71,7 +74,7 @@ const {
   error: importStatusError,
   refresh: refreshImportStatuses,
 } = await useFetch<AdminImportStatusResponse>("/api/admin/import-status", {
-  default: () => ({ sources: [], kevSummary: null }),
+  default: () => ({ sources: [], kevSummary: null, sourceSummaries: {} }),
   headers: {
     "cache-control": "no-store",
   },
@@ -80,6 +83,16 @@ const {
 const importSources = computed(() => importStatusData.value?.sources ?? []);
 const importEvents = computed(() => importProgress.value.events ?? []);
 const kevSummaryFromStatus = computed(() => importStatusData.value?.kevSummary ?? null);
+const sourceSummariesFromStatus = computed(() => importStatusData.value?.sourceSummaries ?? {});
+
+type SourceSummary = {
+  lastImportedAt: string | null;
+  newCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  removedCount: number;
+  strategy: ImportStrategy;
+};
 
 type FormattedImportSource = {
   key: string;
@@ -92,6 +105,9 @@ type FormattedImportSource = {
   totalCountLabel: string | null;
   hasCache: boolean;
   supportsImport: boolean;
+  summary: SourceSummary | null;
+  summaryBadges: KevSummaryBadge[];
+  summaryStrategy: ImportStrategy | null;
 };
 
 type FormattedImportEvent = {
@@ -110,6 +126,19 @@ type KevSummaryBadge = {
   color: string;
 };
 
+const buildSummaryBadges = (summary: SourceSummary | null): KevSummaryBadge[] => {
+  if (!summary) {
+    return [];
+  }
+
+  return [
+    { key: "new", label: "New", value: summary.newCount, color: "success" },
+    { key: "updated", label: "Updated", value: summary.updatedCount, color: "primary" },
+    { key: "unchanged", label: "Unchanged", value: summary.skippedCount, color: "neutral" },
+    { key: "removed", label: "Removed", value: summary.removedCount, color: "error" },
+  ];
+};
+
 const { formatDate } = useDateDisplay();
 
 const formatTimestamp = (value: string) =>
@@ -126,8 +155,10 @@ const formatOptionalTimestamp = (
   return formatTimestamp(value);
 };
 
-const formattedImportSources = computed<FormattedImportSource[]>(() =>
-  importSources.value.map((source) => {
+const formattedImportSources = computed<FormattedImportSource[]>(() => {
+  const summaryMap = sourceSummariesFromStatus.value as Partial<Record<ImportTaskKey, SourceSummary>>;
+
+  return importSources.value.map((source) => {
     const versionParts: string[] = [];
     if (source.catalogVersion) {
       const versionLabel = source.key === "cvelist"
@@ -160,6 +191,10 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
         ? `${numberFormatter.format(source.totalCount)} entries cached`
         : null;
 
+    const summary = source.importKey ? summaryMap[source.importKey] ?? null : null;
+    const summaryBadges = buildSummaryBadges(summary);
+    const summaryStrategy = summary ? summary.strategy : null;
+
     return {
       key: source.key,
       label: source.label,
@@ -171,9 +206,12 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
       totalCountLabel,
       hasCache: Boolean(cacheTimestamp),
       supportsImport: Boolean(source.importKey),
+      summary,
+      summaryBadges,
+      summaryStrategy,
     } satisfies FormattedImportSource;
-  }),
-);
+  });
+});
 
 const eventBadgeVariants: Record<ImportProgressEventStatus, string> = {
   pending: "neutral",
@@ -347,11 +385,72 @@ const importSummaryMessage = computed(() => {
     }
   }
 
+  if (summary.sources.includes("historic") && summary.historicImportStrategy === "incremental") {
+    const historicChanges: string[] = [];
+    if (summary.historicNewCount > 0) {
+      historicChanges.push(`${summary.historicNewCount.toLocaleString()} new`);
+    }
+    if (summary.historicUpdatedCount > 0) {
+      historicChanges.push(`${summary.historicUpdatedCount.toLocaleString()} updated`);
+    }
+    if (summary.historicSkippedCount > 0) {
+      historicChanges.push(`${summary.historicSkippedCount.toLocaleString()} unchanged`);
+    }
+    if (summary.historicRemovedCount > 0) {
+      historicChanges.push(`${summary.historicRemovedCount.toLocaleString()} removed`);
+    }
+    if (historicChanges.length) {
+      messageParts.push(`Historic incremental update touched ${historicChanges.join(", ")}.`);
+    } else {
+      messageParts.push("Historic incremental update detected no changes.");
+    }
+  }
+
   if (summary.sources.includes("enisa") && summary.enisaLastUpdated) {
+    if (summary.enisaImportStrategy === "incremental") {
+      const enisaChanges: string[] = [];
+      if (summary.enisaNewCount > 0) {
+        enisaChanges.push(`${summary.enisaNewCount.toLocaleString()} new`);
+      }
+      if (summary.enisaUpdatedCount > 0) {
+        enisaChanges.push(`${summary.enisaUpdatedCount.toLocaleString()} updated`);
+      }
+      if (summary.enisaSkippedCount > 0) {
+        enisaChanges.push(`${summary.enisaSkippedCount.toLocaleString()} unchanged`);
+      }
+      if (summary.enisaRemovedCount > 0) {
+        enisaChanges.push(`${summary.enisaRemovedCount.toLocaleString()} removed`);
+      }
+      if (enisaChanges.length) {
+        messageParts.push(`ENISA incremental update touched ${enisaChanges.join(", ")}.`);
+      } else {
+        messageParts.push("ENISA incremental update detected no changes.");
+      }
+    }
     messageParts.push(`ENISA last updated ${formatTimestamp(summary.enisaLastUpdated)}.`);
   }
 
   if (summary.sources.includes("metasploit")) {
+    if (summary.metasploitImportStrategy === "incremental") {
+      const metasploitChanges: string[] = [];
+      if (summary.metasploitNewCount > 0) {
+        metasploitChanges.push(`${summary.metasploitNewCount.toLocaleString()} new`);
+      }
+      if (summary.metasploitUpdatedCount > 0) {
+        metasploitChanges.push(`${summary.metasploitUpdatedCount.toLocaleString()} updated`);
+      }
+      if (summary.metasploitSkippedCount > 0) {
+        metasploitChanges.push(`${summary.metasploitSkippedCount.toLocaleString()} unchanged`);
+      }
+      if (summary.metasploitRemovedCount > 0) {
+        metasploitChanges.push(`${summary.metasploitRemovedCount.toLocaleString()} removed`);
+      }
+      if (metasploitChanges.length) {
+        messageParts.push(`Metasploit incremental update touched ${metasploitChanges.join(", ")}.`);
+      } else {
+        messageParts.push("Metasploit incremental update detected no changes.");
+      }
+    }
     if (summary.metasploitModules > 0) {
       const commitLabel = summary.metasploitCommit
         ? ` (commit ${summary.metasploitCommit.slice(0, 7)})`
@@ -361,6 +460,27 @@ const importSummaryMessage = computed(() => {
       );
     } else if (summary.metasploitCommit) {
       messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);
+    }
+  }
+
+  if (summary.sources.includes("poc") && summary.pocImportStrategy === "incremental") {
+    const pocChanges: string[] = [];
+    if (summary.pocNewCount > 0) {
+      pocChanges.push(`${summary.pocNewCount.toLocaleString()} new`);
+    }
+    if (summary.pocUpdatedCount > 0) {
+      pocChanges.push(`${summary.pocUpdatedCount.toLocaleString()} updated`);
+    }
+    if (summary.pocSkippedCount > 0) {
+      pocChanges.push(`${summary.pocSkippedCount.toLocaleString()} unchanged`);
+    }
+    if (summary.pocRemovedCount > 0) {
+      pocChanges.push(`${summary.pocRemovedCount.toLocaleString()} removed`);
+    }
+    if (pocChanges.length) {
+      messageParts.push(`GitHub PoC incremental update touched ${pocChanges.join(", ")}.`);
+    } else {
+      messageParts.push("GitHub PoC incremental update detected no changes.");
     }
   }
 
@@ -839,6 +959,23 @@ const handleResetDatabase = async () => {
                     <p v-if="source.totalCountLabel" class="text-xs text-neutral-500 dark:text-neutral-400">
                       {{ source.totalCountLabel }}
                     </p>
+                    <div
+                      v-if="source.summary && source.summaryStrategy === 'incremental' && source.summaryBadges.length"
+                      class="space-y-1 text-xs text-neutral-500 dark:text-neutral-400"
+                    >
+                      <p>Incremental update counts:</p>
+                      <div class="flex flex-wrap gap-2">
+                        <UBadge
+                          v-for="badge in source.summaryBadges"
+                          :key="`${source.key}-${badge.key}`"
+                          :color="badge.color"
+                          variant="soft"
+                          class="text-[11px] font-semibold"
+                        >
+                          {{ badge.label }} {{ numberFormatter.format(badge.value) }}
+                        </UBadge>
+                      </div>
+                    </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
                     <template v-if="source.supportsImport && source.importKey">

@@ -24,6 +24,11 @@ import {
 import { ensureDir, runGit, syncSparseRepo } from './git'
 import { mapWithConcurrency } from './concurrency'
 import { matchVendorProductByTitle } from './metasploitVendorCatalog'
+import {
+  createEntryRecords,
+  saveEntryRecords,
+  type ImportStrategy
+} from './importDiff'
 
 const METASPLOIT_REPO_URL = 'https://github.com/rapid7/metasploit-framework.git'
 const METASPLOIT_BRANCH = 'master'
@@ -1038,10 +1043,29 @@ const walkRubyFiles = async (dir: string): Promise<string[]> => {
   return files
 }
 
+type MetasploitImportOptions = {
+  useCachedRepository?: boolean
+  offline?: boolean
+  reprocessCachedEntries?: boolean
+  strategy?: ImportStrategy
+}
+
+type MetasploitImportSummary = {
+  imported: number
+  total: number
+  newCount: number
+  updatedCount: number
+  skippedCount: number
+  removedCount: number
+  strategy: ImportStrategy
+  commit: string | null
+  modules: number
+}
+
 export const importMetasploitCatalog = async (
   db: DrizzleDatabase,
-  options: { useCachedRepository?: boolean; offline?: boolean; reprocessCachedEntries?: boolean } = {}
-): Promise<{ imported: number; commit: string | null; modules: number }> => {
+  options: MetasploitImportOptions = {}
+): Promise<MetasploitImportSummary> => {
   markTaskRunning('metasploit', 'Synchronising Metasploit catalog')
 
   try {
@@ -1195,105 +1219,51 @@ export const importMetasploitCatalog = async (
       db
     )
     const entries = vendorAdjustedEntries.map(entry => enrichEntry(entry))
+    const strategy: ImportStrategy = options.strategy === 'incremental' ? 'incremental' : 'full'
+    const entryRecords = createEntryRecords(entries, 'metasploit', impactRecordMap)
 
-    setImportPhase('savingMetasploit', {
-      message: 'Saving Metasploit entries to the local cache',
-      completed: 0,
-      total: entries.length
-    })
-    markTaskProgress('metasploit', 0, entries.length, 'Saving Metasploit entries to the local cache')
-
-    db.transaction(tx => {
-      tx
-        .delete(tables.vulnerabilityEntries)
-        .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
-        .run()
-
-      for (let index = 0; index < entries.length; index += 1) {
-        const entry = entries[index]
-        tx
-          .insert(tables.vulnerabilityEntries)
-          .values({
-            id: entry.id,
-            cveId: entry.cveId,
-            source: 'metasploit',
-            vendor: entry.vendor,
-            product: entry.product,
-            vendorKey: entry.vendorKey,
-            productKey: entry.productKey,
-            vulnerabilityName: entry.vulnerabilityName,
-            description: entry.description,
-            requiredAction: entry.requiredAction,
-            dateAdded: entry.dateAdded,
-            dueDate: entry.dueDate,
-            ransomwareUse: entry.ransomwareUse,
-            notes: JSON.stringify(entry.notes),
-            cwes: JSON.stringify(entry.cwes),
-            cvssScore: entry.cvssScore,
-            cvssVector: entry.cvssVector,
-            cvssVersion: entry.cvssVersion,
-            cvssSeverity: entry.cvssSeverity,
-            epssScore: entry.epssScore,
-            assigner: entry.assigner,
-            datePublished: entry.datePublished,
-            dateUpdated: entry.dateUpdated,
-            exploitedSince: entry.exploitedSince,
-            sourceUrl: entry.sourceUrl,
-            pocUrl: entry.pocUrl,
-            pocPublishedAt: entry.pocPublishedAt,
-            referenceLinks: JSON.stringify(entry.references),
-            aliases: JSON.stringify(entry.aliases),
-            affectedProducts: JSON.stringify(entry.affectedProducts),
-            problemTypes: JSON.stringify(entry.problemTypes),
-            metasploitModulePath: entry.metasploitModulePath,
-            metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
-            internetExposed: entry.internetExposed ? 1 : 0
-          })
-          .run()
-
-        const entryImpacts = impactRecordMap.get(entry.id) ?? []
-        if (entryImpacts.length) {
-          for (const impact of entryImpacts) {
-            tx
-              .insert(tables.vulnerabilityEntryImpacts)
-              .values({
-                entryId: impact.entryId,
-                vendor: impact.vendor,
-                vendorKey: impact.vendorKey,
-                product: impact.product,
-                productKey: impact.productKey,
-                status: impact.status,
-                versionRange: impact.versionRange,
-                source: impact.source
-              })
-              .run()
-          }
-        }
-
-        const dimensionRecords: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
-
-        const pushCategories = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
-          for (const value of values) {
-            dimensionRecords.push({ entryId: entry.id, categoryType: type, value, name: value })
-          }
-        }
-
-        pushCategories(entry.domainCategories, 'domain')
-        pushCategories(entry.exploitLayers, 'exploit')
-        pushCategories(entry.vulnerabilityCategories, 'vulnerability')
-
-        if (dimensionRecords.length) {
-          tx.insert(tables.vulnerabilityEntryCategories).values(dimensionRecords).run()
-        }
-
-        if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
-          const message = `Saving Metasploit entries (${index + 1} of ${entries.length})`
+    const saveResult = saveEntryRecords({
+      db,
+      source: 'metasploit',
+      records: entryRecords,
+      strategy,
+      callbacks: {
+        onFullStart(total) {
           setImportPhase('savingMetasploit', {
-            message,
-            completed: index + 1,
-            total: entries.length
+            message: 'Saving Metasploit entries to the local cache',
+            completed: 0,
+            total
           })
-          markTaskProgress('metasploit', index + 1, entries.length, message)
+          markTaskProgress('metasploit', 0, total, 'Saving Metasploit entries to the local cache')
+        },
+        onFullProgress(index, total) {
+          if ((index + 1) % 25 !== 0 && index + 1 !== total) {
+            return
+          }
+          const completed = index + 1
+          const message = `Saving Metasploit entries (${completed} of ${total})`
+          setImportPhase('savingMetasploit', { message, completed, total })
+          markTaskProgress('metasploit', completed, total, message)
+        },
+        onIncrementalStart({ totalChanges, removedCount }) {
+          if (totalChanges > 0) {
+            const message = 'Saving Metasploit changes to the local cache'
+            setImportPhase('savingMetasploit', { message, completed: 0, total: totalChanges })
+            markTaskProgress('metasploit', 0, totalChanges, message)
+          } else if (removedCount > 0) {
+            const message = `Removing ${removedCount.toLocaleString()} retired Metasploit entr${removedCount === 1 ? 'y' : 'ies'}`
+            setImportPhase('savingMetasploit', { message, completed: 0, total: 0 })
+            markTaskProgress('metasploit', 0, 0, message)
+          } else {
+            const message = 'Metasploit catalog already up to date'
+            setImportPhase('savingMetasploit', { message, completed: 0, total: 0 })
+            markTaskProgress('metasploit', 0, 0, message)
+          }
+        },
+        onIncrementalProgress(processed, totalChanges) {
+          const message = `Saving Metasploit changes (${processed} of ${totalChanges})`
+          setImportPhase('savingMetasploit', { message, completed: processed, total: totalChanges })
+          markTaskProgress('metasploit', processed, totalChanges, message)
         }
       }
     })
@@ -1302,16 +1272,54 @@ export const importMetasploitCatalog = async (
     setMetadata('metasploit.lastImportAt', importedAt)
     setMetadata('metasploit.totalCount', String(entries.length))
     setMetadata('metasploit.moduleCount', String(processedModules.size))
+    setMetadata('metasploit.lastNewCount', String(saveResult.newCount))
+    setMetadata('metasploit.lastUpdatedCount', String(saveResult.updatedCount))
+    setMetadata('metasploit.lastSkippedCount', String(saveResult.skippedCount))
+    setMetadata('metasploit.lastRemovedCount', String(saveResult.removedCount))
+    setMetadata('metasploit.lastImportStrategy', strategy)
     if (commit) {
       setMetadata('metasploit.lastCommit', commit)
     }
 
-    markTaskComplete(
-      'metasploit',
-      `${entries.length.toLocaleString()} Metasploit entries across ${processedModules.size.toLocaleString()} modules cached`
-    )
+    if (strategy === 'incremental') {
+      const detailSegments: string[] = []
+      if (saveResult.newCount > 0) {
+        detailSegments.push(`${saveResult.newCount.toLocaleString()} new`)
+      }
+      if (saveResult.updatedCount > 0) {
+        detailSegments.push(`${saveResult.updatedCount.toLocaleString()} updated`)
+      }
+      if (saveResult.skippedCount > 0) {
+        detailSegments.push(`${saveResult.skippedCount.toLocaleString()} unchanged`)
+      }
+      if (saveResult.removedCount > 0) {
+        detailSegments.push(`${saveResult.removedCount.toLocaleString()} removed`)
+      }
+      const detailSummary = detailSegments.length
+        ? detailSegments.join(', ')
+        : 'no changes detected'
+      markTaskComplete(
+        'metasploit',
+        `Incremental Metasploit import: ${detailSummary} across ${processedModules.size.toLocaleString()} modules`
+      )
+    } else {
+      markTaskComplete(
+        'metasploit',
+        `${entries.length.toLocaleString()} Metasploit entries across ${processedModules.size.toLocaleString()} modules cached`
+      )
+    }
 
-    return { imported: entries.length, commit, modules: processedModules.size }
+    return {
+      imported: saveResult.newCount + saveResult.updatedCount,
+      total: entries.length,
+      newCount: saveResult.newCount,
+      updatedCount: saveResult.updatedCount,
+      skippedCount: saveResult.skippedCount,
+      removedCount: saveResult.removedCount,
+      strategy,
+      commit,
+      modules: processedModules.size
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Metasploit import failed'

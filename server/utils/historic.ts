@@ -1,11 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
-import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
 import {
@@ -22,6 +20,11 @@ import {
   markTaskRunning,
   setImportPhase
 } from './import-progress'
+import {
+  createEntryRecords,
+  saveEntryRecords,
+  type ImportStrategy
+} from './importDiff'
 
 const historicEntrySchema = z.object({
   cve: z.string(),
@@ -51,8 +54,6 @@ const toNotes = (context?: string, notes?: string): string[] => {
 
   return Array.from(new Set(entries))
 }
-
-const toJson = (value: unknown): string => JSON.stringify(value ?? [])
 
 const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | null => {
   const cveId = item.cve?.trim()
@@ -111,32 +112,24 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
   }
 }
 
-const collectDimensionRecords = (
-  entryId: string,
-  entry: ReturnType<typeof enrichEntry>
-): Array<{ entryId: string; categoryType: string; value: string; name: string }> => {
-  const records: Array<{ entryId: string; categoryType: string; value: string; name: string }> = []
+type ImportHistoricOptions = {
+  strategy?: ImportStrategy
+}
 
-  const push = (values: string[], type: 'domain' | 'exploit' | 'vulnerability') => {
-    for (const value of values) {
-      if (!value) {
-        continue
-      }
-      records.push({ entryId, categoryType: type, value, name: value })
-    }
-  }
-
-  push(entry.domainCategories, 'domain')
-  push(entry.exploitLayers, 'exploit')
-  push(entry.vulnerabilityCategories, 'vulnerability')
-
-  return records
+type ImportHistoricSummary = {
+  imported: number
+  total: number
+  newCount: number
+  updatedCount: number
+  skippedCount: number
+  removedCount: number
+  strategy: ImportStrategy
 }
 
 export const importHistoricCatalog = async (
   db: DrizzleDatabase,
-  _options: Record<string, never> = {}
-): Promise<{ imported: number }> => {
+  options: ImportHistoricOptions = {}
+): Promise<ImportHistoricSummary> => {
   markTaskRunning('historic', 'Loading historic exploit dataset')
 
   try {
@@ -207,109 +200,99 @@ export const importHistoricCatalog = async (
       }
     }
 
-    const enrichedEntries = cvelistResults.map(result => enrichEntry(result.entry))
+    const entries = cvelistResults.map(result => enrichEntry(result.entry))
+    const strategy: ImportStrategy = options.strategy === 'incremental' ? 'incremental' : 'full'
+    const entryRecords = createEntryRecords(entries, 'historic', impactRecordMap)
 
-    setImportPhase('savingHistoric', {
-      message: 'Saving historic entries to the local cache',
-      completed: 0,
-      total: enrichedEntries.length
-    })
-    markTaskProgress('historic', 0, enrichedEntries.length, 'Saving historic entries to the local cache')
-
-    db.transaction(tx => {
-      tx
-        .delete(tables.vulnerabilityEntries)
-        .where(eq(tables.vulnerabilityEntries.source, 'historic'))
-        .run()
-
-      for (let index = 0; index < enrichedEntries.length; index += 1) {
-        const entry = enrichedEntries[index]
-        const entryId = entry.id
-
-        tx
-          .insert(tables.vulnerabilityEntries)
-          .values({
-            id: entryId,
-            cveId: entry.cveId,
-            source: 'historic',
-            vendor: entry.vendor,
-            product: entry.product,
-            vendorKey: entry.vendorKey,
-            productKey: entry.productKey,
-            vulnerabilityName: entry.vulnerabilityName,
-            description: entry.description,
-            requiredAction: entry.requiredAction,
-            dateAdded: entry.dateAdded,
-            dueDate: entry.dueDate,
-            ransomwareUse: entry.ransomwareUse,
-            notes: toJson(entry.notes),
-            cwes: toJson(entry.cwes),
-            cvssScore: entry.cvssScore,
-            cvssVector: entry.cvssVector,
-            cvssVersion: entry.cvssVersion,
-            cvssSeverity: entry.cvssSeverity,
-            epssScore: entry.epssScore,
-            assigner: entry.assigner,
-            datePublished: entry.datePublished,
-            dateUpdated: entry.dateUpdated,
-            exploitedSince: entry.exploitedSince,
-          sourceUrl: entry.sourceUrl,
-          pocUrl: entry.pocUrl,
-          pocPublishedAt: entry.pocPublishedAt,
-          referenceLinks: toJson(entry.references),
-            aliases: toJson(entry.aliases),
-            affectedProducts: toJson(entry.affectedProducts),
-            problemTypes: toJson(entry.problemTypes),
-            metasploitModulePath: entry.metasploitModulePath,
-            metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
-            internetExposed: entry.internetExposed ? 1 : 0
-          })
-          .run()
-
-        const entryImpacts = impactRecordMap.get(entryId) ?? []
-        if (entryImpacts.length) {
-          for (const impact of entryImpacts) {
-            tx
-              .insert(tables.vulnerabilityEntryImpacts)
-              .values({
-                entryId: impact.entryId,
-                vendor: impact.vendor,
-                vendorKey: impact.vendorKey,
-                product: impact.product,
-                productKey: impact.productKey,
-                status: impact.status,
-                versionRange: impact.versionRange,
-                source: impact.source
-              })
-              .run()
-          }
-        }
-
-        const dimensions = collectDimensionRecords(entryId, entry)
-
-        if (dimensions.length) {
-          tx.insert(tables.vulnerabilityEntryCategories).values(dimensions).run()
-        }
-
-        if ((index + 1) % 25 === 0 || index + 1 === enrichedEntries.length) {
-          const message = `Saving historic entries to the local cache (${index + 1} of ${enrichedEntries.length})`
+    const saveResult = saveEntryRecords({
+      db,
+      source: 'historic',
+      records: entryRecords,
+      strategy,
+      callbacks: {
+        onFullStart(total) {
           setImportPhase('savingHistoric', {
-            message,
-            completed: index + 1,
-            total: enrichedEntries.length
+            message: 'Saving historic entries to the local cache',
+            completed: 0,
+            total
           })
-          markTaskProgress('historic', index + 1, enrichedEntries.length, message)
+          markTaskProgress('historic', 0, total, 'Saving historic entries to the local cache')
+        },
+        onFullProgress(index, total) {
+          if ((index + 1) % 25 !== 0 && index + 1 !== total) {
+            return
+          }
+          const completed = index + 1
+          const message = `Saving historic entries to the local cache (${completed} of ${total})`
+          setImportPhase('savingHistoric', { message, completed, total })
+          markTaskProgress('historic', completed, total, message)
+        },
+        onIncrementalStart({ totalChanges, removedCount }) {
+          if (totalChanges > 0) {
+            const message = 'Saving historic changes to the local cache'
+            setImportPhase('savingHistoric', { message, completed: 0, total: totalChanges })
+            markTaskProgress('historic', 0, totalChanges, message)
+          } else if (removedCount > 0) {
+            const message = `Removing ${removedCount.toLocaleString()} retired historic entr${removedCount === 1 ? 'y' : 'ies'}`
+            setImportPhase('savingHistoric', { message, completed: 0, total: 0 })
+            markTaskProgress('historic', 0, 0, message)
+          } else {
+            const message = 'Historic dataset already up to date'
+            setImportPhase('savingHistoric', { message, completed: 0, total: 0 })
+            markTaskProgress('historic', 0, 0, message)
+          }
+        },
+        onIncrementalProgress(processed, totalChanges) {
+          const message = `Saving historic changes to the local cache (${processed} of ${totalChanges})`
+          setImportPhase('savingHistoric', { message, completed: processed, total: totalChanges })
+          markTaskProgress('historic', processed, totalChanges, message)
         }
       }
     })
 
     const importedAt = new Date().toISOString()
     setMetadata('historic.lastImportAt', importedAt)
-    setMetadata('historic.totalCount', String(enrichedEntries.length))
+    setMetadata('historic.totalCount', String(entries.length))
+    setMetadata('historic.lastNewCount', String(saveResult.newCount))
+    setMetadata('historic.lastUpdatedCount', String(saveResult.updatedCount))
+    setMetadata('historic.lastSkippedCount', String(saveResult.skippedCount))
+    setMetadata('historic.lastRemovedCount', String(saveResult.removedCount))
+    setMetadata('historic.lastImportStrategy', strategy)
 
-    markTaskComplete('historic', `${enrichedEntries.length.toLocaleString()} historic entries cached`)
+    if (strategy === 'incremental') {
+      const detailSegments: string[] = []
+      if (saveResult.newCount > 0) {
+        detailSegments.push(`${saveResult.newCount.toLocaleString()} new`)
+      }
+      if (saveResult.updatedCount > 0) {
+        detailSegments.push(`${saveResult.updatedCount.toLocaleString()} updated`)
+      }
+      if (saveResult.skippedCount > 0) {
+        detailSegments.push(`${saveResult.skippedCount.toLocaleString()} unchanged`)
+      }
+      if (saveResult.removedCount > 0) {
+        detailSegments.push(`${saveResult.removedCount.toLocaleString()} removed`)
+      }
+      const detailSummary = detailSegments.length
+        ? detailSegments.join(', ')
+        : 'no changes detected'
+      markTaskComplete(
+        'historic',
+        `Incremental historic import: ${detailSummary} (catalog size: ${entries.length.toLocaleString()})`
+      )
+    } else {
+      markTaskComplete('historic', `${entries.length.toLocaleString()} historic entries cached`)
+    }
 
-    return { imported: enrichedEntries.length }
+    return {
+      imported: saveResult.newCount + saveResult.updatedCount,
+      total: entries.length,
+      newCount: saveResult.newCount,
+      updatedCount: saveResult.updatedCount,
+      skippedCount: saveResult.skippedCount,
+      removedCount: saveResult.removedCount,
+      strategy
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Historic import failed'

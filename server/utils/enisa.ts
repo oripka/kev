@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm'
 import { ofetch } from 'ofetch'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
@@ -20,7 +19,11 @@ import {
   markTaskRunning,
   setImportPhase
 } from './import-progress'
-import { tables } from '../database/client'
+import {
+  createEntryRecords,
+  saveEntryRecords,
+  type ImportStrategy
+} from './importDiff'
 import type { DrizzleDatabase } from './sqlite'
 
 type EnisaApiProduct = {
@@ -209,8 +212,6 @@ const toBaseEntry = (item: EnisaApiItem): KevBaseEntry | null => {
   return baseEntry
 }
 
-const toJson = (value: unknown[] | undefined): string => JSON.stringify(value ?? [])
-
 const fetchPage = async (page: number, size: number): Promise<EnisaApiResponse> => {
   return ofetch<EnisaApiResponse>(ENISA_ENDPOINT, {
     query: {
@@ -232,12 +233,24 @@ type ImportOptions = {
   ttlMs?: number
   forceRefresh?: boolean
   allowStale?: boolean
+  strategy?: ImportStrategy
+}
+
+type EnisaImportSummary = {
+  imported: number
+  total: number
+  newCount: number
+  updatedCount: number
+  skippedCount: number
+  removedCount: number
+  strategy: ImportStrategy
+  lastUpdated: string | null
 }
 
 export const importEnisaCatalog = async (
   db: DrizzleDatabase,
   options: ImportOptions = {}
-): Promise<{ imported: number; lastUpdated: string | null }> => {
+): Promise<EnisaImportSummary> => {
   const { ttlMs = 86_400_000, forceRefresh = false, allowStale = false } = options
 
   markTaskRunning('enisa', 'Checking ENISA cache')
@@ -349,90 +362,51 @@ export const importEnisaCatalog = async (
     }
 
     const entries = cvelistResults.map(result => enrichEntry(result.entry))
+    const strategy: ImportStrategy = options.strategy === 'incremental' ? 'incremental' : 'full'
+    const entryRecords = createEntryRecords(entries, 'enisa', impactRecordMap)
 
-    setImportPhase('savingEnisa', {
-      message: 'Saving ENISA entries to the local cache',
-      completed: 0,
-      total: entries.length
-    })
-    markTaskProgress('enisa', 0, entries.length, 'Saving ENISA entries to the local cache')
-
-    db.transaction(tx => {
-      tx
-        .delete(tables.vulnerabilityEntries)
-        .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
-        .run()
-
-      for (let index = 0; index < entries.length; index += 1) {
-        const entry = entries[index]
-
-        tx
-          .insert(tables.vulnerabilityEntries)
-          .values({
-            id: entry.id,
-            cveId: entry.cveId,
-            source: 'enisa',
-            vendor: entry.vendor,
-            product: entry.product,
-            vendorKey: entry.vendorKey,
-            productKey: entry.productKey,
-            vulnerabilityName: entry.vulnerabilityName,
-            description: entry.description,
-            requiredAction: entry.requiredAction,
-            dateAdded: entry.dateAdded,
-            dueDate: entry.dueDate,
-            ransomwareUse: entry.ransomwareUse,
-            notes: toJson(entry.notes),
-            cwes: toJson(entry.cwes),
-            cvssScore: entry.cvssScore,
-            cvssVector: entry.cvssVector,
-            cvssVersion: entry.cvssVersion,
-            cvssSeverity: entry.cvssSeverity,
-            epssScore: entry.epssScore,
-            assigner: entry.assigner,
-            datePublished: entry.datePublished,
-            dateUpdated: entry.dateUpdated,
-            exploitedSince: entry.exploitedSince,
-          sourceUrl: entry.sourceUrl,
-          pocUrl: entry.pocUrl,
-          pocPublishedAt: entry.pocPublishedAt,
-          referenceLinks: toJson(entry.references),
-            aliases: toJson(entry.aliases),
-            affectedProducts: toJson(entry.affectedProducts),
-            problemTypes: toJson(entry.problemTypes),
-            metasploitModulePath: entry.metasploitModulePath,
-            metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
-            internetExposed: entry.internetExposed ? 1 : 0
-          })
-          .run()
-
-        const entryImpacts = impactRecordMap.get(entry.id) ?? []
-        if (entryImpacts.length) {
-          for (const impact of entryImpacts) {
-            tx
-              .insert(tables.vulnerabilityEntryImpacts)
-              .values({
-                entryId: impact.entryId,
-                vendor: impact.vendor,
-                vendorKey: impact.vendorKey,
-                product: impact.product,
-                productKey: impact.productKey,
-                status: impact.status,
-                versionRange: impact.versionRange,
-                source: impact.source
-              })
-              .run()
-          }
-        }
-
-        if ((index + 1) % 25 === 0 || index + 1 === entries.length) {
-          const message = `Saving ENISA entries to the local cache (${index + 1} of ${entries.length})`
+    const saveResult = saveEntryRecords({
+      db,
+      source: 'enisa',
+      records: entryRecords,
+      strategy,
+      callbacks: {
+        onFullStart(total) {
           setImportPhase('savingEnisa', {
-            message,
-            completed: index + 1,
-            total: entries.length
+            message: 'Saving ENISA entries to the local cache',
+            completed: 0,
+            total
           })
-          markTaskProgress('enisa', index + 1, entries.length, message)
+          markTaskProgress('enisa', 0, total, 'Saving ENISA entries to the local cache')
+        },
+        onFullProgress(index, total) {
+          if ((index + 1) % 25 !== 0 && index + 1 !== total) {
+            return
+          }
+          const completed = index + 1
+          const message = `Saving ENISA entries to the local cache (${completed} of ${total})`
+          setImportPhase('savingEnisa', { message, completed, total })
+          markTaskProgress('enisa', completed, total, message)
+        },
+        onIncrementalStart({ totalChanges, removedCount }) {
+          if (totalChanges > 0) {
+            const message = 'Saving ENISA changes to the local cache'
+            setImportPhase('savingEnisa', { message, completed: 0, total: totalChanges })
+            markTaskProgress('enisa', 0, totalChanges, message)
+          } else if (removedCount > 0) {
+            const message = `Removing ${removedCount.toLocaleString()} retired ENISA entr${removedCount === 1 ? 'y' : 'ies'}`
+            setImportPhase('savingEnisa', { message, completed: 0, total: 0 })
+            markTaskProgress('enisa', 0, 0, message)
+          } else {
+            const message = 'ENISA catalog already up to date'
+            setImportPhase('savingEnisa', { message, completed: 0, total: 0 })
+            markTaskProgress('enisa', 0, 0, message)
+          }
+        },
+        onIncrementalProgress(processed, totalChanges) {
+          const message = `Saving ENISA changes to the local cache (${processed} of ${totalChanges})`
+          setImportPhase('savingEnisa', { message, completed: processed, total: totalChanges })
+          markTaskProgress('enisa', processed, totalChanges, message)
         }
       }
     })
@@ -440,6 +414,11 @@ export const importEnisaCatalog = async (
     const importedAt = new Date().toISOString()
     setMetadata('enisa.lastImportAt', importedAt)
     setMetadata('enisa.totalCount', String(entries.length))
+    setMetadata('enisa.lastNewCount', String(saveResult.newCount))
+    setMetadata('enisa.lastUpdatedCount', String(saveResult.updatedCount))
+    setMetadata('enisa.lastSkippedCount', String(saveResult.skippedCount))
+    setMetadata('enisa.lastRemovedCount', String(saveResult.removedCount))
+    setMetadata('enisa.lastImportStrategy', strategy)
 
     const latestUpdatedAt = entries
       .map(entry => entry.dateUpdated ?? entry.exploitedSince ?? entry.datePublished)
@@ -451,10 +430,39 @@ export const importEnisaCatalog = async (
       setMetadata('enisa.lastUpdatedAt', latestUpdatedAt)
     }
 
-    markTaskComplete('enisa', `${entries.length.toLocaleString()} ENISA entries cached`)
+    if (strategy === 'incremental') {
+      const detailSegments: string[] = []
+      if (saveResult.newCount > 0) {
+        detailSegments.push(`${saveResult.newCount.toLocaleString()} new`)
+      }
+      if (saveResult.updatedCount > 0) {
+        detailSegments.push(`${saveResult.updatedCount.toLocaleString()} updated`)
+      }
+      if (saveResult.skippedCount > 0) {
+        detailSegments.push(`${saveResult.skippedCount.toLocaleString()} unchanged`)
+      }
+      if (saveResult.removedCount > 0) {
+        detailSegments.push(`${saveResult.removedCount.toLocaleString()} removed`)
+      }
+      const detailSummary = detailSegments.length
+        ? detailSegments.join(', ')
+        : 'no changes detected'
+      markTaskComplete(
+        'enisa',
+        `Incremental ENISA import: ${detailSummary} (catalog size: ${entries.length.toLocaleString()})`
+      )
+    } else {
+      markTaskComplete('enisa', `${entries.length.toLocaleString()} ENISA entries cached`)
+    }
 
     return {
-      imported: entries.length,
+      imported: saveResult.newCount + saveResult.updatedCount,
+      total: entries.length,
+      newCount: saveResult.newCount,
+      updatedCount: saveResult.updatedCount,
+      skippedCount: saveResult.skippedCount,
+      removedCount: saveResult.removedCount,
+      strategy,
       lastUpdated: latestUpdatedAt
     }
   } catch (error) {

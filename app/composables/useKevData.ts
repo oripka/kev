@@ -32,11 +32,31 @@ type ImportSummary = {
   kevRemovedCount: number
   kevImportStrategy: ImportStrategy
   historicImported: number
+  historicNewCount: number
+  historicUpdatedCount: number
+  historicSkippedCount: number
+  historicRemovedCount: number
+  historicImportStrategy: ImportStrategy
   enisaImported: number
+  enisaNewCount: number
+  enisaUpdatedCount: number
+  enisaSkippedCount: number
+  enisaRemovedCount: number
+  enisaImportStrategy: ImportStrategy
   metasploitImported: number
+  metasploitNewCount: number
+  metasploitUpdatedCount: number
+  metasploitSkippedCount: number
+  metasploitRemovedCount: number
+  metasploitImportStrategy: ImportStrategy
   metasploitModules: number
   metasploitCommit: string | null
   pocImported: number
+  pocNewCount: number
+  pocUpdatedCount: number
+  pocSkippedCount: number
+  pocRemovedCount: number
+  pocImportStrategy: ImportStrategy
   marketImported: number
   marketOfferCount: number
   marketProgramCount: number

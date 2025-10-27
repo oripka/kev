@@ -1061,20 +1061,24 @@ const filterParams = computed(() => {
   return params;
 });
 
-const pagelessFilterParams = computed(() => {
+const pagelessFilterSignature = computed(() => {
   const { limit: _limit, offset: _offset, ...rest } = filterParams.value;
-  return rest;
+  const entries = Object.entries(rest).filter(([, value]) => value !== undefined);
+
+  entries.sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey));
+
+  return JSON.stringify(entries);
 });
 
-watch(
-  pagelessFilterParams,
-  () => {
-    pagination.value.pageIndex = 0;
-    tablePagination.value.pageIndex = 0;
-    tablePagination.value.pageSize = pagination.value.pageSize;
-  },
-  { deep: true }
-);
+watch(pagelessFilterSignature, (next, previous) => {
+  if (next === previous) {
+    return;
+  }
+
+  pagination.value.pageIndex = 0;
+  tablePagination.value.pageIndex = 0;
+  tablePagination.value.pageSize = pagination.value.pageSize;
+});
 
 const normalizedSearchTerm = computed(() =>
   debouncedSearch.value.trim().toLowerCase()
@@ -1730,11 +1734,16 @@ const resultCountLabel = computed(() => {
     return "No matching exploits.";
   }
 
-  const loadedLabel = loaded.toLocaleString();
+  const start = loaded
+    ? paginatedRowStartIndex.value + 1
+    : 0;
+  const end = loaded ? paginatedRowEndIndex.value : 0;
+  const startLabel = start.toLocaleString();
+  const endLabel = end.toLocaleString();
   const totalLabel = total.toLocaleString();
   const noun = total === 1 ? "exploit" : "exploits";
 
-  return `Showing ${loadedLabel} / ${totalLabel} ${noun}.`;
+  return `Showing ${startLabel}-${endLabel} / ${totalLabel} ${noun}.`;
 });
 
 watch(showTrendSlideover, (value) => {

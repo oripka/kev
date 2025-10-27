@@ -18,7 +18,7 @@ type ImportSourceStatus = {
   latestCaptureAt: string | null
 }
 
-type KevImportSummary = {
+type SourceImportSummary = {
   lastImportedAt: string | null
   newCount: number
   updatedCount: number
@@ -29,7 +29,8 @@ type KevImportSummary = {
 
 type ImportStatusResponse = {
   sources: ImportSourceStatus[]
-  kevSummary: KevImportSummary | null
+  kevSummary: SourceImportSummary | null
+  sourceSummaries: Partial<Record<ImportTaskKey, SourceImportSummary>>
 }
 
 const CACHE_DIR = join(process.cwd(), 'data', 'cache')
@@ -50,6 +51,10 @@ const parseNumber = (value: string | null): number | null => {
 
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+const parseStrategy = (value: string | null): 'full' | 'incremental' => {
+  return normaliseString(value) === 'incremental' ? 'incremental' : 'full'
 }
 
 const loadCachedAt = async (fileName: string): Promise<string | null> => {
@@ -83,11 +88,96 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
   const kevRemovedCount = parseNumber(getMetadata('kev.lastRemovedCount')) ?? 0
   const kevStrategyRaw = normaliseString(getMetadata('kev.lastImportStrategy'))
   const kevStrategy: 'full' | 'incremental' = kevStrategyRaw === 'incremental' ? 'incremental' : 'full'
+  const historicLastImportedAt = normaliseString(getMetadata('historic.lastImportAt'))
+  const historicNewCount = parseNumber(getMetadata('historic.lastNewCount')) ?? 0
+  const historicUpdatedCount = parseNumber(getMetadata('historic.lastUpdatedCount')) ?? 0
+  const historicSkippedCount = parseNumber(getMetadata('historic.lastSkippedCount')) ?? 0
+  const historicRemovedCount = parseNumber(getMetadata('historic.lastRemovedCount')) ?? 0
+  const historicStrategy = parseStrategy(getMetadata('historic.lastImportStrategy'))
+  const enisaLastImportAt = normaliseString(getMetadata('enisa.lastImportAt'))
+  const enisaNewCount = parseNumber(getMetadata('enisa.lastNewCount')) ?? 0
+  const enisaUpdatedCount = parseNumber(getMetadata('enisa.lastUpdatedCount')) ?? 0
+  const enisaSkippedCount = parseNumber(getMetadata('enisa.lastSkippedCount')) ?? 0
+  const enisaRemovedCount = parseNumber(getMetadata('enisa.lastRemovedCount')) ?? 0
+  const enisaStrategy = parseStrategy(getMetadata('enisa.lastImportStrategy'))
+  const metasploitLastImportAt = normaliseString(getMetadata('metasploit.lastImportAt'))
+  const metasploitNewCount = parseNumber(getMetadata('metasploit.lastNewCount')) ?? 0
+  const metasploitUpdatedCount = parseNumber(getMetadata('metasploit.lastUpdatedCount')) ?? 0
+  const metasploitSkippedCount = parseNumber(getMetadata('metasploit.lastSkippedCount')) ?? 0
+  const metasploitRemovedCount = parseNumber(getMetadata('metasploit.lastRemovedCount')) ?? 0
+  const metasploitStrategy = parseStrategy(getMetadata('metasploit.lastImportStrategy'))
+  const pocLastImportAt = normaliseString(getMetadata('poc.lastImportAt'))
+  const pocNewCount = parseNumber(getMetadata('poc.lastNewCount')) ?? 0
+  const pocUpdatedCount = parseNumber(getMetadata('poc.lastUpdatedCount')) ?? 0
+  const pocSkippedCount = parseNumber(getMetadata('poc.lastSkippedCount')) ?? 0
+  const pocRemovedCount = parseNumber(getMetadata('poc.lastRemovedCount')) ?? 0
+  const pocStrategy = parseStrategy(getMetadata('poc.lastImportStrategy'))
   const marketLastImportedAt = normaliseString(getMetadata('market.lastImportAt'))
   const marketCachedAt = normaliseString(getMetadata('market.cachedAt'))
   const marketOfferCount = parseNumber(getMetadata('market.offerCount'))
   const marketProgramCount = parseNumber(getMetadata('market.programCount'))
   const marketLastCaptureAt = normaliseString(getMetadata('market.lastCaptureAt'))
+
+  const sourceSummaries: Partial<Record<ImportTaskKey, SourceImportSummary>> = {}
+
+  const kevSummary = kevLastImportedAt
+    ? {
+        lastImportedAt: kevLastImportedAt,
+        newCount: kevNewCount,
+        updatedCount: kevUpdatedCount,
+        skippedCount: kevSkippedCount,
+        removedCount: kevRemovedCount,
+        strategy: kevStrategy
+      }
+    : null
+
+  if (kevSummary) {
+    sourceSummaries.kev = kevSummary
+  }
+
+  if (historicLastImportedAt) {
+    sourceSummaries.historic = {
+      lastImportedAt: historicLastImportedAt,
+      newCount: historicNewCount,
+      updatedCount: historicUpdatedCount,
+      skippedCount: historicSkippedCount,
+      removedCount: historicRemovedCount,
+      strategy: historicStrategy
+    }
+  }
+
+  if (enisaLastImportAt) {
+    sourceSummaries.enisa = {
+      lastImportedAt: enisaLastImportAt,
+      newCount: enisaNewCount,
+      updatedCount: enisaUpdatedCount,
+      skippedCount: enisaSkippedCount,
+      removedCount: enisaRemovedCount,
+      strategy: enisaStrategy
+    }
+  }
+
+  if (metasploitLastImportAt) {
+    sourceSummaries.metasploit = {
+      lastImportedAt: metasploitLastImportAt,
+      newCount: metasploitNewCount,
+      updatedCount: metasploitUpdatedCount,
+      skippedCount: metasploitSkippedCount,
+      removedCount: metasploitRemovedCount,
+      strategy: metasploitStrategy
+    }
+  }
+
+  if (pocLastImportAt) {
+    sourceSummaries.poc = {
+      lastImportedAt: pocLastImportAt,
+      newCount: pocNewCount,
+      updatedCount: pocUpdatedCount,
+      skippedCount: pocSkippedCount,
+      removedCount: pocRemovedCount,
+      strategy: pocStrategy
+    }
+  }
 
   return {
     sources: [
@@ -121,7 +211,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'enisa',
         catalogVersion: normaliseString(getMetadata('enisa.lastUpdatedAt')),
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('enisa.lastImportAt')),
+        lastImportedAt: enisaLastImportAt,
         cachedAt: enisaCachedAt,
         totalCount: parseNumber(getMetadata('enisa.totalCount')),
         programCount: null,
@@ -133,7 +223,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'historic',
         catalogVersion: null,
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('historic.lastImportAt')),
+        lastImportedAt: historicLastImportedAt,
         cachedAt: null,
         totalCount: parseNumber(getMetadata('historic.totalCount')),
         programCount: null,
@@ -145,7 +235,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'metasploit',
         catalogVersion: normaliseString(getMetadata('metasploit.lastCommit')),
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('metasploit.lastImportAt')),
+        lastImportedAt: metasploitLastImportAt,
         cachedAt: null,
         totalCount: parseNumber(getMetadata('metasploit.totalCount')),
         programCount: null,
@@ -157,7 +247,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'poc',
         catalogVersion: null,
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('poc.lastImportAt')),
+        lastImportedAt: pocLastImportAt,
         cachedAt: pocCachedAt ?? normaliseString(getMetadata('poc.cachedAt')),
         totalCount: parseNumber(getMetadata('poc.totalCount')),
         programCount: null,
@@ -176,15 +266,7 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         latestCaptureAt: marketLastCaptureAt
       }
     ],
-    kevSummary: kevLastImportedAt
-      ? {
-          lastImportedAt: kevLastImportedAt,
-          newCount: kevNewCount,
-          updatedCount: kevUpdatedCount,
-          skippedCount: kevSkippedCount,
-          removedCount: kevRemovedCount,
-          strategy: kevStrategy
-        }
-      : null
+    kevSummary,
+    sourceSummaries
   }
 })
