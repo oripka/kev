@@ -121,27 +121,29 @@ type CatalogTableExpose = {
 
 const table = useTemplateRef<CatalogTableExpose | null>("table");
 
-const pagination = ref({
-  pageIndex: 0,
-  pageSize: 10,
-});
-
 const defaultEntryLimit = 25;
 const maxEntryLimit = 50;
-const requestedEntryLimit = ref(defaultEntryLimit);
+
+const pagination = ref({
+  pageIndex: 0,
+  pageSize: defaultEntryLimit,
+});
+
+const tablePagination = ref({
+  pageIndex: 0,
+  pageSize: defaultEntryLimit,
+});
 
 const currentPage = computed({
   get: () => pagination.value.pageIndex + 1,
   set: (page: number) => {
     const nextIndex = Math.max(0, page - 1);
-    const tableApi = table.value?.tableApi;
-
-    if (tableApi) {
-      tableApi.setPageIndex(nextIndex);
-      return;
-    }
-
     pagination.value.pageIndex = nextIndex;
+    const tableApi = table.value?.tableApi;
+    if (tableApi) {
+      tableApi.setPageIndex(0);
+    }
+    tablePagination.value.pageIndex = 0;
   },
 });
 
@@ -212,50 +214,27 @@ const filterPanelToggleAriaLabel = computed(() =>
 );
 
 watch(
-  () => pagination.value.pageIndex,
-  (pageIndex) => {
-    if (showAllResults.value) {
-      return;
-    }
-
-    const required = (pageIndex + 1) * pagination.value.pageSize;
-    if (required > requestedEntryLimit.value) {
-      requestedEntryLimit.value = Math.min(maxEntryLimit, required);
-    }
-  }
-);
-
-watch(
-  () => pagination.value.pageSize,
-  () => {
-    if (showAllResults.value) {
-      return;
-    }
-
-    const required = (pagination.value.pageIndex + 1) * pagination.value.pageSize;
-    requestedEntryLimit.value = Math.min(
-      maxEntryLimit,
-      Math.max(defaultEntryLimit, required),
-    );
-  },
-  { immediate: true }
-);
-
-watch(
   showAllResults,
   (value) => {
-    if (value) {
-      requestedEntryLimit.value = maxEntryLimit;
-      return;
-    }
-
-    const required = (pagination.value.pageIndex + 1) * pagination.value.pageSize;
-    requestedEntryLimit.value = Math.min(
-      maxEntryLimit,
-      Math.max(defaultEntryLimit, required),
-    );
+    pagination.value.pageIndex = 0;
+    tablePagination.value.pageIndex = 0;
+    pagination.value.pageSize = value ? maxEntryLimit : defaultEntryLimit;
+    tablePagination.value.pageSize = pagination.value.pageSize;
   },
   { immediate: true }
+);
+
+const apiPageSize = computed(() => {
+  const base = showAllResults.value ? maxEntryLimit : pagination.value.pageSize;
+  const normalized = Math.max(1, Math.trunc(base));
+  const minimum = showAllResults.value
+    ? normalized
+    : Math.max(defaultEntryLimit, normalized);
+  return Math.min(maxEntryLimit, minimum);
+});
+
+const apiOffset = computed(
+  () => pagination.value.pageIndex * apiPageSize.value,
 );
 
 const sortBadgeLabelMap: Record<SortOption, string> = {
@@ -1073,14 +1052,29 @@ const filterParams = computed(() => {
     }
   }
 
-  const requestedLimit = showAllResults.value
-    ? maxEntryLimit
-    : requestedEntryLimit.value;
-
-  params.limit = Math.min(maxEntryLimit, Math.max(defaultEntryLimit, requestedLimit));
+  const limit = apiPageSize.value;
+  params.limit = limit;
+  params.offset = apiOffset.value;
+  params.sort = sortOption.value;
+  params.sortDirection = sortDirection.value;
 
   return params;
 });
+
+const pagelessFilterParams = computed(() => {
+  const { limit: _limit, offset: _offset, ...rest } = filterParams.value;
+  return rest;
+});
+
+watch(
+  pagelessFilterParams,
+  () => {
+    pagination.value.pageIndex = 0;
+    tablePagination.value.pageIndex = 0;
+    tablePagination.value.pageSize = pagination.value.pageSize;
+  },
+  { deep: true }
+);
 
 const normalizedSearchTerm = computed(() =>
   debouncedSearch.value.trim().toLowerCase()
@@ -1674,33 +1668,19 @@ watch(
 );
 
 watch(
-  [results, () => pagination.value.pageSize],
-  () => {
+  results,
+  (rows) => {
     nextTick(() => {
+      tablePagination.value.pageIndex = 0;
+      tablePagination.value.pageSize =
+        rows.length || tablePagination.value.pageSize || 1;
       const tableApi = table.value?.tableApi;
-      if (!tableApi) {
-        return;
-      }
-
-      const { pageIndex } = tableApi.getState().pagination;
-      const maxPageIndex = Math.max(0, tableApi.getPageCount() - 1);
-      const filteredRowModel =
-        typeof tableApi.getFilteredRowModel === "function"
-          ? tableApi.getFilteredRowModel()
-          : null;
-      const totalLoaded = filteredRowModel?.rows.length ?? results.value.length;
-      const totalAvailable = totalEntries.value;
-
-      if (totalAvailable > totalLoaded) {
-        return;
-      }
-
-      if (pageIndex > maxPageIndex) {
-        tableApi.setPageIndex(Math.max(0, maxPageIndex));
+      if (tableApi) {
+        tableApi.setPageIndex(0);
       }
     });
   },
-  { flush: "post" }
+  { immediate: true }
 );
 
 const isBusy = computed(() => dataPending.value || isFiltering.value);
@@ -1710,8 +1690,7 @@ const paginatedRowStartIndex = computed(() => {
     return 0;
   }
 
-  const start = pagination.value.pageIndex * pagination.value.pageSize;
-  return Math.min(start, Math.max(results.value.length - 1, 0));
+  return pagination.value.pageIndex * apiPageSize.value;
 });
 
 const paginatedRowEndIndex = computed(() => {
@@ -1720,8 +1699,8 @@ const paginatedRowEndIndex = computed(() => {
   }
 
   return Math.min(
-    paginatedRowStartIndex.value + pagination.value.pageSize,
-    results.value.length,
+    paginatedRowStartIndex.value + results.value.length,
+    totalEntries.value,
   );
 });
 
@@ -1730,7 +1709,7 @@ const visiblePageRowCount = computed(() => {
     return 0;
   }
 
-  return paginatedRowEndIndex.value - paginatedRowStartIndex.value;
+  return results.value.length;
 });
 
 const shownResultCount = computed(() => results.value.length);
@@ -4973,7 +4952,7 @@ const tableMeta = {
             <UTable
               v-else
               ref="table"
-              v-model:pagination="pagination"
+              v-model:pagination="tablePagination"
               :data="results"
               :columns="columns"
               :meta="tableMeta"
@@ -4990,11 +4969,11 @@ const tableMeta = {
               <span>{{ resultCountLabel }}</span>
               <UPagination
                 v-if="
-                  results.length > pagination.pageSize ||
-                  (table?.tableApi?.getPageCount?.() ?? 0) > 1
+                  totalMatchCount > apiPageSize ||
+                  pagination.pageIndex > 0
                 "
                 v-model:page="currentPage"
-                :items-per-page="pagination.pageSize"
+                :items-per-page="apiPageSize"
                 :total="totalMatchCount"
               />
             </div>

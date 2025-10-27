@@ -20,6 +20,9 @@ import {
 import { getDatabase, getMetadata } from '../utils/sqlite'
 import type { DrizzleDatabase } from '../utils/sqlite'
 
+type SortKey = 'publicationDate' | 'cvssScore' | 'epssScore' | 'cveId'
+type SortDirection = 'asc' | 'desc'
+
 type CatalogQuery = {
   search?: string
   vendor?: string
@@ -49,6 +52,9 @@ type CatalogQuery = {
   ransomwareOnly?: boolean
   internetExposedOnly?: boolean
   limit?: number
+  offset?: number
+  sort?: SortKey
+  sortDirection?: SortDirection
   marketProgramType?: MarketProgramType
 }
 
@@ -311,6 +317,21 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.limit = Math.max(1, Math.min(MAX_ENTRY_LIMIT, limit))
   }
 
+  const offset = getInt('offset')
+  if (typeof offset === 'number' && offset >= 0) {
+    filters.offset = Math.max(0, offset)
+  }
+
+  const sort = getString('sort')
+  if (sort === 'publicationDate' || sort === 'cvssScore' || sort === 'epssScore' || sort === 'cveId') {
+    filters.sort = sort
+  }
+
+  const sortDirection = getString('sortDirection')
+  if (sortDirection === 'asc' || sortDirection === 'desc') {
+    filters.sortDirection = sortDirection
+  }
+
   return filters
 }
 
@@ -523,6 +544,57 @@ const combineConditions = (conditions: Condition[]): Condition | undefined => {
   return and(...(conditions as [Condition, Condition, ...Condition[]]))
 }
 
+const resolveSortDirection = (direction: SortDirection | undefined): SortDirection =>
+  direction === 'asc' || direction === 'desc' ? direction : 'desc'
+
+const resolveSortKey = (key: SortKey | undefined): SortKey => {
+  switch (key) {
+    case 'cvssScore':
+    case 'epssScore':
+    case 'cveId':
+      return key
+    default:
+      return 'publicationDate'
+  }
+}
+
+const buildOrderByExpressions = (
+  ce: typeof tables.catalogEntries,
+  filters: CatalogQuery
+): SQL<unknown>[] => {
+  const direction = resolveSortDirection(filters.sortDirection)
+  const key = resolveSortKey(filters.sort)
+
+  if (key === 'cvssScore') {
+    const column = ce.cvssScore
+    return [
+      sql`${column} IS NULL`,
+      direction === 'asc' ? asc(column) : desc(column),
+      asc(ce.cveId)
+    ]
+  }
+
+  if (key === 'epssScore') {
+    const column = ce.epssScore
+    return [
+      sql`${column} IS NULL`,
+      direction === 'asc' ? asc(column) : desc(column),
+      asc(ce.cveId)
+    ]
+  }
+
+  if (key === 'cveId') {
+    return [direction === 'asc' ? asc(ce.cveId) : desc(ce.cveId)]
+  }
+
+  const column = ce.dateAddedTs
+  return [
+    sql`${column} IS NULL`,
+    direction === 'asc' ? asc(column) : desc(column),
+    asc(ce.cveId)
+  ]
+}
+
 const queryEntries = (
   db: DrizzleDatabase,
   filters: CatalogQuery,
@@ -535,6 +607,8 @@ const queryEntries = (
     1,
     Math.min(MAX_ENTRY_LIMIT, limitOverride ?? filters.limit ?? DEFAULT_ENTRY_LIMIT)
   )
+  const offset = Math.max(0, filters.offset ?? 0)
+  const orderBy = buildOrderByExpressions(ce, filters)
 
   let query = db
     .select({
@@ -568,8 +642,9 @@ const queryEntries = (
   }
 
   const rows = query
-    .orderBy(sql`${ce.dateAddedTs} IS NULL`, desc(ce.dateAddedTs), asc(ce.cveId))
+    .orderBy(...orderBy)
     .limit(limit)
+    .offset(offset)
     .all() as CatalogSummaryRow[]
 
   const productKeys = Array.from(
