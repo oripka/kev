@@ -2,6 +2,7 @@ import {
   computed,
   onScopeDispose,
   ref,
+  shallowRef,
   unref,
   watch,
   type ComputedRef,
@@ -122,8 +123,31 @@ const normaliseQuery = (source?: KevQueryParams): NormalisedQuery => {
   return query
 }
 
+const areQueriesEqual = (first: NormalisedQuery, second: NormalisedQuery) => {
+  const firstKeys = Object.keys(first)
+  const secondKeys = Object.keys(second)
+
+  if (firstKeys.length !== secondKeys.length) {
+    return false
+  }
+
+  return firstKeys.every((key) => first[key] === second[key])
+}
+
 export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
-  const normalisedQuery = computed(() => normaliseQuery(querySource ? unref(querySource) : undefined))
+  const normalisedQuery = shallowRef<NormalisedQuery>({})
+
+  const resolveQuery = () => normaliseQuery(querySource ? unref(querySource) : undefined)
+
+  watch(
+    resolveQuery,
+    (next) => {
+      if (!areQueriesEqual(normalisedQuery.value, next)) {
+        normalisedQuery.value = next
+      }
+    },
+    { immediate: true }
+  )
 
   const { data, pending, error, refresh } = useFetch<KevResponse>('/api/kev', {
     query: normalisedQuery,
