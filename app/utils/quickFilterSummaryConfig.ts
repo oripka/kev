@@ -23,8 +23,8 @@ type MetricInfo = {
 
 export const quickFilterSummaryMetricInfo: Record<QuickFilterSummaryMetricKey, MetricInfo> = {
   count: {
-    label: "In view",
-    description: "Number of catalog entries that match the current filters.",
+    label: "Matching results",
+    description: "Loaded vs total catalog entries that match the current filters.",
     icon: "i-lucide-list-checks",
   },
   year: {

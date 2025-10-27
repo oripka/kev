@@ -366,7 +366,7 @@ const focusSeveritySlices = computed<TrackedProductSeveritySlice[]>(() => {
                   variant="soft"
                   class="text-xs font-semibold"
                 >
-                  {{ props.matchingResultsLabel }} CVEs
+                  {{ props.matchingResultsLabel }} exploits
                 </UBadge>
               </div>
               <div v-if="props.severityDistribution.length" class="space-y-3">

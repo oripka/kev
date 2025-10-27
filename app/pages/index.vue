@@ -73,7 +73,7 @@ const formatMarketProgramTypeLabel = (type: MarketProgramType) => {
 
 const sliderMinYear = 2021;
 const sliderMaxYear = new Date().getFullYear();
-const defaultYearStart = Math.max(sliderMinYear, sliderMaxYear - 1);
+const defaultYearStart = sliderMaxYear;
 const defaultYearEnd = sliderMaxYear;
 
 const defaultYearRange = ref<[number, number]>([
@@ -315,6 +315,13 @@ const selectableSources: CatalogSource[] = [
   "poc",
 ];
 
+const defaultSourceSelection: CatalogSource[] = [
+  "kev",
+  "enisa",
+  "historic",
+  "metasploit",
+];
+
 const selectedSources = ref<CatalogSource[]>([]);
 const hasSourceSelection = computed(() => selectedSources.value.length > 0);
 const updateSelectedSources = (values: Iterable<CatalogSource>) => {
@@ -536,6 +543,10 @@ const normaliseNumericRange = (
   return [start, end];
 };
 
+let hasAppliedInitialRoute = false;
+let isApplyingRouteToState = false;
+let isReplacingRouteQuery = false;
+
 const applyRouteQueryState = (rawQuery: RouteQuery) => {
   const getValue = (key: string) => rawQuery[key];
 
@@ -660,13 +671,20 @@ const applyRouteQueryState = (rawQuery: RouteQuery) => {
           selectableSources.includes(value as CatalogSource),
         )
     : [];
+  const shouldApplyDefaultSources =
+    !hasAppliedInitialRoute &&
+    !resolvedSources.length &&
+    !selectedSources.value.length;
+  const nextSources = shouldApplyDefaultSources
+    ? defaultSourceSelection
+    : resolvedSources;
 
   const currentSources = selectedSources.value;
   if (
-    resolvedSources.length !== currentSources.length ||
-    resolvedSources.some((value) => !currentSources.includes(value))
+    nextSources.length !== currentSources.length ||
+    nextSources.some((value) => !currentSources.includes(value))
   ) {
-    setSourceSelection(resolvedSources);
+    setSourceSelection(nextSources);
   }
 
   const marketProgramTypeParam = extractQueryString(getValue("marketProgramType"));
@@ -891,10 +909,6 @@ const routeQueryState = computed<Record<string, string>>(() => {
 
   return query;
 });
-
-let hasAppliedInitialRoute = false;
-let isApplyingRouteToState = false;
-let isReplacingRouteQuery = false;
 
 watch(
   () => route.query,
@@ -1732,36 +1746,16 @@ const canShowAllResults = computed(
 const resultCountLabel = computed(() => {
   const total = totalMatchCount.value;
   const loaded = shownResultCount.value;
-  const visible = visiblePageRowCount.value;
 
-  if (total === 0) {
-    return "No matches found.";
+  if (!total) {
+    return "No matching exploits.";
   }
 
-  if (!loaded || !visible) {
-    return `Showing 0 of ${total.toLocaleString()} matches.`;
-  }
+  const loadedLabel = loaded.toLocaleString();
+  const totalLabel = total.toLocaleString();
+  const noun = total === 1 ? "exploit" : "exploits";
 
-  if (
-    total <= loaded &&
-    loaded <= pagination.value.pageSize &&
-    paginatedRowStartIndex.value === 0 &&
-    paginatedRowEndIndex.value === loaded
-  ) {
-    const shownLabel = `${loaded.toLocaleString()} match${
-      loaded === 1 ? "" : "es"
-    }`;
-    return `Showing ${shownLabel}.`;
-  }
-
-  const start = paginatedRowStartIndex.value + 1;
-  const end = paginatedRowEndIndex.value;
-  const rangeLabel =
-    start === end
-      ? start.toLocaleString()
-      : `${start.toLocaleString()}–${end.toLocaleString()}`;
-
-  return `Showing ${rangeLabel} of ${total.toLocaleString()} matches.`;
+  return `Showing ${loadedLabel} / ${totalLabel} ${noun}.`;
 });
 
 watch(showTrendSlideover, (value) => {
@@ -1848,9 +1842,20 @@ const formatShare = (count: number, total: number) => {
 };
 
 const matchingResultsCount = computed(() => results.value.length);
-const matchingResultsLabel = computed(() =>
-  matchingResultsCount.value.toLocaleString()
-);
+const matchingResultsTotal = computed(() => totalMatchCount.value);
+const matchingResultsLabel = computed(() => {
+  const loaded = matchingResultsCount.value;
+  const total = matchingResultsTotal.value;
+
+  if (!total) {
+    return "0";
+  }
+
+  const loadedLabel = loaded.toLocaleString();
+  const totalLabel = total.toLocaleString();
+
+  return `${loadedLabel} / ${totalLabel}`;
+});
 
 const showCatalogEmptyState = computed(
   () => !isBusy.value && results.value.length === 0
@@ -2325,7 +2330,7 @@ const quickFilterSummaryMetricMap = computed<
       key: "count",
       icon: info.count.icon,
       label: info.count.label,
-      value: `${matchingResultsLabel.value} CVEs`,
+      value: `${matchingResultsLabel.value} exploits`,
     },
     year: {
       key: "year",
@@ -3471,6 +3476,20 @@ const truncateDescription = (value: string | null | undefined) => {
 const getEntryTitle = (entry: KevEntrySummary) =>
   entry.vulnerabilityName?.trim() || entry.cveId;
 
+const truncateTitle = (entry: KevEntrySummary, limit = 96) => {
+  const title = getEntryTitle(entry);
+
+  if (!title) {
+    return entry.cveId;
+  }
+
+  if (title.length <= limit) {
+    return title;
+  }
+
+  return `${title.slice(0, limit)}…`;
+};
+
 const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
   if (showCompactTable.value) {
     return [
@@ -3484,7 +3503,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               class:
                 "max-w-xs break-words text-wrap text-sm font-semibold text-neutral-900 dark:text-neutral-50",
             },
-            getEntryTitle(row.original),
+            truncateTitle(row.original),
           ),
       },
       {
@@ -3497,7 +3516,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               class:
                 "max-w-xs break-words text-wrap text-sm",
             },
-           truncateDescription(row.original.description),
+            truncateDescription(row.original.description),
           ),
       },
       {
@@ -3555,12 +3574,14 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
       id: "summary",
       header: "Description",
       cell: ({ row }) => {
-        const description =
-          row.original.description || "No description provided.";
-        const wellKnownLabel = getWellKnownCveName(row.original.cveId);
-        const badgeRowChildren: Array<ReturnType<typeof h>> = [];
-
         const entry = row.original;
+        const fullDescription =
+          entry.description?.trim() || "No description provided.";
+        const description = truncateDescription(entry.description);
+        const fullTitle = getEntryTitle(entry);
+        const titleLabel = truncateTitle(entry);
+        const wellKnownLabel = getWellKnownCveName(entry.cveId);
+        const badgeRowChildren: Array<ReturnType<typeof h>> = [];
         const isTracked =
           trackedProductsReady.value &&
           trackedProductSet.value.has(entry.productKey);
@@ -3571,7 +3592,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           "RCE · Server-side Non-memory"
         );
 
-        for (const source of row.original.sources) {
+        for (const source of entry.sources) {
           const meta = sourceBadgeMap[source];
           const label = meta?.label ?? source.toUpperCase();
           const color = meta?.color ?? "neutral";
@@ -3668,8 +3689,9 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
             {
               class:
                 "max-w-2xl whitespace-normal break-words font-medium text-neutral-900 dark:text-neutral-100",
+              title: fullTitle !== titleLabel ? fullTitle : undefined,
             },
-            row.original.vulnerabilityName
+            titleLabel
           ),
         ];
 
@@ -3692,6 +3714,8 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
             {
               class:
                 "text-sm text-neutral-500 dark:text-neutral-400 max-w-3xl whitespace-normal break-words text-pretty leading-relaxed",
+              title:
+                fullDescription !== description ? fullDescription : undefined,
             },
             description
           )
