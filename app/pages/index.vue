@@ -127,7 +127,7 @@ const pagination = ref({
 });
 
 const defaultEntryLimit = 25;
-const maxEntryLimit = 10_000;
+const maxEntryLimit = 50;
 const requestedEntryLimit = ref(defaultEntryLimit);
 
 const currentPage = computed({
