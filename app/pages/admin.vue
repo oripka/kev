@@ -48,6 +48,8 @@ const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
   market: "market intelligence offers",
 };
 
+const INCREMENTAL_IMPORT_SOURCES = new Set<ImportTaskKey>(["kev", "historic", "enisa", "metasploit", "poc"]);
+
 const isDevEnvironment = import.meta.dev;
 
 const numberFormatter = new Intl.NumberFormat("en-US");
@@ -92,6 +94,7 @@ type FormattedImportSource = {
   totalCountLabel: string | null;
   hasCache: boolean;
   supportsImport: boolean;
+  supportsIncremental: boolean;
 };
 
 type FormattedImportEvent = {
@@ -171,6 +174,7 @@ const formattedImportSources = computed<FormattedImportSource[]>(() =>
       totalCountLabel,
       hasCache: Boolean(cacheTimestamp),
       supportsImport: Boolean(source.importKey),
+      supportsIncremental: Boolean(source.importKey && INCREMENTAL_IMPORT_SOURCES.has(source.importKey)),
     } satisfies FormattedImportSource;
   }),
 );
@@ -496,13 +500,13 @@ const handleImport = async (source: ImportTaskKey | "all" = "all") => {
   }
 };
 
-const handleIncrementalKevImport = async () => {
+const handleIncrementalImport = async (source: ImportTaskKey | "all" = "all") => {
   if (!isDevEnvironment) {
     return;
   }
 
   try {
-    await importLatest({ mode: "force", source: "kev", strategy: "incremental" });
+    await importLatest({ mode: "force", source, strategy: "incremental" });
   } finally {
     await refreshImportStatuses();
   }
@@ -938,14 +942,14 @@ const handleResetDatabase = async () => {
                         Fetch latest
                       </UButton>
                       <UButton
-                        v-if="source.importKey === 'kev'"
+                        v-if="source.supportsIncremental"
                         size="sm"
                         color="success"
                         variant="soft"
                         icon="i-lucide-sparkles"
                         :disabled="importing || !isDevEnvironment"
-                        aria-label="Run incremental KEV update"
-                        @click="handleIncrementalKevImport"
+                        :aria-label="`Run incremental ${source.label.toLowerCase()} update`"
+                        @click="() => handleIncrementalImport(source.importKey as ImportTaskKey)"
                       >
                         Incremental update
                       </UButton>
@@ -982,6 +986,15 @@ const handleResetDatabase = async () => {
                   @click="() => handleImport()"
                 >
                   {{ importing ? "Importing…" : "Import latest data" }}
+                </UButton>
+                <UButton
+                  color="success"
+                  variant="soft"
+                  icon="i-lucide-sparkles"
+                  :disabled="importing || !isDevEnvironment"
+                  @click="() => handleIncrementalImport()"
+                >
+                  Run incremental update for all
                 </UButton>
                 <UButton
                   color="neutral"
