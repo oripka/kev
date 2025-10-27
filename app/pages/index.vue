@@ -953,6 +953,7 @@ const {
   updatedAt,
   getWellKnownCveName,
   totalEntries,
+  totalEntriesWithoutYear,
   entryLimit,
   pending: dataPending,
   market: marketOverview,
@@ -1038,67 +1039,6 @@ watch(priceSliderReady, (ready) => {
     pendingPriceRange = null;
   }
 });
-
-const filterParamsWithoutYear = computed(() => {
-  const [cvssStart, cvssEnd] = cvssRange.value;
-  const [epssStart, epssEnd] = epssRange.value;
-
-  const params: Record<string, unknown> = {
-    search: debouncedSearch.value || undefined,
-    domain: filters.domain || undefined,
-    exploit: filters.exploit || undefined,
-    vulnerability: filters.vulnerability || undefined,
-    vendor: filters.vendor || undefined,
-    product: filters.product || undefined,
-    wellKnownOnly: showWellKnownOnly.value ? true : undefined,
-    ransomwareOnly: showRansomwareOnly.value ? true : undefined,
-    publicExploitOnly: showPublicExploitOnly.value ? true : undefined,
-    ownedOnly: showOwnedOnlyEffective.value ? true : undefined,
-    internetExposedOnly: showInternetExposedOnly.value ? true : undefined,
-    limit: 1,
-  };
-
-  if (showOwnedOnlyEffective.value && trackedProductKeys.value.length) {
-    params.products = trackedProductKeys.value.join(",");
-  }
-
-  if (selectedSource.value !== "all") {
-    params.source = selectedSource.value;
-  }
-
-  if (selectedMarketProgramType.value) {
-    params.marketProgramType = selectedMarketProgramType.value;
-  }
-
-  if (cvssStart > defaultCvssRange[0] || cvssEnd < defaultCvssRange[1]) {
-    params.cvssMin = cvssStart;
-    params.cvssMax = cvssEnd;
-  }
-
-  if (epssStart > defaultEpssRange[0] || epssEnd < defaultEpssRange[1]) {
-    params.epssMin = epssStart;
-    params.epssMax = epssEnd;
-  }
-
-  if (priceSliderReady.value) {
-    const [defaultPriceMin, defaultPriceMax] = defaultPriceRange.value;
-    const [currentPriceMin, currentPriceMax] = priceRange.value;
-    if (
-      currentPriceMin > defaultPriceMin ||
-      currentPriceMax < defaultPriceMax
-    ) {
-      params.priceMin = currentPriceMin;
-      params.priceMax = currentPriceMax;
-    }
-  }
-
-  return params;
-});
-
-const {
-  totalEntries: totalEntriesAnyYear,
-  pending: anyYearPending,
-} = useKevData(filterParamsWithoutYear);
 
 const earliestDataYear = computed(() => {
   const value = catalogBounds.value.earliest;
@@ -1807,11 +1747,11 @@ const hasMatchesOutsideYearRange = computed(() => {
     return false;
   }
 
-  if (anyYearPending.value) {
+  if (dataPending.value) {
     return false;
   }
 
-  return totalEntriesAnyYear.value > 0;
+  return totalEntriesWithoutYear.value > 0;
 });
 
 const catalogEmptyMessage = computed(() => {

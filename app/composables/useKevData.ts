@@ -61,9 +61,11 @@ type UseKevDataResult = {
     product: KevCountDatum[]
   }>
   totalEntries: ComputedRef<number>
+  totalEntriesWithoutYear: ComputedRef<number>
   entryLimit: ComputedRef<number>
   updatedAt: ComputedRef<string>
   catalogBounds: ComputedRef<{ earliest: string | null; latest: string | null }>
+  market: ComputedRef<MarketOverview>
   pending: Ref<boolean>
   error: Ref<Error | null>
   refresh: () => Promise<void>
@@ -132,6 +134,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
       counts: createDefaultCounts(),
       catalogBounds: { earliest: null, latest: null },
       totalEntries: 0,
+      totalEntriesWithoutYear: 0,
       entryLimit: DEFAULT_ENTRY_LIMIT,
       market: createDefaultMarketOverview()
     })
@@ -269,6 +272,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   const entries = computed(() => data.value?.entries ?? [])
   const counts = computed(() => data.value?.counts ?? createDefaultCounts())
   const totalEntries = computed(() => data.value?.totalEntries ?? 0)
+  const totalEntriesWithoutYear = computed(() => data.value?.totalEntriesWithoutYear ?? 0)
   const entryLimit = computed(() => data.value?.entryLimit ?? DEFAULT_ENTRY_LIMIT)
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
   const catalogBounds = computed(() => data.value?.catalogBounds ?? { earliest: null, latest: null })
@@ -298,9 +302,11 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     entries,
     counts,
     totalEntries,
+    totalEntriesWithoutYear,
     entryLimit,
     updatedAt,
     catalogBounds,
+    market,
     pending,
     error,
     refresh,
@@ -310,7 +316,6 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     lastImportSummary,
     importProgress,
     isWellKnownCve,
-    getWellKnownCveName,
-    market
+    getWellKnownCveName
   }
 }

@@ -891,6 +891,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       },
       catalogBounds: getCatalogBounds(db),
       totalEntries: 0,
+      totalEntriesWithoutYear: 0,
       entryLimit,
       market: createEmptyMarketOverview()
     }
@@ -898,6 +899,10 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
 
   const entries = queryEntries(db, filters, entryLimit)
   const totalEntries = countEntries(db, filters)
+  const hasYearFilter = typeof filters.startYear === 'number' || typeof filters.endYear === 'number'
+  const totalEntriesWithoutYear = hasYearFilter
+    ? countEntries(db, omitFilters(filters, ['startYear', 'endYear']))
+    : totalEntries
 
   const counts = {
     domain: queryDimensionCounts(
@@ -941,6 +946,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     counts,
     catalogBounds,
     totalEntries,
+    totalEntriesWithoutYear,
     entryLimit,
     market
   }

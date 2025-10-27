@@ -242,6 +242,7 @@ export type KevResponse = {
     latest: string | null
   }
   totalEntries: number
+  totalEntriesWithoutYear: number
   entryLimit: number
   market: MarketOverview
 }
