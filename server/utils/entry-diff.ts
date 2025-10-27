@@ -1,12 +1,8 @@
 import { eq, inArray } from 'drizzle-orm'
 import type { KevEntry } from '~/types'
-import type { VulnerabilityImpactRecord } from './cvelist'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
-
-const toJson = (value: unknown): string => JSON.stringify(value ?? [])
-
-export type ImportStrategy = 'full' | 'incremental'
+import type { VulnerabilityImpactRecord } from './cvelist'
 
 export type EntryRowValues = {
   id: string
@@ -27,7 +23,7 @@ export type EntryRowValues = {
   cvssScore: number | null
   cvssVector: string | null
   cvssVersion: string | null
-  cvssSeverity: KevEntry['cvssSeverity']
+  cvssSeverity: KevEntry['cvssSeverity'] | null
   epssScore: number | null
   assigner: string | null
   datePublished: string | null
@@ -45,13 +41,6 @@ export type EntryRowValues = {
   internetExposed: number
 }
 
-export type CategoryRecord = {
-  entryId: string
-  categoryType: 'domain' | 'exploit' | 'vulnerability'
-  value: string
-  name: string
-}
-
 export type ImpactRecord = {
   entryId: string
   vendor: string
@@ -63,6 +52,13 @@ export type ImpactRecord = {
   source: string
 }
 
+export type CategoryRecord = {
+  entryId: string
+  categoryType: 'domain' | 'exploit' | 'vulnerability'
+  value: string
+  name: string
+}
+
 export type EntryDiffRecord = {
   values: EntryRowValues
   impacts: ImpactRecord[]
@@ -70,16 +66,15 @@ export type EntryDiffRecord = {
   signature: string
 }
 
-type ExistingRecord = {
-  values: EntryRowValues
-  impacts: ImpactRecord[]
-  categories: CategoryRecord[]
-  signature: string
-}
+type TransactionContext = Parameters<DrizzleDatabase['transaction']>[0] extends (
+  ...args: any
+) => any
+  ? Parameters<Parameters<DrizzleDatabase['transaction']>[0]>[0]
+  : never
 
-type ExistingRecordMap = Map<string, ExistingRecord>
+const toJson = (value: unknown): string => JSON.stringify(value ?? [])
 
-export const normaliseStoredSeverity = (
+const normaliseStoredSeverity = (
   value: unknown
 ): KevEntry['cvssSeverity'] | null => {
   if (typeof value !== 'string') {
@@ -98,65 +93,10 @@ export const normaliseStoredSeverity = (
   }
 }
 
-const buildCategoryRecords = (entry: KevEntry): CategoryRecord[] => {
-  const records: CategoryRecord[] = []
-  const pushCategories = (values: string[], type: CategoryRecord['categoryType']) => {
-    for (const value of values) {
-      records.push({ entryId: entry.id, categoryType: type, value, name: value })
-    }
-  }
-  pushCategories(entry.domainCategories, 'domain')
-  pushCategories(entry.exploitLayers, 'exploit')
-  pushCategories(entry.vulnerabilityCategories, 'vulnerability')
-  return records
-}
-
-const normaliseImpacts = (impacts: VulnerabilityImpactRecord[]): ImpactRecord[] => {
-  return impacts.map(impact => ({
-    entryId: impact.entryId,
-    vendor: impact.vendor,
-    vendorKey: impact.vendorKey,
-    product: impact.product,
-    productKey: impact.productKey,
-    status: impact.status ?? '',
-    versionRange: impact.versionRange ?? '',
-    source: impact.source
-  }))
-}
-
-const sortImpacts = (records: ImpactRecord[]) => {
-  return records
-    .map(record => ({ ...record }))
-    .sort((first, second) => {
-      const firstKey = [first.vendorKey, first.productKey, first.status, first.versionRange, first.source].join('|')
-      const secondKey = [second.vendorKey, second.productKey, second.status, second.versionRange, second.source].join('|')
-      return firstKey.localeCompare(secondKey)
-    })
-}
-
-const sortCategories = (records: CategoryRecord[]) => {
-  return records
-    .map(record => ({ ...record }))
-    .sort((first, second) => {
-      const firstKey = `${first.categoryType}|${first.value}`
-      const secondKey = `${second.categoryType}|${second.value}`
-      return firstKey.localeCompare(secondKey)
-    })
-}
-
-const createRecordSignature = (
-  values: EntryRowValues,
-  impacts: ImpactRecord[],
-  categories: CategoryRecord[]
-) => {
-  return JSON.stringify({
-    values: { ...values },
-    impacts: sortImpacts(impacts),
-    categories: sortCategories(categories)
-  })
-}
-
-export const createEntryValues = (entry: KevEntry, source: string): EntryRowValues => ({
+export const createEntryValues = (
+  entry: KevEntry,
+  source: string
+): EntryRowValues => ({
   id: entry.id,
   cveId: entry.cveId,
   source,
@@ -181,9 +121,9 @@ export const createEntryValues = (entry: KevEntry, source: string): EntryRowValu
   datePublished: entry.datePublished,
   dateUpdated: entry.dateUpdated,
   exploitedSince: entry.exploitedSince,
-  sourceUrl: entry.sourceUrl ?? null,
-  pocUrl: entry.pocUrl ?? null,
-  pocPublishedAt: entry.pocPublishedAt ?? null,
+  sourceUrl: entry.sourceUrl,
+  pocUrl: entry.pocUrl,
+  pocPublishedAt: entry.pocPublishedAt,
   referenceLinks: toJson(entry.references),
   aliases: toJson(entry.aliases),
   affectedProducts: toJson(entry.affectedProducts),
@@ -193,25 +133,100 @@ export const createEntryValues = (entry: KevEntry, source: string): EntryRowValu
   internetExposed: entry.internetExposed ? 1 : 0
 })
 
-export const createEntryRecords = (
-  entries: KevEntry[],
-  source: string,
-  impacts: Map<string, VulnerabilityImpactRecord[]>
-): EntryDiffRecord[] => {
-  return entries.map(entry => {
-    const values = createEntryValues(entry, source)
-    const categories = buildCategoryRecords(entry)
-    const impactRecords = normaliseImpacts(impacts.get(entry.id) ?? [])
-    return {
-      values,
-      impacts: impactRecords,
-      categories,
-      signature: createRecordSignature(values, impactRecords, categories)
+export const buildCategoryRecords = (entry: KevEntry): CategoryRecord[] => {
+  const records: CategoryRecord[] = []
+  const pushCategories = (
+    values: string[],
+    type: CategoryRecord['categoryType']
+  ) => {
+    for (const value of values) {
+      if (!value) {
+        continue
+      }
+      records.push({ entryId: entry.id, categoryType: type, value, name: value })
     }
-  })
+  }
+
+  pushCategories(entry.domainCategories, 'domain')
+  pushCategories(entry.exploitLayers, 'exploit')
+  pushCategories(entry.vulnerabilityCategories, 'vulnerability')
+
+  return records
 }
 
-const createEntryValuesFromRow = (row: {
+export const normaliseImpacts = (
+  impacts: VulnerabilityImpactRecord[]
+): ImpactRecord[] =>
+  impacts.map(impact => ({
+    entryId: impact.entryId,
+    vendor: impact.vendor,
+    vendorKey: impact.vendorKey,
+    product: impact.product,
+    productKey: impact.productKey,
+    status: impact.status ?? '',
+    versionRange: impact.versionRange ?? '',
+    source: impact.source
+  }))
+
+const sortImpacts = (records: ImpactRecord[]) =>
+  records
+    .map(record => ({ ...record }))
+    .sort((first, second) => {
+      const firstKey = [
+        first.vendorKey,
+        first.productKey,
+        first.status,
+        first.versionRange,
+        first.source
+      ].join('|')
+      const secondKey = [
+        second.vendorKey,
+        second.productKey,
+        second.status,
+        second.versionRange,
+        second.source
+      ].join('|')
+      return firstKey.localeCompare(secondKey)
+    })
+
+const sortCategories = (records: CategoryRecord[]) =>
+  records
+    .map(record => ({ ...record }))
+    .sort((first, second) => {
+      const firstKey = `${first.categoryType}|${first.value}`
+      const secondKey = `${second.categoryType}|${second.value}`
+      return firstKey.localeCompare(secondKey)
+    })
+
+export const createRecordSignature = (
+  values: EntryRowValues,
+  impacts: ImpactRecord[],
+  categories: CategoryRecord[]
+) =>
+  JSON.stringify({
+    values: { ...values },
+    impacts: sortImpacts(impacts),
+    categories: sortCategories(categories)
+  })
+
+export const buildEntryDiffRecords = (
+  entries: KevEntry[],
+  source: string,
+  impactMap: Map<string, VulnerabilityImpactRecord[]>
+): EntryDiffRecord[] =>
+  entries.map(entry => {
+    const values = createEntryValues(entry, source)
+    const categories = buildCategoryRecords(entry)
+    const impacts = normaliseImpacts(impactMap.get(entry.id) ?? [])
+    return {
+      values,
+      categories,
+      impacts,
+      signature: createRecordSignature(values, impacts, categories)
+    }
+  })
+
+type ExistingEntryRow = {
   id: string
   cveId: string | null
   vendor: string | null
@@ -245,7 +260,12 @@ const createEntryValuesFromRow = (row: {
   metasploitModulePath: string | null
   metasploitModulePublishedAt: string | null
   internetExposed: number | null
-}, source: string): EntryRowValues => ({
+}
+
+const createEntryValuesFromRow = (
+  row: ExistingEntryRow,
+  source: string
+): EntryRowValues => ({
   id: row.id,
   cveId: row.cveId ?? '',
   source,
@@ -282,7 +302,17 @@ const createEntryValuesFromRow = (row: {
   internetExposed: typeof row.internetExposed === 'number' ? row.internetExposed : 0
 })
 
-const loadExistingRecords = (db: DrizzleDatabase, source: string): ExistingRecordMap => {
+type ExistingEntryBucket = {
+  values: EntryRowValues
+  impacts: ImpactRecord[]
+  categories: CategoryRecord[]
+  signature: string
+}
+
+export const loadExistingEntryRecords = (
+  db: DrizzleDatabase,
+  source: string
+): Map<string, ExistingEntryBucket> => {
   const rows = db
     .select({
       id: tables.vulnerabilityEntries.id,
@@ -316,26 +346,22 @@ const loadExistingRecords = (db: DrizzleDatabase, source: string): ExistingRecor
       affectedProducts: tables.vulnerabilityEntries.affectedProducts,
       problemTypes: tables.vulnerabilityEntries.problemTypes,
       metasploitModulePath: tables.vulnerabilityEntries.metasploitModulePath,
-      metasploitModulePublishedAt: tables.vulnerabilityEntries.metasploitModulePublishedAt,
+      metasploitModulePublishedAt:
+        tables.vulnerabilityEntries.metasploitModulePublishedAt,
       internetExposed: tables.vulnerabilityEntries.internetExposed
     })
     .from(tables.vulnerabilityEntries)
     .where(eq(tables.vulnerabilityEntries.source, source))
-    .all()
+    .all() as ExistingEntryRow[]
 
-  const map: ExistingRecordMap = new Map()
+  const map = new Map<string, ExistingEntryBucket>()
 
   for (const row of rows) {
-    map.set(row.id, {
-      values: createEntryValuesFromRow(row, source),
-      impacts: [],
-      categories: [],
-      signature: ''
-    })
+    const values = createEntryValuesFromRow(row, source)
+    map.set(row.id, { values, impacts: [], categories: [], signature: '' })
   }
 
   const existingIds = Array.from(map.keys())
-
   if (!existingIds.length) {
     return map
   }
@@ -353,7 +379,7 @@ const loadExistingRecords = (db: DrizzleDatabase, source: string): ExistingRecor
     })
     .from(tables.vulnerabilityEntryImpacts)
     .where(inArray(tables.vulnerabilityEntryImpacts.entryId, existingIds))
-    .all()
+    .all() as ImpactRecord[]
 
   for (const impact of impactRows) {
     const bucket = map.get(impact.entryId)
@@ -366,8 +392,8 @@ const loadExistingRecords = (db: DrizzleDatabase, source: string): ExistingRecor
       vendorKey: impact.vendorKey,
       product: impact.product,
       productKey: impact.productKey,
-      status: impact.status ?? '',
-      versionRange: impact.versionRange ?? '',
+      status: impact.status,
+      versionRange: impact.versionRange,
       source: impact.source
     })
   }
@@ -381,7 +407,7 @@ const loadExistingRecords = (db: DrizzleDatabase, source: string): ExistingRecor
     })
     .from(tables.vulnerabilityEntryCategories)
     .where(inArray(tables.vulnerabilityEntryCategories.entryId, existingIds))
-    .all()
+    .all() as CategoryRecord[]
 
   for (const category of categoryRows) {
     const bucket = map.get(category.entryId)
@@ -397,23 +423,20 @@ const loadExistingRecords = (db: DrizzleDatabase, source: string): ExistingRecor
   }
 
   for (const bucket of map.values()) {
-    bucket.signature = createRecordSignature(bucket.values, bucket.impacts, bucket.categories)
+    bucket.signature = createRecordSignature(
+      bucket.values,
+      bucket.impacts,
+      bucket.categories
+    )
   }
 
   return map
 }
 
-type DiffResult = {
-  newRecords: EntryDiffRecord[]
-  updatedRecords: EntryDiffRecord[]
-  unchangedRecords: EntryDiffRecord[]
-  removedIds: string[]
-}
-
-const diffEntryRecords = (
-  existingMap: ExistingRecordMap,
-  records: EntryDiffRecord[]
-): DiffResult => {
+export const diffEntryRecords = (
+  records: EntryDiffRecord[],
+  existingMap: Map<string, ExistingEntryBucket>
+) => {
   const seenExisting = new Set<string>()
   const newRecords: EntryDiffRecord[] = []
   const updatedRecords: EntryDiffRecord[] = []
@@ -435,141 +458,47 @@ const diffEntryRecords = (
     }
   }
 
-  const removedIds = Array.from(existingMap.keys()).filter(id => !seenExisting.has(id))
+  const removedIds = Array.from(existingMap.keys()).filter(
+    id => !seenExisting.has(id)
+  )
+
   return { newRecords, updatedRecords, unchangedRecords, removedIds }
 }
 
-type SaveCallbacks = {
-  onFullStart?: (total: number) => void
-  onFullProgress?: (index: number, total: number) => void
-  onIncrementalStart?: (details: { totalChanges: number; removedCount: number }) => void
-  onIncrementalProgress?: (processed: number, totalChanges: number) => void
-}
+export const persistEntryRecord = (
+  tx: TransactionContext,
+  record: EntryDiffRecord,
+  action: 'insert' | 'update'
+) => {
+  const { values, impacts, categories } = record
 
-type SaveEntryRecordsOptions = {
-  db: DrizzleDatabase
-  source: string
-  records: EntryDiffRecord[]
-  strategy: ImportStrategy
-  callbacks?: SaveCallbacks
-}
-
-type SaveResult = {
-  newCount: number
-  updatedCount: number
-  skippedCount: number
-  removedCount: number
-}
-
-export const saveEntryRecords = ({
-  db,
-  source,
-  records,
-  strategy,
-  callbacks
-}: SaveEntryRecordsOptions): SaveResult => {
-  const totalRecords = records.length
-
-  if (strategy !== 'incremental') {
-    db.transaction(tx => {
-      tx
-        .delete(tables.vulnerabilityEntries)
-        .where(eq(tables.vulnerabilityEntries.source, source))
-        .run()
-
-      callbacks?.onFullStart?.(totalRecords)
-
-      for (let index = 0; index < records.length; index += 1) {
-        const record = records[index]
-        tx.insert(tables.vulnerabilityEntries).values(record.values).run()
-
-        if (record.impacts.length) {
-          tx.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
-        }
-
-        if (record.categories.length) {
-          tx.insert(tables.vulnerabilityEntryCategories).values(record.categories).run()
-        }
-
-        callbacks?.onFullProgress?.(index, totalRecords)
-      }
-    })
-
-    return {
-      newCount: totalRecords,
-      updatedCount: 0,
-      skippedCount: 0,
-      removedCount: 0
-    }
+  if (action === 'insert') {
+    tx.insert(tables.vulnerabilityEntries).values(values).run()
+  } else {
+    const { id, ...updateValues } = values
+    tx
+      .update(tables.vulnerabilityEntries)
+      .set(updateValues)
+      .where(eq(tables.vulnerabilityEntries.id, id))
+      .run()
   }
 
-  const existingMap = loadExistingRecords(db, source)
-  const { newRecords, updatedRecords, unchangedRecords, removedIds } = diffEntryRecords(existingMap, records)
-  const totalChanges = newRecords.length + updatedRecords.length
+  tx
+    .delete(tables.vulnerabilityEntryImpacts)
+    .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
+    .run()
 
-  db.transaction(tx => {
-    callbacks?.onIncrementalStart?.({ totalChanges, removedCount: removedIds.length })
+  if (impacts.length) {
+    tx.insert(tables.vulnerabilityEntryImpacts).values(impacts).run()
+  }
 
-    const persistRecord = (record: EntryDiffRecord, action: 'insert' | 'update', processed: number) => {
-      const { values, impacts, categories } = record
+  tx
+    .delete(tables.vulnerabilityEntryCategories)
+    .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
+    .run()
 
-      if (action === 'insert') {
-        tx.insert(tables.vulnerabilityEntries).values(values).run()
-      } else {
-        const { id, ...updateValues } = values
-        tx
-          .update(tables.vulnerabilityEntries)
-          .set(updateValues)
-          .where(eq(tables.vulnerabilityEntries.id, id))
-          .run()
-      }
-
-      tx
-        .delete(tables.vulnerabilityEntryImpacts)
-        .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
-        .run()
-
-      if (impacts.length) {
-        tx.insert(tables.vulnerabilityEntryImpacts).values(impacts).run()
-      }
-
-      tx
-        .delete(tables.vulnerabilityEntryCategories)
-        .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
-        .run()
-
-      if (categories.length) {
-        tx.insert(tables.vulnerabilityEntryCategories).values(categories).run()
-      }
-
-      if (totalChanges > 0) {
-        callbacks?.onIncrementalProgress?.(processed, totalChanges)
-      }
-    }
-
-    let processed = 0
-    for (const record of newRecords) {
-      processed += 1
-      persistRecord(record, 'insert', processed)
-    }
-    for (const record of updatedRecords) {
-      processed += 1
-      persistRecord(record, 'update', processed)
-    }
-
-    if (removedIds.length) {
-      tx
-        .delete(tables.vulnerabilityEntries)
-        .where(inArray(tables.vulnerabilityEntries.id, removedIds))
-        .run()
-    }
-  })
-
-  return {
-    newCount: newRecords.length,
-    updatedCount: updatedRecords.length,
-    skippedCount: unchangedRecords.length,
-    removedCount: removedIds.length
+  if (categories.length) {
+    tx.insert(tables.vulnerabilityEntryCategories).values(categories).run()
   }
 }
 

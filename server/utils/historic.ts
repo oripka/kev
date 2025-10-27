@@ -1,11 +1,20 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
+import {
+  buildEntryDiffRecords,
+  diffEntryRecords,
+  loadExistingEntryRecords,
+  persistEntryRecord
+} from './entry-diff'
+import type { ImportStrategy } from './import-types'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
@@ -20,11 +29,6 @@ import {
   markTaskRunning,
   setImportPhase
 } from './import-progress'
-import {
-  createEntryRecords,
-  saveEntryRecords,
-  type ImportStrategy
-} from './importDiff'
 
 const historicEntrySchema = z.object({
   cve: z.string(),
@@ -112,13 +116,9 @@ const toBaseEntry = (item: z.infer<typeof historicEntrySchema>): KevBaseEntry | 
   }
 }
 
-type ImportHistoricOptions = {
-  strategy?: ImportStrategy
-}
-
-type ImportHistoricSummary = {
+type HistoricImportSummary = {
   imported: number
-  total: number
+  totalCount: number
   newCount: number
   updatedCount: number
   skippedCount: number
@@ -128,8 +128,9 @@ type ImportHistoricSummary = {
 
 export const importHistoricCatalog = async (
   db: DrizzleDatabase,
-  options: ImportHistoricOptions = {}
-): Promise<ImportHistoricSummary> => {
+  options: { strategy?: ImportStrategy } = {}
+): Promise<HistoricImportSummary> => {
+  const strategy = options.strategy ?? 'full'
   markTaskRunning('historic', 'Loading historic exploit dataset')
 
   try {
@@ -200,98 +201,190 @@ export const importHistoricCatalog = async (
       }
     }
 
-    const entries = cvelistResults.map(result => enrichEntry(result.entry))
-    const strategy: ImportStrategy = options.strategy === 'incremental' ? 'incremental' : 'full'
-    const entryRecords = createEntryRecords(entries, 'historic', impactRecordMap)
+    const enrichedEntries = cvelistResults.map(result => enrichEntry(result.entry))
+    const entryRecords = buildEntryDiffRecords(
+      enrichedEntries,
+      'historic',
+      impactRecordMap
+    )
+    const totalEntries = entryRecords.length
+    const useIncremental = strategy === 'incremental'
 
-    const saveResult = saveEntryRecords({
-      db,
-      source: 'historic',
-      records: entryRecords,
-      strategy,
-      callbacks: {
-        onFullStart(total) {
-          setImportPhase('savingHistoric', {
-            message: 'Saving historic entries to the local cache',
-            completed: 0,
-            total
-          })
-          markTaskProgress('historic', 0, total, 'Saving historic entries to the local cache')
-        },
-        onFullProgress(index, total) {
-          if ((index + 1) % 25 !== 0 && index + 1 !== total) {
-            return
+    if (!useIncremental) {
+      setImportPhase('savingHistoric', {
+        message: 'Saving historic entries to the local cache',
+        completed: 0,
+        total: totalEntries
+      })
+      markTaskProgress(
+        'historic',
+        0,
+        totalEntries,
+        'Saving historic entries to the local cache'
+      )
+
+      db.transaction(tx => {
+        tx
+          .delete(tables.vulnerabilityEntries)
+          .where(eq(tables.vulnerabilityEntries.source, 'historic'))
+          .run()
+
+        for (let index = 0; index < entryRecords.length; index += 1) {
+          const record = entryRecords[index]
+
+          tx.insert(tables.vulnerabilityEntries).values(record.values).run()
+
+          if (record.impacts.length) {
+            tx.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
           }
-          const completed = index + 1
-          const message = `Saving historic entries to the local cache (${completed} of ${total})`
-          setImportPhase('savingHistoric', { message, completed, total })
-          markTaskProgress('historic', completed, total, message)
-        },
-        onIncrementalStart({ totalChanges, removedCount }) {
-          if (totalChanges > 0) {
-            const message = 'Saving historic changes to the local cache'
-            setImportPhase('savingHistoric', { message, completed: 0, total: totalChanges })
-            markTaskProgress('historic', 0, totalChanges, message)
-          } else if (removedCount > 0) {
-            const message = `Removing ${removedCount.toLocaleString()} retired historic entr${removedCount === 1 ? 'y' : 'ies'}`
-            setImportPhase('savingHistoric', { message, completed: 0, total: 0 })
-            markTaskProgress('historic', 0, 0, message)
-          } else {
-            const message = 'Historic dataset already up to date'
-            setImportPhase('savingHistoric', { message, completed: 0, total: 0 })
-            markTaskProgress('historic', 0, 0, message)
+
+          if (record.categories.length) {
+            tx
+              .insert(tables.vulnerabilityEntryCategories)
+              .values(record.categories)
+              .run()
           }
-        },
-        onIncrementalProgress(processed, totalChanges) {
-          const message = `Saving historic changes to the local cache (${processed} of ${totalChanges})`
-          setImportPhase('savingHistoric', { message, completed: processed, total: totalChanges })
-          markTaskProgress('historic', processed, totalChanges, message)
+
+          if ((index + 1) % 25 === 0 || index + 1 === entryRecords.length) {
+            const message = `Saving historic entries to the local cache (${index + 1} of ${entryRecords.length})`
+            setImportPhase('savingHistoric', {
+              message,
+              completed: index + 1,
+              total: entryRecords.length
+            })
+            markTaskProgress('historic', index + 1, entryRecords.length, message)
+          }
         }
+      })
+
+      const importedAt = new Date().toISOString()
+      setMetadata('historic.lastImportAt', importedAt)
+      setMetadata('historic.totalCount', String(totalEntries))
+      setMetadata('historic.lastNewCount', String(totalEntries))
+      setMetadata('historic.lastUpdatedCount', '0')
+      setMetadata('historic.lastSkippedCount', '0')
+      setMetadata('historic.lastRemovedCount', '0')
+      setMetadata('historic.lastImportStrategy', 'full')
+
+      markTaskComplete(
+        'historic',
+        `${totalEntries.toLocaleString()} historic entries cached`
+      )
+
+      return {
+        imported: totalEntries,
+        totalCount: totalEntries,
+        newCount: totalEntries,
+        updatedCount: 0,
+        skippedCount: 0,
+        removedCount: 0,
+        strategy: 'full'
+      }
+    }
+
+    const existingMap = loadExistingEntryRecords(db, 'historic')
+    const { newRecords, updatedRecords, unchangedRecords, removedIds } =
+      diffEntryRecords(entryRecords, existingMap)
+    const totalChanges = newRecords.length + updatedRecords.length
+
+    db.transaction(tx => {
+      if (totalChanges > 0) {
+        const message = 'Saving historic changes to the local cache'
+        setImportPhase('savingHistoric', {
+          message,
+          completed: 0,
+          total: totalChanges
+        })
+        markTaskProgress('historic', 0, totalChanges, message)
+      } else if (removedIds.length > 0) {
+        const message = `Removing ${removedIds.length.toLocaleString()} retired historic entr${removedIds.length === 1 ? 'y' : 'ies'}`
+        setImportPhase('savingHistoric', {
+          message,
+          completed: 0,
+          total: 0
+        })
+        markTaskProgress('historic', 0, 0, message)
+      } else {
+        const message = 'Historic catalog already up to date'
+        setImportPhase('savingHistoric', {
+          message,
+          completed: 0,
+          total: 0
+        })
+        markTaskProgress('historic', 0, 0, message)
+      }
+
+      const persist = (
+        record: typeof newRecords[number],
+        action: 'insert' | 'update',
+        index: number
+      ) => {
+        persistEntryRecord(tx, record, action)
+
+        if (totalChanges > 0) {
+          const completed = index + 1
+          const progressMessage = `Saving historic changes to the local cache (${completed} of ${totalChanges})`
+          setImportPhase('savingHistoric', {
+            message: progressMessage,
+            completed,
+            total: totalChanges
+          })
+          markTaskProgress('historic', completed, totalChanges, progressMessage)
+        }
+      }
+
+      let processed = 0
+      for (const record of newRecords) {
+        persist(record, 'insert', processed)
+        processed += 1
+      }
+      for (const record of updatedRecords) {
+        persist(record, 'update', processed)
+        processed += 1
+      }
+
+      if (removedIds.length > 0) {
+        tx
+          .delete(tables.vulnerabilityEntries)
+          .where(inArray(tables.vulnerabilityEntries.id, removedIds))
+          .run()
       }
     })
 
     const importedAt = new Date().toISOString()
     setMetadata('historic.lastImportAt', importedAt)
-    setMetadata('historic.totalCount', String(entries.length))
-    setMetadata('historic.lastNewCount', String(saveResult.newCount))
-    setMetadata('historic.lastUpdatedCount', String(saveResult.updatedCount))
-    setMetadata('historic.lastSkippedCount', String(saveResult.skippedCount))
-    setMetadata('historic.lastRemovedCount', String(saveResult.removedCount))
-    setMetadata('historic.lastImportStrategy', strategy)
+    setMetadata('historic.totalCount', String(totalEntries))
+    setMetadata('historic.lastNewCount', String(newRecords.length))
+    setMetadata('historic.lastUpdatedCount', String(updatedRecords.length))
+    setMetadata('historic.lastSkippedCount', String(unchangedRecords.length))
+    setMetadata('historic.lastRemovedCount', String(removedIds.length))
+    setMetadata('historic.lastImportStrategy', 'incremental')
 
-    if (strategy === 'incremental') {
-      const detailSegments: string[] = []
-      if (saveResult.newCount > 0) {
-        detailSegments.push(`${saveResult.newCount.toLocaleString()} new`)
-      }
-      if (saveResult.updatedCount > 0) {
-        detailSegments.push(`${saveResult.updatedCount.toLocaleString()} updated`)
-      }
-      if (saveResult.skippedCount > 0) {
-        detailSegments.push(`${saveResult.skippedCount.toLocaleString()} unchanged`)
-      }
-      if (saveResult.removedCount > 0) {
-        detailSegments.push(`${saveResult.removedCount.toLocaleString()} removed`)
-      }
-      const detailSummary = detailSegments.length
-        ? detailSegments.join(', ')
-        : 'no changes detected'
-      markTaskComplete(
-        'historic',
-        `Incremental historic import: ${detailSummary} (catalog size: ${entries.length.toLocaleString()})`
-      )
-    } else {
-      markTaskComplete('historic', `${entries.length.toLocaleString()} historic entries cached`)
+    const changeSegments: string[] = []
+    if (newRecords.length > 0) {
+      changeSegments.push(`${newRecords.length.toLocaleString()} new`)
+    }
+    if (updatedRecords.length > 0) {
+      changeSegments.push(`${updatedRecords.length.toLocaleString()} updated`)
+    }
+    if (removedIds.length > 0) {
+      changeSegments.push(`${removedIds.length.toLocaleString()} removed`)
     }
 
+    const summaryLabel = changeSegments.length
+      ? `Historic catalog updated (${changeSegments.join(', ')})`
+      : 'Historic catalog already up to date'
+
+    markTaskComplete('historic', summaryLabel)
+
     return {
-      imported: saveResult.newCount + saveResult.updatedCount,
-      total: entries.length,
-      newCount: saveResult.newCount,
-      updatedCount: saveResult.updatedCount,
-      skippedCount: saveResult.skippedCount,
-      removedCount: saveResult.removedCount,
-      strategy
+      imported: totalChanges,
+      totalCount: totalEntries,
+      newCount: newRecords.length,
+      updatedCount: updatedRecords.length,
+      skippedCount: unchangedRecords.length,
+      removedCount: removedIds.length,
+      strategy: 'incremental'
     }
   } catch (error) {
     const message =

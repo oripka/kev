@@ -1,8 +1,10 @@
+import { eq, inArray } from 'drizzle-orm'
 import { ofetch } from 'ofetch'
 import { z } from 'zod'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import { tables } from '../database/client'
 import type { DrizzleDatabase } from './sqlite'
 import { setMetadata } from './sqlite'
 import { getCachedData } from './cache'
@@ -14,11 +16,6 @@ import {
   type VulnerabilityImpactRecord
 } from './cvelist'
 import {
-  createEntryRecords,
-  saveEntryRecords,
-  type ImportStrategy
-} from './importDiff'
-import {
   markTaskComplete,
   markTaskError,
   markTaskProgress,
@@ -27,6 +24,13 @@ import {
   updateImportProgress
 } from './import-progress'
 import { resolvePocPublishDates } from './github-poc-history'
+import {
+  buildEntryDiffRecords,
+  diffEntryRecords,
+  loadExistingEntryRecords,
+  persistEntryRecord
+} from './entry-diff'
+import type { ImportStrategy } from './import-types'
 
 const POC_ENRICHMENT_CONCURRENCY = Math.max(16, CVELIST_ENRICHMENT_CONCURRENCY)
 const POC_HISTORY_LOOKBACK_DAYS = 365
@@ -174,9 +178,9 @@ type ImportOptions = {
   strategy?: ImportStrategy
 }
 
-type ImportSummary = {
+type PocImportSummary = {
   imported: number
-  total: number
+  totalCount: number
   newCount: number
   updatedCount: number
   skippedCount: number
@@ -207,9 +211,9 @@ const resolveDateAdded = (entry: KevBaseEntry, fallback: string): string => {
 export const importGithubPocCatalog = async (
   db: DrizzleDatabase,
   options: ImportOptions = {}
-): Promise<ImportSummary> => {
+): Promise<PocImportSummary> => {
   const ttlMs = options.ttlMs ?? 86_400_000
-  const strategy: ImportStrategy = options.strategy === 'incremental' ? 'incremental' : 'full'
+  const strategy = options.strategy ?? 'full'
 
   try {
     markTaskRunning('poc', 'Checking GitHub PoC feed cache')
@@ -366,100 +370,192 @@ export const importGithubPocCatalog = async (
         dateAdded: resolvedDate
       }
     })
-    const entryRecords = createEntryRecords(entries, 'poc', impactRecordMap)
 
-    const saveResult = saveEntryRecords({
-      db,
-      source: 'poc',
-      records: entryRecords,
-      strategy,
-      callbacks: {
-        onFullStart(total) {
-          setImportPhase('savingPoc', {
-            message: 'Saving GitHub PoC entries to the local cache',
-            completed: 0,
-            total
-          })
-          markTaskProgress('poc', 0, total, 'Saving GitHub PoC entries to the local cache')
-        },
-        onFullProgress(index, total) {
-          if ((index + 1) % 25 !== 0 && index + 1 !== total) {
-            return
+    const entryRecords = buildEntryDiffRecords(entries, 'poc', impactRecordMap)
+    const totalEntries = entryRecords.length
+    const useIncremental = strategy === 'incremental'
+
+    if (!useIncremental) {
+      setImportPhase('savingPoc', {
+        message: 'Saving GitHub PoC entries to the local cache',
+        completed: 0,
+        total: totalEntries
+      })
+      markTaskProgress(
+        'poc',
+        0,
+        totalEntries,
+        'Saving GitHub PoC entries to the local cache'
+      )
+
+      db.transaction(tx => {
+        tx
+          .delete(tables.vulnerabilityEntries)
+          .where(eq(tables.vulnerabilityEntries.source, 'poc'))
+          .run()
+
+        for (let index = 0; index < entryRecords.length; index += 1) {
+          const record = entryRecords[index]
+
+          tx.insert(tables.vulnerabilityEntries).values(record.values).run()
+
+          if (record.impacts.length) {
+            tx.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
           }
-          const completed = index + 1
-          const message = `Saving GitHub PoC entries (${completed} of ${total})`
-          setImportPhase('savingPoc', { message, completed, total })
-          markTaskProgress('poc', completed, total, message)
-        },
-        onIncrementalStart({ totalChanges, removedCount }) {
-          if (totalChanges > 0) {
-            const message = 'Saving GitHub PoC changes to the local cache'
-            setImportPhase('savingPoc', { message, completed: 0, total: totalChanges })
-            markTaskProgress('poc', 0, totalChanges, message)
-          } else if (removedCount > 0) {
-            const message = `Removing ${removedCount.toLocaleString()} retired PoC entr${removedCount === 1 ? 'y' : 'ies'}`
-            setImportPhase('savingPoc', { message, completed: 0, total: 0 })
-            markTaskProgress('poc', 0, 0, message)
-          } else {
-            const message = 'GitHub PoC catalog already up to date'
-            setImportPhase('savingPoc', { message, completed: 0, total: 0 })
-            markTaskProgress('poc', 0, 0, message)
+
+          if (record.categories.length) {
+            tx
+              .insert(tables.vulnerabilityEntryCategories)
+              .values(record.categories)
+              .run()
           }
-        },
-        onIncrementalProgress(processed, totalChanges) {
-          const message = `Saving GitHub PoC changes (${processed} of ${totalChanges})`
-          setImportPhase('savingPoc', { message, completed: processed, total: totalChanges })
-          markTaskProgress('poc', processed, totalChanges, message)
+
+          if ((index + 1) % 25 === 0 || index + 1 === entryRecords.length) {
+            const message = `Saving GitHub PoC entries (${index + 1} of ${entryRecords.length})`
+            setImportPhase('savingPoc', {
+              message,
+              completed: index + 1,
+              total: entryRecords.length
+            })
+            markTaskProgress('poc', index + 1, entryRecords.length, message)
+          }
         }
+      })
+
+      const importedAt = new Date().toISOString()
+      setMetadata('poc.lastImportAt', importedAt)
+      setMetadata('poc.totalCount', String(totalEntries))
+      setMetadata('poc.lastNewCount', String(totalEntries))
+      setMetadata('poc.lastUpdatedCount', '0')
+      setMetadata('poc.lastSkippedCount', '0')
+      setMetadata('poc.lastRemovedCount', '0')
+      setMetadata('poc.lastImportStrategy', 'full')
+      if (datasetTimestamp) {
+        setMetadata('poc.cachedAt', datasetTimestamp)
+      }
+
+      const summaryLabel = totalEntries
+        ? `${totalEntries.toLocaleString()} GitHub PoC entries cached`
+        : 'No GitHub PoC entries found'
+      markTaskComplete('poc', summaryLabel)
+
+      return {
+        imported: totalEntries,
+        totalCount: totalEntries,
+        newCount: totalEntries,
+        updatedCount: 0,
+        skippedCount: 0,
+        removedCount: 0,
+        strategy: 'full',
+        cachedAt: datasetTimestamp || null
+      }
+    }
+
+    const existingMap = loadExistingEntryRecords(db, 'poc')
+    const { newRecords, updatedRecords, unchangedRecords, removedIds } =
+      diffEntryRecords(entryRecords, existingMap)
+    const totalChanges = newRecords.length + updatedRecords.length
+
+    db.transaction(tx => {
+      if (totalChanges > 0) {
+        const message = 'Saving GitHub PoC changes to the local cache'
+        setImportPhase('savingPoc', {
+          message,
+          completed: 0,
+          total: totalChanges
+        })
+        markTaskProgress('poc', 0, totalChanges, message)
+      } else if (removedIds.length > 0) {
+        const message = `Removing ${removedIds.length.toLocaleString()} retired GitHub PoC entr${removedIds.length === 1 ? 'y' : 'ies'}`
+        setImportPhase('savingPoc', {
+          message,
+          completed: 0,
+          total: 0
+        })
+        markTaskProgress('poc', 0, 0, message)
+      } else {
+        const message = 'GitHub PoC catalog already up to date'
+        setImportPhase('savingPoc', {
+          message,
+          completed: 0,
+          total: 0
+        })
+        markTaskProgress('poc', 0, 0, message)
+      }
+
+      const persist = (
+        record: typeof newRecords[number],
+        action: 'insert' | 'update',
+        index: number
+      ) => {
+        persistEntryRecord(tx, record, action)
+
+        if (totalChanges > 0) {
+          const completed = index + 1
+          const progressMessage = `Saving GitHub PoC changes (${completed} of ${totalChanges})`
+          setImportPhase('savingPoc', {
+            message: progressMessage,
+            completed,
+            total: totalChanges
+          })
+          markTaskProgress('poc', completed, totalChanges, progressMessage)
+        }
+      }
+
+      let processed = 0
+      for (const record of newRecords) {
+        persist(record, 'insert', processed)
+        processed += 1
+      }
+      for (const record of updatedRecords) {
+        persist(record, 'update', processed)
+        processed += 1
+      }
+
+      if (removedIds.length > 0) {
+        tx
+          .delete(tables.vulnerabilityEntries)
+          .where(inArray(tables.vulnerabilityEntries.id, removedIds))
+          .run()
       }
     })
 
     const importedAt = new Date().toISOString()
     setMetadata('poc.lastImportAt', importedAt)
-    setMetadata('poc.totalCount', String(entries.length))
-    setMetadata('poc.lastNewCount', String(saveResult.newCount))
-    setMetadata('poc.lastUpdatedCount', String(saveResult.updatedCount))
-    setMetadata('poc.lastSkippedCount', String(saveResult.skippedCount))
-    setMetadata('poc.lastRemovedCount', String(saveResult.removedCount))
-    setMetadata('poc.lastImportStrategy', strategy)
+    setMetadata('poc.totalCount', String(totalEntries))
+    setMetadata('poc.lastNewCount', String(newRecords.length))
+    setMetadata('poc.lastUpdatedCount', String(updatedRecords.length))
+    setMetadata('poc.lastSkippedCount', String(unchangedRecords.length))
+    setMetadata('poc.lastRemovedCount', String(removedIds.length))
+    setMetadata('poc.lastImportStrategy', 'incremental')
     if (datasetTimestamp) {
       setMetadata('poc.cachedAt', datasetTimestamp)
     }
 
-    const detailSegments: string[] = []
-    if (saveResult.newCount > 0) {
-      detailSegments.push(`${saveResult.newCount.toLocaleString()} new`)
+    const changeSegments: string[] = []
+    if (newRecords.length > 0) {
+      changeSegments.push(`${newRecords.length.toLocaleString()} new`)
     }
-    if (saveResult.updatedCount > 0) {
-      detailSegments.push(`${saveResult.updatedCount.toLocaleString()} updated`)
+    if (updatedRecords.length > 0) {
+      changeSegments.push(`${updatedRecords.length.toLocaleString()} updated`)
     }
-    if (saveResult.skippedCount > 0) {
-      detailSegments.push(`${saveResult.skippedCount.toLocaleString()} unchanged`)
-    }
-    if (saveResult.removedCount > 0) {
-      detailSegments.push(`${saveResult.removedCount.toLocaleString()} removed`)
+    if (removedIds.length > 0) {
+      changeSegments.push(`${removedIds.length.toLocaleString()} removed`)
     }
 
-    if (strategy === 'incremental') {
-      const detailSummary = detailSegments.length
-        ? detailSegments.join(', ')
-        : 'no changes detected'
-      markTaskComplete('poc', `Incremental GitHub PoC import: ${detailSummary}`)
-    } else {
-      const summaryLabel = entries.length
-        ? `${entries.length.toLocaleString()} GitHub PoC entries cached`
-        : 'No GitHub PoC entries found'
-      markTaskComplete('poc', summaryLabel)
-    }
+    const summaryLabel = changeSegments.length
+      ? `GitHub PoC catalog updated (${changeSegments.join(', ')})`
+      : 'GitHub PoC catalog already up to date'
+    markTaskComplete('poc', summaryLabel)
 
     return {
-      imported: saveResult.newCount + saveResult.updatedCount,
-      total: entries.length,
-      newCount: saveResult.newCount,
-      updatedCount: saveResult.updatedCount,
-      skippedCount: saveResult.skippedCount,
-      removedCount: saveResult.removedCount,
-      strategy,
+      imported: totalChanges,
+      totalCount: totalEntries,
+      newCount: newRecords.length,
+      updatedCount: updatedRecords.length,
+      skippedCount: unchangedRecords.length,
+      removedCount: removedIds.length,
+      strategy: 'incremental',
       cachedAt: datasetTimestamp || null
     }
   } catch (error) {
