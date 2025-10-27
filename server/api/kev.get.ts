@@ -572,6 +572,8 @@ const queryDimensionCounts = (
   return rows.map(row => ({ key: row.key, name: row.name, count: Number(row.count) }))
 }
 
+const TOP_COUNT_LIMIT = 15
+
 const queryVendorCounts = (
   db: DrizzleDatabase,
   filters: CatalogQuery
@@ -600,6 +602,7 @@ const queryVendorCounts = (
     .groupBy(filtered.vendorKey)
     .having(sql`max(${filtered.vendor}) != 'Other'`)
     .orderBy(sql`count(*) DESC`, sql`max(${filtered.vendor}) ASC`)
+    .limit(TOP_COUNT_LIMIT)
     .all()
 
   return rows.map(row => ({
@@ -646,6 +649,7 @@ const queryProductCounts = (
     .groupBy(filtered.productKey)
     .having(sql`max(${filtered.product}) != 'Other'`)
     .orderBy(sql`count(*) DESC`, sql`max(${filtered.product}) ASC`)
+    .limit(TOP_COUNT_LIMIT)
     .all()
 
   return rows.map(row => ({

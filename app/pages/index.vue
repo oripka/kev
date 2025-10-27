@@ -9,6 +9,7 @@ import {
   resolveComponent,
   watch,
 } from "vue";
+import { getPaginationRowModel } from "@tanstack/vue-table";
 import { parseISO } from "date-fns";
 import type { AccordionItem, SelectMenuItem, TableColumn, TableRow } from "@nuxt/ui";
 import { useKevData } from "~/composables/useKevData";
@@ -106,6 +107,24 @@ const showRiskDetails = ref(false);
 const showAllResults = ref(false);
 const showMySoftwareSlideover = ref(false);
 const showClassificationReviewSlideover = ref(false);
+
+type CatalogTableApi = {
+  getState(): { pagination: { pageIndex: number; pageSize: number } };
+  setPageIndex(index: number): void;
+  getFilteredRowModel(): { rows: Array<unknown> };
+  getPageCount(): number;
+};
+
+type CatalogTableExpose = {
+  tableApi?: CatalogTableApi;
+};
+
+const table = useTemplateRef<CatalogTableExpose | null>("table");
+
+const pagination = ref({
+  pageIndex: 0,
+  pageSize: 10,
+});
 
 const showRelativeDates = computed({
   get: () => displayPreferences.value.relativeDates,
@@ -1574,7 +1593,67 @@ watch(
   { immediate: true, flush: "post" }
 );
 
+watch(
+  [results, () => pagination.value.pageSize],
+  () => {
+    nextTick(() => {
+      const tableApi = table.value?.tableApi;
+      if (!tableApi) {
+        return;
+      }
+
+      const { pageIndex } = tableApi.getState().pagination;
+      const maxPageIndex = Math.max(0, tableApi.getPageCount() - 1);
+
+      if (pageIndex > maxPageIndex) {
+        tableApi.setPageIndex(Math.max(0, maxPageIndex));
+      }
+    });
+  },
+  { flush: "post" }
+);
+
+const handlePageUpdate = (page: number) => {
+  const nextIndex = Math.max(0, page - 1);
+  const tableApi = table.value?.tableApi;
+
+  if (tableApi) {
+    tableApi.setPageIndex(nextIndex);
+    return;
+  }
+
+  pagination.value.pageIndex = nextIndex;
+};
+
 const isBusy = computed(() => dataPending.value || isFiltering.value);
+
+const paginatedRowStartIndex = computed(() => {
+  if (!results.value.length) {
+    return 0;
+  }
+
+  const start = pagination.value.pageIndex * pagination.value.pageSize;
+  return Math.min(start, Math.max(results.value.length - 1, 0));
+});
+
+const paginatedRowEndIndex = computed(() => {
+  if (!results.value.length) {
+    return 0;
+  }
+
+  return Math.min(
+    paginatedRowStartIndex.value + pagination.value.pageSize,
+    results.value.length,
+  );
+});
+
+const visiblePageRowCount = computed(() => {
+  if (!results.value.length) {
+    return 0;
+  }
+
+  return paginatedRowEndIndex.value - paginatedRowStartIndex.value;
+});
 
 const shownResultCount = computed(() => results.value.length);
 const totalMatchCount = computed(() => totalEntries.value);
@@ -1587,21 +1666,38 @@ const canShowAllResults = computed(
   () => hasLimitedResults.value || showAllResults.value
 );
 const resultCountLabel = computed(() => {
-  const shown = shownResultCount.value;
   const total = totalMatchCount.value;
+  const loaded = shownResultCount.value;
+  const visible = visiblePageRowCount.value;
 
   if (total === 0) {
     return "No matches found.";
   }
 
-  const shownLabel = `${shown.toLocaleString()} match${
-    shown === 1 ? "" : "es"
-  }`;
-  if (total <= shown) {
+  if (!loaded || !visible) {
+    return `Showing 0 of ${total.toLocaleString()} matches.`;
+  }
+
+  if (
+    total <= loaded &&
+    loaded <= pagination.value.pageSize &&
+    paginatedRowStartIndex.value === 0 &&
+    paginatedRowEndIndex.value === loaded
+  ) {
+    const shownLabel = `${loaded.toLocaleString()} match${
+      loaded === 1 ? "" : "es"
+    }`;
     return `Showing ${shownLabel}.`;
   }
 
-  return `Showing ${shown.toLocaleString()} of ${total.toLocaleString()} matches.`;
+  const start = paginatedRowStartIndex.value + 1;
+  const end = paginatedRowEndIndex.value;
+  const rangeLabel =
+    start === end
+      ? start.toLocaleString()
+      : `${start.toLocaleString()}–${end.toLocaleString()}`;
+
+  return `Showing ${rangeLabel} of ${total.toLocaleString()} matches.`;
 });
 
 watch(showTrendSlideover, (value) => {
@@ -4738,11 +4834,39 @@ const tableMeta = {
             />
             <UTable
               v-else
+              ref="table"
+              v-model:pagination="pagination"
               :data="results"
               :columns="columns"
               :meta="tableMeta"
+              :pagination-options="{
+                getPaginationRowModel: getPaginationRowModel()
+              }"
               @select="handleTableSelect"
             />
+
+            <div
+              v-if="results.length"
+              class="mt-4 flex flex-col items-center gap-2 border-t border-default pt-4 text-xs text-neutral-500 dark:text-neutral-400"
+            >
+              <span>{{ resultCountLabel }}</span>
+              <UPagination
+                v-if="
+                  results.length > pagination.pageSize ||
+                  (table?.tableApi?.getPageCount?.() ?? 0) > 1
+                "
+                :default-page="
+                  (table?.tableApi?.getState().pagination.pageIndex ?? pagination.pageIndex) + 1
+                "
+                :items-per-page="
+                  table?.tableApi?.getState().pagination.pageSize ?? pagination.pageSize
+                "
+                :total="
+                  table?.tableApi?.getFilteredRowModel().rows.length || results.length
+                "
+                @update:page="handlePageUpdate"
+              />
+            </div>
           </div>
         </div>
       </UCard>
