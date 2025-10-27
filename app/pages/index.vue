@@ -126,6 +126,25 @@ const pagination = ref({
   pageSize: 10,
 });
 
+const defaultEntryLimit = 25;
+const maxEntryLimit = 10_000;
+const requestedEntryLimit = ref(defaultEntryLimit);
+
+const currentPage = computed({
+  get: () => pagination.value.pageIndex + 1,
+  set: (page: number) => {
+    const nextIndex = Math.max(0, page - 1);
+    const tableApi = table.value?.tableApi;
+
+    if (tableApi) {
+      tableApi.setPageIndex(nextIndex);
+      return;
+    }
+
+    pagination.value.pageIndex = nextIndex;
+  },
+});
+
 const showRelativeDates = computed({
   get: () => displayPreferences.value.relativeDates,
   set: (value: boolean) => {
@@ -192,6 +211,53 @@ const filterPanelToggleAriaLabel = computed(() =>
     : "Show filters panel",
 );
 
+watch(
+  () => pagination.value.pageIndex,
+  (pageIndex) => {
+    if (showAllResults.value) {
+      return;
+    }
+
+    const required = (pageIndex + 1) * pagination.value.pageSize;
+    if (required > requestedEntryLimit.value) {
+      requestedEntryLimit.value = Math.min(maxEntryLimit, required);
+    }
+  }
+);
+
+watch(
+  () => pagination.value.pageSize,
+  () => {
+    if (showAllResults.value) {
+      return;
+    }
+
+    const required = (pagination.value.pageIndex + 1) * pagination.value.pageSize;
+    requestedEntryLimit.value = Math.min(
+      maxEntryLimit,
+      Math.max(defaultEntryLimit, required),
+    );
+  },
+  { immediate: true }
+);
+
+watch(
+  showAllResults,
+  (value) => {
+    if (value) {
+      requestedEntryLimit.value = maxEntryLimit;
+      return;
+    }
+
+    const required = (pagination.value.pageIndex + 1) * pagination.value.pageSize;
+    requestedEntryLimit.value = Math.min(
+      maxEntryLimit,
+      Math.max(defaultEntryLimit, required),
+    );
+  },
+  { immediate: true }
+);
+
 const sortBadgeLabelMap: Record<SortOption, string> = {
   publicationDate: "Published",
   epssScore: "EPSS",
@@ -209,7 +275,6 @@ const sortBadgeText = computed(
 );
 const defaultCvssRange = [0, 10] as const;
 const defaultEpssRange = [0, 100] as const;
-const maxEntryLimit = 25;
 const cvssRange = ref<[number, number]>([
   defaultCvssRange[0],
   defaultCvssRange[1],
@@ -935,9 +1000,11 @@ const filterParams = computed(() => {
     }
   }
 
-  if (showAllResults.value) {
-    params.limit = maxEntryLimit;
-  }
+  const requestedLimit = showAllResults.value
+    ? maxEntryLimit
+    : requestedEntryLimit.value;
+
+  params.limit = Math.min(maxEntryLimit, Math.max(defaultEntryLimit, requestedLimit));
 
   return params;
 });
@@ -1544,6 +1611,16 @@ watch(
 
       const { pageIndex } = tableApi.getState().pagination;
       const maxPageIndex = Math.max(0, tableApi.getPageCount() - 1);
+      const filteredRowModel =
+        typeof tableApi.getFilteredRowModel === "function"
+          ? tableApi.getFilteredRowModel()
+          : null;
+      const totalLoaded = filteredRowModel?.rows.length ?? results.value.length;
+      const totalAvailable = totalEntries.value;
+
+      if (totalAvailable > totalLoaded) {
+        return;
+      }
 
       if (pageIndex > maxPageIndex) {
         tableApi.setPageIndex(Math.max(0, maxPageIndex));
@@ -1552,18 +1629,6 @@ watch(
   },
   { flush: "post" }
 );
-
-const handlePageUpdate = (page: number) => {
-  const nextIndex = Math.max(0, page - 1);
-  const tableApi = table.value?.tableApi;
-
-  if (tableApi) {
-    tableApi.setPageIndex(nextIndex);
-    return;
-  }
-
-  pagination.value.pageIndex = nextIndex;
-};
 
 const isBusy = computed(() => dataPending.value || isFiltering.value);
 
@@ -4795,16 +4860,9 @@ const tableMeta = {
                   results.length > pagination.pageSize ||
                   (table?.tableApi?.getPageCount?.() ?? 0) > 1
                 "
-                :default-page="
-                  (table?.tableApi?.getState().pagination.pageIndex ?? pagination.pageIndex) + 1
-                "
-                :items-per-page="
-                  table?.tableApi?.getState().pagination.pageSize ?? pagination.pageSize
-                "
-                :total="
-                  table?.tableApi?.getFilteredRowModel().rows.length || results.length
-                "
-                @update:page="handlePageUpdate"
+                v-model:page="currentPage"
+                :items-per-page="pagination.pageSize"
+                :total="totalMatchCount"
               />
             </div>
           </div>
