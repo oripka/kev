@@ -11,7 +11,7 @@ Migrate the application from the local `better-sqlite3` database to NuxtHub's Cl
 - We added `server/utils/drizzle.ts` -> use this useDrizzle for querying
 - Dont use gor querying anymore `server/utils/sqlite.ts` (and any modules importing it) to use the new client, ensuring all Drizzle queries run against D1.
 - Validate that existing composables/services (`server/api/*.ts`, market utilities, etc.) still compile and function with the new client.
-
+- i think d1 cant do .transaction. so fix all thse any maybe stuff needs to be async.
 
 ## Usage
 
