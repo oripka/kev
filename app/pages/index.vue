@@ -188,7 +188,7 @@ const sortOption = ref<SortOption>("publicationDate");
 const sortDirection = ref<SortDirection>("desc");
 
 const sortOptionItems: SelectMenuItem<SortOption>[] = [
-  { label: "Publication date", value: "publicationDate" },
+  { label: "Date added", value: "publicationDate" },
   { label: "EPSS score", value: "epssScore" },
   { label: "CVSS score", value: "cvssScore" },
   { label: "CVE number", value: "cveId" },
@@ -238,7 +238,7 @@ const apiOffset = computed(
 );
 
 const sortBadgeLabelMap: Record<SortOption, string> = {
-  publicationDate: "Published",
+  publicationDate: "Added",
   epssScore: "EPSS",
   cvssScore: "CVSS",
   cveId: "CVE",
@@ -1512,7 +1512,7 @@ connectTrackedProductsKevData({
 });
 
 const getPublicationTimestamp = (entry: KevEntrySummary) => {
-  const candidates = [entry.datePublished, entry.dateAdded];
+  const candidates = [entry.dateAdded, entry.datePublished];
 
   for (const candidate of candidates) {
     if (!candidate) {

@@ -39,6 +39,7 @@ const INCLUDED_TABLES = [
   'market_offer_targets',
   'market_offer_categories',
   'market_programs',
+  'vulnerability_entries',
   'kev_metadata',
   'user_sessions',
   'user_product_filters'
