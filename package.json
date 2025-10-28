@@ -10,7 +10,8 @@
     "postinstall": "nuxt prepare",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:deploy": "node scripts/export-to-d1.mjs"
   },
   "dependencies": {
     "@nuxt/ui": "4.0.1",

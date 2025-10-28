@@ -79,6 +79,43 @@ const {
   },
 });
 
+const extractStatusCode = (error: unknown): number | null => {
+  if (!error || typeof error !== "object" || error === null) {
+    return null;
+  }
+  const withStatus = error as {
+    statusCode?: number;
+    status?: number;
+    response?: { status?: number } | null;
+  };
+  if (typeof withStatus.statusCode === "number") {
+    return withStatus.statusCode;
+  }
+  if (typeof withStatus.status === "number") {
+    return withStatus.status;
+  }
+  const response = withStatus.response;
+  if (response && typeof response === "object" && response !== null) {
+    const responseWithStatus = response as { status?: number };
+    if (typeof responseWithStatus.status === "number") {
+      return responseWithStatus.status;
+    }
+  }
+  return null;
+};
+
+const importStatusCode = computed(() => extractStatusCode(importStatusError.value));
+const importStatusForbidden = computed(() => {
+  const status = importStatusCode.value;
+  return status === 401 || status === 403;
+});
+const importStatusFetchFailed = computed(
+  () => Boolean(importStatusError.value) && !importStatusForbidden.value,
+);
+const adminActionsDisabled = computed(
+  () => !isDevEnvironment || importStatusForbidden.value,
+);
+
 const importSources = computed(() => importStatusData.value?.sources ?? []);
 const importEvents = computed(() => importProgress.value.events ?? []);
 const kevSummaryFromStatus = computed(() => importStatusData.value?.kevSummary ?? null);
