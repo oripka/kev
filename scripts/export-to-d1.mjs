@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
@@ -23,7 +24,8 @@ const dumpFilename =
 const dumpPath = join(dataDir, dumpFilename)
 const resetPath = join(dataDir, 'reset-d1.sql')
 const chunkDir = join(dataDir, 'dump-chunks')
-const localDbPath = join(dataDir, 'db.sqlite')
+const hubD1Dir = join(projectRoot, '.data', 'hub', 'd1')
+const legacyLocalDbPath = join(dataDir, 'db.sqlite')
 
 const usePreview = process.argv.includes('--preview')
 const wranglerTargetFlag = usePreview ? '--preview' : '--remote'
@@ -131,7 +133,56 @@ const resetRemoteDatabase = () => {
   )
 }
 
-const exportLocalDatabase = () => {
+const findSqliteFile = directory => {
+  if (!existsSync(directory)) {
+    return null
+  }
+
+  const entries = readdirSync(directory, { withFileTypes: true })
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      const nested = findSqliteFile(entryPath)
+      if (nested) {
+        return nested
+      }
+      continue
+    }
+    if (entry.isFile() && entry.name.endsWith('.sqlite')) {
+      return entryPath
+    }
+  }
+  return null
+}
+
+const resolveLocalDatabasePath = () => {
+  const envPath =
+    process.env.NUXTHUB_LOCAL_D1_PATH ||
+    process.env.LOCAL_SQLITE_PATH ||
+    process.env.DATABASE_PATH
+  if (envPath) {
+    const resolved = resolve(projectRoot, envPath)
+    if (!existsSync(resolved)) {
+      throw new Error(`Configured database file not found at ${resolved}`)
+    }
+    return resolved
+  }
+
+  const hubDbFile = findSqliteFile(hubD1Dir)
+  if (hubDbFile) {
+    return hubDbFile
+  }
+
+  if (existsSync(legacyLocalDbPath)) {
+    return legacyLocalDbPath
+  }
+
+  throw new Error(
+    `Unable to locate a NuxtHub D1 database file. Looked under ${hubD1Dir} and ${legacyLocalDbPath}.`
+  )
+}
+
+const exportLocalDatabase = localDbPath => {
   if (!existsSync(localDbPath)) {
     throw new Error(
       `Local database not found at ${localDbPath}. Run the app locally to generate it or adjust the path.`
@@ -273,7 +324,9 @@ const main = () => {
     ensureDataDir()
     writeResetSql()
     resetRemoteDatabase()
-    exportLocalDatabase()
+    const localDbPath = resolveLocalDatabasePath()
+    console.info(`Using local NuxtHub D1 database at ${localDbPath}`)
+    exportLocalDatabase(localDbPath)
     prepareDumpFile()
     uploadDump()
     console.info('✅ Remote D1 database refreshed successfully.')

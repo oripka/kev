@@ -1,7 +1,6 @@
 import { getQuery } from 'h3'
 import { sql, tables, useDrizzle } from '../utils/drizzle'
 import type { CatalogSource, ProductCatalogItem, ProductCatalogResponse } from '~/types'
-import { normaliseVendorProduct } from '~/utils/vendorProduct'
 
 interface ProductCatalogRow {
   product_key: string
@@ -12,8 +11,7 @@ interface ProductCatalogRow {
 }
 
 interface MatchCountRow {
-  vendor: string | null
-  product: string | null
+  product_key: string | null
   count: number
 }
 
@@ -60,18 +58,27 @@ export default defineEventHandler(async (event): Promise<ProductCatalogResponse>
   const db = useDrizzle()
   const matchCountRows = await db.all(
     sql<MatchCountRow>`
-      SELECT vendor, product, COUNT(*) as count
-      FROM ${tables.vulnerabilityEntries}
-      WHERE source IN ('kev', 'enisa', 'historic', 'metasploit')
-      GROUP BY vendor, product
+      SELECT product_key, COUNT(*) as count
+      FROM ${tables.catalogEntries}
+      WHERE product_key IS NOT NULL
+        AND product_key != ''
+        AND (
+          ${tables.catalogEntries.hasSourceKev} = 1
+          OR ${tables.catalogEntries.hasSourceEnisa} = 1
+          OR ${tables.catalogEntries.hasSourceHistoric} = 1
+          OR ${tables.catalogEntries.hasSourceMetasploit} = 1
+        )
+      GROUP BY product_key
     `
   )
 
   const matchCountByProduct = new Map<string, number>()
 
   for (const row of matchCountRows) {
-    const normalised = normaliseVendorProduct({ vendor: row.vendor, product: row.product })
-    matchCountByProduct.set(normalised.product.key, row.count ?? 0)
+    if (!row.product_key) {
+      continue
+    }
+    matchCountByProduct.set(row.product_key, row.count ?? 0)
   }
 
   let rows: ProductCatalogRow[]
