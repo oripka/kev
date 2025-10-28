@@ -115,6 +115,7 @@ const importStatusFetchFailed = computed(
 const adminActionsDisabled = computed(
   () => !isDevEnvironment || importStatusForbidden.value,
 );
+const adminActionsVisible = computed(() => isDevEnvironment && !importStatusForbidden.value);
 
 const importSources = computed(() => importStatusData.value?.sources ?? []);
 const importEvents = computed(() => importProgress.value.events ?? []);
@@ -526,7 +527,7 @@ const catalogRangeLabel = computed(() => {
 });
 
 const handleImport = async (source: ImportTaskKey | "all" = "all") => {
-  if (!isDevEnvironment) {
+  if (adminActionsDisabled.value) {
     return;
   }
 
@@ -538,7 +539,7 @@ const handleImport = async (source: ImportTaskKey | "all" = "all") => {
 };
 
 const handleIncrementalImport = async (source: ImportTaskKey | "all" = "all") => {
-  if (!isDevEnvironment) {
+  if (adminActionsDisabled.value) {
     return;
   }
 
@@ -550,7 +551,7 @@ const handleIncrementalImport = async (source: ImportTaskKey | "all" = "all") =>
 };
 
 const handleCachedReimport = async (source: ImportTaskKey | "all" = "all") => {
-  if (!isDevEnvironment) {
+  if (adminActionsDisabled.value) {
     return;
   }
 
@@ -806,7 +807,7 @@ if (typeof window !== "undefined") {
 }
 
 const handleReclassify = async () => {
-  if (!isDevEnvironment) {
+  if (adminActionsDisabled.value) {
     return;
   }
 
@@ -828,7 +829,7 @@ const handleReclassify = async () => {
 };
 
 const handleResetDatabase = async () => {
-  if (!isDevEnvironment) {
+  if (adminActionsDisabled.value) {
     return;
   }
 
@@ -920,12 +921,20 @@ const handleResetDatabase = async () => {
 
             <div class="space-y-3">
               <UAlert
-                v-if="importStatusError"
+                v-if="importStatusForbidden"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-lock"
+                title="Admin API key required"
+                description="Provide the admin API key to view import history in production."
+              />
+              <UAlert
+                v-else-if="importStatusFetchFailed"
                 color="error"
                 variant="soft"
                 icon="i-lucide-alert-triangle"
                 title="Unable to load import history"
-                :description="importStatusError.message"
+                :description="importStatusError?.message ?? 'Unexpected error while fetching import history.'"
               />
               <p
                 v-else-if="importStatusPending"
@@ -965,14 +974,14 @@ const handleResetDatabase = async () => {
                       {{ source.totalCountLabel }}
                     </p>
                   </div>
-                  <div class="flex flex-wrap items-center gap-2">
+                  <div v-if="adminActionsVisible" class="flex flex-wrap items-center gap-2">
                     <template v-if="source.supportsImport && source.importKey">
                       <UButton
                         size="sm"
                         color="primary"
                         variant="soft"
                         icon="i-lucide-cloud-download"
-                        :disabled="importing || !isDevEnvironment"
+                        :disabled="importing || adminActionsDisabled"
                         :aria-label="`Fetch latest ${source.label}`"
                         @click="() => handleImport(source.importKey as ImportTaskKey)"
                       >
@@ -984,7 +993,7 @@ const handleResetDatabase = async () => {
                         color="success"
                         variant="soft"
                         icon="i-lucide-sparkles"
-                        :disabled="importing || !isDevEnvironment"
+                        :disabled="importing || adminActionsDisabled"
                         :aria-label="`Run incremental ${source.label.toLowerCase()} update`"
                         @click="() => handleIncrementalImport(source.importKey as ImportTaskKey)"
                       >
@@ -995,7 +1004,7 @@ const handleResetDatabase = async () => {
                         color="neutral"
                         variant="ghost"
                         icon="i-lucide-hard-drive-download"
-                        :disabled="importing || !isDevEnvironment || !source.hasCache"
+                        :disabled="importing || adminActionsDisabled || !source.hasCache"
                         :aria-label="`Use cached ${source.label}`"
                         @click="() => handleCachedReimport(source.importKey as ImportTaskKey)"
                       >
@@ -1014,12 +1023,12 @@ const handleResetDatabase = async () => {
             </div>
 
             <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div class="flex flex-1 flex-wrap gap-2">
+              <div v-if="adminActionsVisible" class="flex flex-1 flex-wrap gap-2">
                 <UButton
                   color="primary"
                   icon="i-lucide-cloud-download"
                   :loading="importing"
-                  :disabled="importing || !isDevEnvironment"
+                  :disabled="importing || adminActionsDisabled"
                   @click="() => handleImport()"
                 >
                   {{ importing ? "Importing…" : "Import latest data" }}
@@ -1028,7 +1037,7 @@ const handleResetDatabase = async () => {
                   color="success"
                   variant="soft"
                   icon="i-lucide-sparkles"
-                  :disabled="importing || !isDevEnvironment"
+                  :disabled="importing || adminActionsDisabled"
                   @click="() => handleIncrementalImport()"
                 >
                   Run incremental update for all
@@ -1037,7 +1046,7 @@ const handleResetDatabase = async () => {
                   color="neutral"
                   variant="soft"
                   icon="i-lucide-refresh-ccw"
-                  :disabled="importing || !isDevEnvironment"
+                  :disabled="importing || adminActionsDisabled"
                   @click="() => handleCachedReimport()"
                 >
                   Reimport cached data
@@ -1047,7 +1056,7 @@ const handleResetDatabase = async () => {
                   variant="soft"
                   icon="i-lucide-layers"
                   :loading="reclassifyingCatalog"
-                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning || !isDevEnvironment"
+                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning || adminActionsDisabled"
                   @click="handleReclassify"
                 >
                   {{ reclassifyingCatalog ? "Reclassifying…" : "Reclassify cached data" }}
@@ -1057,7 +1066,7 @@ const handleResetDatabase = async () => {
                   variant="soft"
                   icon="i-lucide-trash"
                   :loading="resettingDatabase"
-                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning || !isDevEnvironment"
+                  :disabled="importing || resettingDatabase || reclassifyingCatalog || isClassificationRunning || adminActionsDisabled"
                   @click="handleResetDatabase"
                 >
                   {{ resettingDatabase ? "Resetting cache…" : "Reset local cache" }}
