@@ -1,8 +1,7 @@
 import { and, eq, inArray, not, sql } from 'drizzle-orm'
 import { createError, readBody } from 'h3'
 import { z } from 'zod'
-import { tables } from '../database/client'
-import { getDatabase } from '../utils/sqlite'
+import { tables, useDrizzle } from '../utils/drizzle'
 
 const productSchema = z.object({
   productKey: z.string().min(1),
@@ -29,27 +28,25 @@ export default defineEventHandler(async event => {
 
   const { sessionId, products } = parsed.data
   const uniqueProducts = Array.from(new Map(products.map(item => [item.productKey, item])).values())
-  const db = getDatabase()
+  const db = useDrizzle()
 
-  db
+  await db
     .insert(tables.userSessions)
     .values({ id: sessionId })
     .onConflictDoNothing()
     .run()
 
-  db.transaction(tx => {
-    const items = uniqueProducts
+  const items = uniqueProducts
 
-    if (!items.length) {
-      tx.delete(tables.userProductFilters)
-        .where(eq(tables.userProductFilters.sessionId, sessionId))
-        .run()
-      return
-    }
-
+  if (!items.length) {
+    await db
+      .delete(tables.userProductFilters)
+      .where(eq(tables.userProductFilters.sessionId, sessionId))
+      .run()
+  } else {
     const keys = items.map(item => item.productKey)
 
-    tx
+    await db
       .delete(tables.userProductFilters)
       .where(
         and(
@@ -60,7 +57,7 @@ export default defineEventHandler(async event => {
       .run()
 
     for (const item of items) {
-      tx
+      await db
         .insert(tables.userProductFilters)
         .values({
           sessionId,
@@ -80,9 +77,9 @@ export default defineEventHandler(async event => {
         })
         .run()
     }
-  })
+  }
 
-  const result = db
+  const result = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(tables.userProductFilters)
     .where(eq(tables.userProductFilters.sessionId, sessionId))

@@ -1,9 +1,7 @@
 import { createError, getRouterParam } from 'h3'
-import { sql } from 'drizzle-orm'
-import { tables } from '../../database/client'
+import { sql, tables, useDrizzle } from '../../utils/drizzle'
 import type { CatalogEntryRow } from '../../utils/catalog'
 import { catalogRowToEntry, getMarketSignalsForProducts } from '../../utils/catalog'
-import { getDatabase } from '../../utils/sqlite'
 import type {
   CatalogSource,
   KevAffectedProduct,
@@ -317,8 +315,8 @@ export default defineEventHandler(async event => {
     })
   }
 
-  const db = getDatabase()
-  const row = db.get(
+  const db = useDrizzle()
+  const row = await db.get(
     sql<CatalogEntryRow>`
       SELECT
         ce.cve_id,
@@ -378,7 +376,7 @@ export default defineEventHandler(async event => {
     })
   }
 
-  const marketSignals = getMarketSignalsForProducts(
+  const marketSignals = await getMarketSignalsForProducts(
     db,
     row.product_key ? [row.product_key] : []
   )
@@ -387,7 +385,7 @@ export default defineEventHandler(async event => {
 
   const cveId = normalizeValue(entry.cveId)
 
-  const detailRow = db.get(
+  const detailRow = await db.get(
     sql<{ affected_products: string | null; problem_types: string | null }>`
       SELECT
         ve.affected_products,
@@ -402,7 +400,7 @@ export default defineEventHandler(async event => {
   entry.problemTypes = parseProblemTypesJson(detailRow?.problem_types ?? null)
 
   const timelineRows: TimelineRow[] = cveId
-    ? (db.all(
+    ? ((await db.all(
         sql<TimelineRow>`
           SELECT
             ve.source,
@@ -414,8 +412,8 @@ export default defineEventHandler(async event => {
             ve.updated_at
           FROM ${tables.vulnerabilityEntries} ve
           WHERE ve.cve_id IS NOT NULL AND upper(ve.cve_id) = ${cveId.toUpperCase()}
-        `,
-      ) as TimelineRow[])
+        `
+      )) as TimelineRow[])
     : []
 
   const timeline = buildTimelineEvents(entry, timelineRows)

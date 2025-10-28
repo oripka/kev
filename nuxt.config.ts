@@ -1,6 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: "2025-07-15",
+  compatibilityDate: "2025-10-28",
   devtools: { enabled: true },
   modules: ["@nuxt/ui", "@nuxthub/core"],
   css: ["~/assets/css/main.css"],
@@ -8,7 +8,8 @@ export default defineNuxtConfig({
     database: true,
   },
   ignore: [
-    'data/**'
+    'data/**',
+    'data/cache/**'
   ],
   ssr: false,
   runtimeConfig: {

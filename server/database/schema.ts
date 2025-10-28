@@ -142,7 +142,14 @@ export const vulnerabilityEntryImpacts = sqliteTable(
   },
   table => ({
     pk: primaryKey({
-      columns: [table.entryId, table.vendorKey, table.productKey, table.status, table.versionRange]
+      columns: [
+        table.entryId,
+        table.vendorKey,
+        table.productKey,
+        table.status,
+        table.versionRange,
+        table.source
+      ]
     }),
     entryIdx: index('idx_vulnerability_entry_impacts_entry').on(table.entryId),
     vendorIdx: index('idx_vulnerability_entry_impacts_vendor').on(table.vendorKey),

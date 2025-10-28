@@ -6,8 +6,8 @@ import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
-import { setMetadata } from './sqlite'
+import type { DrizzleDatabase } from '../database/client'
+import { setMetadataValue } from './metadata'
 import {
   buildEntryDiffRecords,
   diffEntryRecords,
@@ -258,13 +258,15 @@ export const importHistoricCatalog = async (
       })
 
       const importedAt = new Date().toISOString()
-      setMetadata('historic.lastImportAt', importedAt)
-      setMetadata('historic.totalCount', String(totalEntries))
-      setMetadata('historic.lastNewCount', String(totalEntries))
-      setMetadata('historic.lastUpdatedCount', '0')
-      setMetadata('historic.lastSkippedCount', '0')
-      setMetadata('historic.lastRemovedCount', '0')
-      setMetadata('historic.lastImportStrategy', 'full')
+      await Promise.all([
+        setMetadataValue('historic.lastImportAt', importedAt),
+        setMetadataValue('historic.totalCount', String(totalEntries)),
+        setMetadataValue('historic.lastNewCount', String(totalEntries)),
+        setMetadataValue('historic.lastUpdatedCount', '0'),
+        setMetadataValue('historic.lastSkippedCount', '0'),
+        setMetadataValue('historic.lastRemovedCount', '0'),
+        setMetadataValue('historic.lastImportStrategy', 'full')
+      ])
 
       markTaskComplete(
         'historic',
@@ -352,13 +354,15 @@ export const importHistoricCatalog = async (
     })
 
     const importedAt = new Date().toISOString()
-    setMetadata('historic.lastImportAt', importedAt)
-    setMetadata('historic.totalCount', String(totalEntries))
-    setMetadata('historic.lastNewCount', String(newRecords.length))
-    setMetadata('historic.lastUpdatedCount', String(updatedRecords.length))
-    setMetadata('historic.lastSkippedCount', String(unchangedRecords.length))
-    setMetadata('historic.lastRemovedCount', String(removedIds.length))
-    setMetadata('historic.lastImportStrategy', 'incremental')
+    await Promise.all([
+      setMetadataValue('historic.lastImportAt', importedAt),
+      setMetadataValue('historic.totalCount', String(totalEntries)),
+      setMetadataValue('historic.lastNewCount', String(newRecords.length)),
+      setMetadataValue('historic.lastUpdatedCount', String(updatedRecords.length)),
+      setMetadataValue('historic.lastSkippedCount', String(unchangedRecords.length)),
+      setMetadataValue('historic.lastRemovedCount', String(removedIds.length)),
+      setMetadataValue('historic.lastImportStrategy', 'incremental')
+    ])
 
     const changeSegments: string[] = []
     if (newRecords.length > 0) {

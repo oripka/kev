@@ -1,8 +1,7 @@
 import { eq, sql } from 'drizzle-orm'
 import type { CatalogSource } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
-import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
+import { tables, type DrizzleDatabase } from './drizzle'
 
 const toSearchTerms = (vendorName: string, productName: string) =>
   `${vendorName} ${productName}`.toLowerCase()
@@ -53,8 +52,8 @@ const collectProducts = (rows: ProductRow[], source: CatalogSource, target: Map<
   }
 }
 
-export const rebuildProductCatalog = (db: DrizzleDatabase) => {
-  const marketRows = db
+export const rebuildProductCatalog = async (db: DrizzleDatabase) => {
+  const marketRows = await db
     .select({
       vendor: tables.productCatalog.vendorName,
       product: tables.productCatalog.productName,
@@ -66,28 +65,28 @@ export const rebuildProductCatalog = (db: DrizzleDatabase) => {
     .where(sql`${tables.productCatalog.sources} LIKE '%"market"%'`)
     .all()
 
-  const kevRows = db
+  const kevRows = await db
     .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
     .from(tables.vulnerabilityEntries)
     .where(eq(tables.vulnerabilityEntries.source, 'kev'))
     .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
     .all()
 
-  const enisaRows = db
+  const enisaRows = await db
     .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
     .from(tables.vulnerabilityEntries)
     .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
     .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
     .all()
 
-  const historicRows = db
+  const historicRows = await db
     .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
     .from(tables.vulnerabilityEntries)
     .where(eq(tables.vulnerabilityEntries.source, 'historic'))
     .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
     .all()
 
-  const metasploitRows = db
+  const metasploitRows = await db
     .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
     .from(tables.vulnerabilityEntries)
     .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
@@ -126,53 +125,51 @@ export const rebuildProductCatalog = (db: DrizzleDatabase) => {
 
   const records = Array.from(catalog.values())
 
-  db.transaction(tx => {
-    const existingRows = tx
-      .select({ productKey: tables.productCatalog.productKey })
-      .from(tables.productCatalog)
-      .all()
+  const existingRows = await db
+    .select({ productKey: tables.productCatalog.productKey })
+    .from(tables.productCatalog)
+    .all()
 
-    const existingKeys = new Set(
-      existingRows
-        .map(row => row.productKey)
-        .filter((key): key is string => typeof key === 'string' && key.length > 0)
-    )
+  const existingKeys = new Set(
+    existingRows
+      .map(row => row.productKey)
+      .filter((key): key is string => typeof key === 'string' && key.length > 0)
+  )
 
-    const nextKeys = new Set<string>()
+  const nextKeys = new Set<string>()
 
-    for (const record of records) {
-      const sourcesJson = JSON.stringify(Array.from(record.sources))
-      const searchTerms = toSearchTerms(record.vendorName, record.productName)
+  for (const record of records) {
+    const sourcesJson = JSON.stringify(Array.from(record.sources))
+    const searchTerms = toSearchTerms(record.vendorName, record.productName)
 
-      nextKeys.add(record.productKey)
+    nextKeys.add(record.productKey)
 
-      tx
-        .insert(tables.productCatalog)
-        .values({
-          productKey: record.productKey,
+    await db
+      .insert(tables.productCatalog)
+      .values({
+        productKey: record.productKey,
+        productName: record.productName,
+        vendorKey: record.vendorKey,
+        vendorName: record.vendorName,
+        sources: sourcesJson,
+        searchTerms
+      })
+      .onConflictDoUpdate({
+        target: tables.productCatalog.productKey,
+        set: {
           productName: record.productName,
           vendorKey: record.vendorKey,
           vendorName: record.vendorName,
           sources: sourcesJson,
           searchTerms
-        })
-        .onConflictDoUpdate({
-          target: tables.productCatalog.productKey,
-          set: {
-            productName: record.productName,
-            vendorKey: record.vendorKey,
-            vendorName: record.vendorName,
-            sources: sourcesJson,
-            searchTerms
-          }
-        })
-        .run()
-    }
+        }
+      })
+      .run()
+  }
 
-    for (const key of existingKeys) {
-      if (!nextKeys.has(key)) {
-        tx.delete(tables.productCatalog).where(eq(tables.productCatalog.productKey, key)).run()
-      }
+  for (const key of existingKeys) {
+    if (!nextKeys.has(key)) {
+      await db.delete(tables.productCatalog).where(eq(tables.productCatalog.productKey, key)).run()
     }
-  })
+  }
 }

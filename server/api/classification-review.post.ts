@@ -1,11 +1,9 @@
-import { inArray } from "drizzle-orm";
 import { createError, readBody } from "h3";
 import { z } from "zod";
 import type { ClassificationReviewResponse } from "~/types";
-import { tables } from "../database/client";
 import { catalogRowToSummary, type CatalogSummaryRow } from "../utils/catalog";
 import { runClassificationReview } from "../utils/classification-review";
-import { getDatabase } from "../utils/sqlite";
+import { inArray, tables, useDrizzle } from "../utils/drizzle";
 
 const bodySchema = z.object({
   entryIds: z.array(z.string().min(1)).min(1),
@@ -52,7 +50,7 @@ export default defineEventHandler(async (event) => {
     return response;
   }
 
-  const db = getDatabase();
+  const db = useDrizzle();
   const { catalogEntries } = tables;
 
   const rows = await db
@@ -80,7 +78,8 @@ export default defineEventHandler(async (event) => {
       internet_exposed: catalogEntries.internetExposed,
     })
     .from(catalogEntries)
-    .where(inArray(catalogEntries.entryId, uniqueIds));
+    .where(inArray(catalogEntries.entryId, uniqueIds))
+    .all();
 
   const rowMap = new Map<string, CatalogSummaryRow>();
   for (const row of rows) {

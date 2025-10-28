@@ -5,7 +5,7 @@ import type { KevBaseEntry } from '~/utils/classification'
 import type { KevEntry } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { getCachedData } from './cache'
-import { setMetadata } from './sqlite'
+import { setMetadataValue } from './metadata'
 import {
   buildEntryDiffRecords,
   diffEntryRecords,
@@ -28,7 +28,7 @@ import {
   setImportPhase
 } from './import-progress'
 import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
+import type { DrizzleDatabase } from '../database/client'
 
 type EnisaApiProduct = {
   product?: {
@@ -425,16 +425,18 @@ export const importEnisaCatalog = async (
       })
 
       const importedAt = new Date().toISOString()
-      setMetadata('enisa.lastImportAt', importedAt)
-      setMetadata('enisa.totalCount', String(totalEntries))
-      setMetadata('enisa.lastNewCount', String(totalEntries))
-      setMetadata('enisa.lastUpdatedCount', '0')
-      setMetadata('enisa.lastSkippedCount', '0')
-      setMetadata('enisa.lastRemovedCount', '0')
-      setMetadata('enisa.lastImportStrategy', 'full')
+      await Promise.all([
+        setMetadataValue('enisa.lastImportAt', importedAt),
+        setMetadataValue('enisa.totalCount', String(totalEntries)),
+        setMetadataValue('enisa.lastNewCount', String(totalEntries)),
+        setMetadataValue('enisa.lastUpdatedCount', '0'),
+        setMetadataValue('enisa.lastSkippedCount', '0'),
+        setMetadataValue('enisa.lastRemovedCount', '0'),
+        setMetadataValue('enisa.lastImportStrategy', 'full')
+      ])
 
       if (latestUpdatedAt) {
-        setMetadata('enisa.lastUpdatedAt', latestUpdatedAt)
+        await setMetadataValue('enisa.lastUpdatedAt', latestUpdatedAt)
       }
 
       markTaskComplete(
@@ -524,16 +526,18 @@ export const importEnisaCatalog = async (
     })
 
     const importedAt = new Date().toISOString()
-    setMetadata('enisa.lastImportAt', importedAt)
-    setMetadata('enisa.totalCount', String(totalEntries))
-    setMetadata('enisa.lastNewCount', String(newRecords.length))
-    setMetadata('enisa.lastUpdatedCount', String(updatedRecords.length))
-    setMetadata('enisa.lastSkippedCount', String(unchangedRecords.length))
-    setMetadata('enisa.lastRemovedCount', String(removedIds.length))
-    setMetadata('enisa.lastImportStrategy', 'incremental')
+    await Promise.all([
+      setMetadataValue('enisa.lastImportAt', importedAt),
+      setMetadataValue('enisa.totalCount', String(totalEntries)),
+      setMetadataValue('enisa.lastNewCount', String(newRecords.length)),
+      setMetadataValue('enisa.lastUpdatedCount', String(updatedRecords.length)),
+      setMetadataValue('enisa.lastSkippedCount', String(unchangedRecords.length)),
+      setMetadataValue('enisa.lastRemovedCount', String(removedIds.length)),
+      setMetadataValue('enisa.lastImportStrategy', 'incremental')
+    ])
 
     if (latestUpdatedAt) {
-      setMetadata('enisa.lastUpdatedAt', latestUpdatedAt)
+      await setMetadataValue('enisa.lastUpdatedAt', latestUpdatedAt)
     }
 
     const changeSegments: string[] = []

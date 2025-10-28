@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm'
 import type { KevEntry } from '~/types'
 import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
+import type { DrizzleDatabase } from '../database/client'
 import type { VulnerabilityImpactRecord } from './cvelist'
 
 export type EntryRowValues = {

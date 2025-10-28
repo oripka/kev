@@ -14,9 +14,8 @@ import type {
   MarketProgramType,
   MarketSignal
 } from '~/types'
-import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
-import { ensureCatalogTables, setMetadata } from './sqlite'
+import { tables, type DrizzleDatabase } from '../database/client'
+import { setMetadataValue } from './metadata'
 
 type RebuildCatalogOptions = {
   onStart?(total: number): void
@@ -738,9 +737,11 @@ const toBooleanFlag = (value: boolean): number => (value ? 1 : 0)
 const toKnownRansomwareFlag = (value: string | null): number =>
   value?.toLowerCase().includes('known') ? 1 : 0
 
-export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptions = {}) => {
-  ensureCatalogTables(db)
-  const entryRows = db.all(
+export const rebuildCatalog = async (
+  db: DrizzleDatabase,
+  options: RebuildCatalogOptions = {},
+): Promise<KevEntrySummary> => {
+  const entryRows = await db.all(
     sql<VulnerabilityEntryRow>`
       SELECT
         id,
@@ -782,7 +783,7 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
     `
   )
 
-  const categoryRows = db.all(
+  const categoryRows = await db.all(
     sql<EntryCategoryRow>`
       SELECT entry_id, category_type, value, name FROM ${tables.vulnerabilityEntryCategories}
     `
@@ -844,110 +845,110 @@ export const rebuildCatalog = (db: DrizzleDatabase, options: RebuildCatalogOptio
     pocEntries
   )
 
-  db.transaction(tx => {
-    tx.delete(tables.catalogEntryDimensions).run()
-    tx.delete(tables.catalogEntries).run()
+  await db.delete(tables.catalogEntryDimensions).run()
+  await db.delete(tables.catalogEntries).run()
 
-    options.onStart?.(catalogEntries.length)
+  options.onStart?.(catalogEntries.length)
 
-    for (let index = 0; index < catalogEntries.length; index += 1) {
-      const entry = catalogEntries[index]
-      const dateAddedTs = toTimestamp(entry.dateAdded)
-      const dateUpdatedTs = toTimestamp(entry.dateUpdated)
-      const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
-      const hasKnownRansomware = toKnownRansomwareFlag(entry.ransomwareUse ?? null)
-      const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
-      const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
-      const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
-      const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
-      const hasSourcePoc = toBooleanFlag(entry.sources.includes('poc'))
+  for (let index = 0; index < catalogEntries.length; index += 1) {
+    const entry = catalogEntries[index]
+    const dateAddedTs = toTimestamp(entry.dateAdded)
+    const dateUpdatedTs = toTimestamp(entry.dateUpdated)
+    const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
+    const hasKnownRansomware = toKnownRansomwareFlag(entry.ransomwareUse ?? null)
+    const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
+    const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
+    const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
+    const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
+    const hasSourcePoc = toBooleanFlag(entry.sources.includes('poc'))
 
-      tx
-        .insert(tables.catalogEntries)
-        .values({
-          cveId: entry.cveId,
-          entryId: entry.id,
-          sources: toJson(entry.sources),
-          vendor: entry.vendor,
-          vendorKey: entry.vendorKey,
-          product: entry.product,
-          productKey: entry.productKey,
-          vulnerabilityName: entry.vulnerabilityName,
-          description: entry.description,
-          requiredAction: entry.requiredAction,
-          dateAdded: entry.dateAdded,
-          dateAddedTs,
-          dateAddedYear: toYear(dateAddedTs),
-          dueDate: entry.dueDate,
-          ransomwareUse: entry.ransomwareUse,
-          hasKnownRansomware,
-          notes: toJson(entry.notes),
-          cwes: toJson(entry.cwes),
-          cvssScore: entry.cvssScore,
-          cvssVector: entry.cvssVector,
-          cvssVersion: entry.cvssVersion,
-          cvssSeverity: entry.cvssSeverity,
-          epssScore: entry.epssScore,
-          assigner: entry.assigner,
-          datePublished: entry.datePublished,
-          dateUpdated: entry.dateUpdated,
-          dateUpdatedTs,
-          exploitedSince: entry.exploitedSince,
-          sourceUrl: entry.sourceUrl,
-          pocUrl: entry.pocUrl,
-          pocPublishedAt: entry.pocPublishedAt,
-          referenceLinks: toJson(entry.references),
-          aliases: toJson(entry.aliases),
-          metasploitModulePath: entry.metasploitModulePath,
-          metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
-          isWellKnown,
-          domainCategories: toJson(entry.domainCategories),
-          exploitLayers: toJson(entry.exploitLayers),
-          vulnerabilityCategories: toJson(entry.vulnerabilityCategories),
-          internetExposed: toBooleanFlag(entry.internetExposed),
-          hasSourceKev,
-          hasSourceEnisa,
-          hasSourceHistoric,
-          hasSourceMetasploit,
-          hasSourcePoc
-        })
-        .run()
+    await db
+      .insert(tables.catalogEntries)
+      .values({
+        cveId: entry.cveId,
+        entryId: entry.id,
+        sources: toJson(entry.sources),
+        vendor: entry.vendor,
+        vendorKey: entry.vendorKey,
+        product: entry.product,
+        productKey: entry.productKey,
+        vulnerabilityName: entry.vulnerabilityName,
+        description: entry.description,
+        requiredAction: entry.requiredAction,
+        dateAdded: entry.dateAdded,
+        dateAddedTs,
+        dateAddedYear: toYear(dateAddedTs),
+        dueDate: entry.dueDate,
+        ransomwareUse: entry.ransomwareUse,
+        hasKnownRansomware,
+        notes: toJson(entry.notes),
+        cwes: toJson(entry.cwes),
+        cvssScore: entry.cvssScore,
+        cvssVector: entry.cvssVector,
+        cvssVersion: entry.cvssVersion,
+        cvssSeverity: entry.cvssSeverity,
+        epssScore: entry.epssScore,
+        assigner: entry.assigner,
+        datePublished: entry.datePublished,
+        dateUpdated: entry.dateUpdated,
+        dateUpdatedTs,
+        exploitedSince: entry.exploitedSince,
+        sourceUrl: entry.sourceUrl,
+        pocUrl: entry.pocUrl,
+        pocPublishedAt: entry.pocPublishedAt,
+        referenceLinks: toJson(entry.references),
+        aliases: toJson(entry.aliases),
+        metasploitModulePath: entry.metasploitModulePath,
+        metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
+        isWellKnown,
+        domainCategories: toJson(entry.domainCategories),
+        exploitLayers: toJson(entry.exploitLayers),
+        vulnerabilityCategories: toJson(entry.vulnerabilityCategories),
+        internetExposed: toBooleanFlag(entry.internetExposed),
+        hasSourceKev,
+        hasSourceEnisa,
+        hasSourceHistoric,
+        hasSourceMetasploit,
+        hasSourcePoc
+      })
+      .run()
 
-      const dimensions: CatalogDimension[] = ['domain', 'exploit', 'vulnerability']
-      const dimensionRecords: Array<{ cveId: string; dimension: string; value: string; name: string }> = []
+    const dimensions: CatalogDimension[] = ['domain', 'exploit', 'vulnerability']
+    const dimensionRecords: Array<{ cveId: string; dimension: string; value: string; name: string }> = []
 
-      for (const dimension of dimensions) {
-        const tuples = toDimensionTuples(entry, dimension)
-        for (const tuple of tuples) {
-          if (!tuple.value || tuple.name === 'Other') {
-            continue
-          }
-          dimensionRecords.push({
-            cveId: entry.cveId,
-            dimension,
-            value: tuple.value,
-            name: tuple.name
-          })
+    for (const dimension of dimensions) {
+      const tuples = toDimensionTuples(entry, dimension)
+      for (const tuple of tuples) {
+        if (!tuple.value || tuple.name === 'Other') {
+          continue
         }
-      }
-
-      if (dimensionRecords.length) {
-        tx.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
-      }
-
-      if ((index + 1) % 25 === 0 || index + 1 === catalogEntries.length) {
-        options.onProgress?.(index + 1, catalogEntries.length)
+        dimensionRecords.push({
+          cveId: entry.cveId,
+          dimension,
+          value: tuple.value,
+          name: tuple.name
+        })
       }
     }
-  })
+
+    if (dimensionRecords.length) {
+      await db.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
+    }
+
+    if ((index + 1) % 25 === 0 || index + 1 === catalogEntries.length) {
+      options.onProgress?.(index + 1, catalogEntries.length)
+    }
+  }
 
   options.onComplete?.(catalogEntries.length)
 
   const bounds = extractBounds(catalogEntries)
 
-  setMetadata('catalog.entryCount', String(catalogEntries.length))
-  setMetadata('catalog.earliestDate', bounds.earliest ?? '')
-  setMetadata('catalog.latestDate', bounds.latest ?? '')
+  await Promise.all([
+    setMetadataValue('catalog.entryCount', String(catalogEntries.length)),
+    setMetadataValue('catalog.earliestDate', bounds.earliest ?? ''),
+    setMetadataValue('catalog.latestDate', bounds.latest ?? '')
+  ])
 
   return {
     count: catalogEntries.length,
@@ -985,11 +986,11 @@ const createEmptyMarketSignal = (): MarketSignal => ({
   categories: []
 })
 
-export const getMarketSignalsForProducts = (
+export const getMarketSignalsForProducts = async (
   db: DrizzleDatabase,
   productKeys: string[],
   options: { programTypes?: MarketProgramType[] } = {}
-): Map<string, MarketSignal> => {
+): Promise<Map<string, MarketSignal>> => {
   const keys = Array.from(new Set(productKeys.filter(key => Boolean(key))))
   const signals = new Map<string, MarketSignal>()
 
@@ -1015,7 +1016,7 @@ export const getMarketSignalsForProducts = (
   const programCondition =
     programTypeFilter.length > 0 ? inArray(program.programType, programTypeFilter) : null
 
-  const priceRows = db
+  const priceRows = await db
     .select({
       productKey: target.productKey,
       minReward: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
@@ -1060,7 +1061,7 @@ export const getMarketSignalsForProducts = (
     })
   }
 
-  const categoryRows = db
+  const categoryRows = await db
     .select({
       productKey: target.productKey,
       categoryType: category.categoryType,

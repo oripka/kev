@@ -1,25 +1,5 @@
-import { sql } from 'drizzle-orm'
-import { tables } from '../../database/client'
-import { getDatabase } from '../../utils/sqlite'
+import { sql, tables, useDrizzle } from '../../utils/drizzle'
 import { requireAdminKey } from '../../utils/adminAuth'
-
-type ProductRow = {
-  vendor_key: string
-  vendor_name: string
-  product_key: string
-  product_name: string
-  count: number
-}
-
-type VendorRow = {
-  vendor_key: string
-  vendor_name: string
-  count: number
-}
-
-type TotalRow = {
-  count: number
-}
 
 type AdminSoftwareResponse = {
   totals: {
@@ -42,41 +22,62 @@ type AdminSoftwareResponse = {
   }>
 }
 
-export default defineEventHandler<AdminSoftwareResponse>(event => {
+export default defineEventHandler<AdminSoftwareResponse>(async event => {
   requireAdminKey(event)
 
-  const db = getDatabase()
+  const db = useDrizzle()
 
-  const productRows = db.all(
-    sql<ProductRow>`
-      SELECT vendor_key, vendor_name, product_key, product_name, COUNT(*) as count
-      FROM ${tables.userProductFilters}
-      GROUP BY vendor_key, vendor_name, product_key, product_name
-      ORDER BY count DESC
-    `
-  )
+  const productQuery = db
+    .select({
+      vendor_key: tables.userProductFilters.vendorKey,
+      vendor_name: tables.userProductFilters.vendorName,
+      product_key: tables.userProductFilters.productKey,
+      product_name: tables.userProductFilters.productName,
+      count: sql<number>`count(*)`
+    })
+    .from(tables.userProductFilters)
+    .groupBy(
+      tables.userProductFilters.vendorKey,
+      tables.userProductFilters.vendorName,
+      tables.userProductFilters.productKey,
+      tables.userProductFilters.productName
+    )
+    .orderBy(sql`count(*) DESC`)
 
-  const vendorRows = db.all(
-    sql<VendorRow>`
-      SELECT vendor_key, vendor_name, COUNT(*) as count
-      FROM ${tables.userProductFilters}
-      GROUP BY vendor_key, vendor_name
-      ORDER BY count DESC
-    `
-  )
+  const vendorQuery = db
+    .select({
+      vendor_key: tables.userProductFilters.vendorKey,
+      vendor_name: tables.userProductFilters.vendorName,
+      count: sql<number>`count(*)`
+    })
+    .from(tables.userProductFilters)
+    .groupBy(
+      tables.userProductFilters.vendorKey,
+      tables.userProductFilters.vendorName
+    )
+    .orderBy(sql`count(*) DESC`)
 
-  const sessionCount = db.get(
-    sql<TotalRow>`SELECT COUNT(*) as count FROM ${tables.userSessions}`
-  )
+  const sessionCountQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(tables.userSessions)
+    .limit(1)
 
-  const selectionCount = db.get(
-    sql<TotalRow>`SELECT COUNT(*) as count FROM ${tables.userProductFilters}`
-  )
+  const selectionCountQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(tables.userProductFilters)
+    .limit(1)
+
+  const [productRows, vendorRows, sessionCountRow, selectionCountRow] = await Promise.all([
+    productQuery.all(),
+    vendorQuery.all(),
+    sessionCountQuery.get(),
+    selectionCountQuery.get()
+  ])
 
   return {
     totals: {
-      sessions: sessionCount?.count ?? 0,
-      trackedSelections: selectionCount?.count ?? 0,
+      sessions: sessionCountRow ? Number(sessionCountRow.count) : 0,
+      trackedSelections: selectionCountRow ? Number(selectionCountRow.count) : 0,
       uniqueProducts: productRows.length,
       uniqueVendors: vendorRows.length
     },
@@ -85,12 +86,12 @@ export default defineEventHandler<AdminSoftwareResponse>(event => {
       vendorName: row.vendor_name,
       productKey: row.product_key,
       productName: row.product_name,
-      selections: row.count
+      selections: Number(row.count)
     })),
     vendors: vendorRows.map(row => ({
       vendorKey: row.vendor_key,
       vendorName: row.vendor_name,
-      selections: row.count
+      selections: Number(row.count)
     }))
   }
 })

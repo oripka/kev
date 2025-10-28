@@ -10,7 +10,7 @@ import type {
   QuickFilterSummaryConfig,
   QuickFilterSummaryMetricKey,
 } from "~/types/dashboard";
-import { setMetadata } from "../../utils/sqlite";
+import { setMetadataValue } from "../../utils/metadata";
 import { requireAdminKey } from "../../utils/adminAuth";
 
 const metricSchema = z.enum(
@@ -43,7 +43,10 @@ export default defineEventHandler(async (event) => {
 
   const config: QuickFilterSummaryConfig = normaliseQuickFilterSummaryConfig(parsed.data);
 
-  setMetadata(QUICK_FILTER_SUMMARY_METADATA_KEY, JSON.stringify(config));
+  await setMetadataValue(
+    QUICK_FILTER_SUMMARY_METADATA_KEY,
+    JSON.stringify(config),
+  );
 
   return cloneQuickFilterSummaryConfig(config);
 });

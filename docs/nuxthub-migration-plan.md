@@ -20,6 +20,24 @@ Migrate the application from the local `better-sqlite3` database to NuxtHub's Cl
 - Re-run TypeScript checks (`pnpm typecheck`) to confirm composables, server routes, and market utilities compile with the async Drizzle client.
 - Manually spot-check a few representative API handlers (read, write, filter-heavy endpoints) to ensure query results still match expectations with the D1-backed driver.
 
+#### Progress
+
+- [x] Converted `server/api/admin/import-status.get.ts` to use the `server/utils/drizzle.ts` client via a new async metadata helper, replacing the synchronous `server/utils/sqlite.ts` access pattern.
+- [x] Replaced synchronous metadata fallbacks in `server/api/fetchKev.post.ts` with the async `getMetadataMap` helper.
+- [x] Updated `server/api/quick-filter-summary.get.ts` to load metadata via the async helper, removing its `server/utils/sqlite.ts` dependency.
+- [x] Migrated `server/api/session.post.ts` to `useDrizzle()` and awaited inserts for Cloudflare D1 compatibility.
+- [x] Updated `server/api/admin/software.get.ts` to query NuxtHub D1 via `useDrizzle()` and async Drizzle aggregations.
+- [x] Converted `server/api/products.get.ts` to load catalog data via `useDrizzle()` with async queries.
+- [x] Migrated `server/api/kev.get.ts` and `server/api/kev/[id].get.ts` to use the async NuxtHub Drizzle client and metadata helpers.
+- [x] Migrated `server/api/user-filters.post.ts` to `useDrizzle()` and asynchronous insert/update flows compatible with Cloudflare D1.
+- [x] Converted `server/api/market/stats.get.ts` to use the async NuxtHub Drizzle client for aggregate queries.
+- [x] Updated `server/api/classification-review.post.ts` to query catalog data via `useDrizzle()` with async `.all()` retrievals.
+- [x] Migrated `server/api/market/offers.get.ts` to the async NuxtHub Drizzle client, awaiting count, data, and catalog lookups.
+- [x] Migrated `server/api/admin/refresh-cvelist.post.ts` to update metadata via the async NuxtHub Drizzle helper.
+- [x] Migrated `server/utils/product-catalog.ts` to the NuxtHub Drizzle client with async operations, replacing the sqlite transaction helper.
+- [x] Updated `server/utils/catalog.ts` and the admin reclassify endpoint to rebuild aggregates with awaited NuxtHub Drizzle writes, replacing the legacy sqlite transaction flow.
+- [x] Replaced the obsolete `server/utils/sqlite.ts` helper with a thin async wrapper around the NuxtHub Drizzle client and updated remaining import handlers to call the shared client directly.
+
 ## Usage
 
 Rewrtie usage to work with d1 helpers like this

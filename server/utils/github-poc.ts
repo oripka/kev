@@ -5,8 +5,8 @@ import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
-import { setMetadata } from './sqlite'
+import type { DrizzleDatabase } from '../database/client'
+import { setMetadataValue } from './metadata'
 import { getCachedData } from './cache'
 import { mapWithConcurrency } from './concurrency'
 import {
@@ -456,15 +456,17 @@ export const importGithubPocCatalog = async (
       })
 
       const importedAt = new Date().toISOString()
-      setMetadata('poc.lastImportAt', importedAt)
-      setMetadata('poc.totalCount', String(totalEntries))
-      setMetadata('poc.lastNewCount', String(totalEntries))
-      setMetadata('poc.lastUpdatedCount', '0')
-      setMetadata('poc.lastSkippedCount', '0')
-      setMetadata('poc.lastRemovedCount', '0')
-      setMetadata('poc.lastImportStrategy', 'full')
+      await Promise.all([
+        setMetadataValue('poc.lastImportAt', importedAt),
+        setMetadataValue('poc.totalCount', String(totalEntries)),
+        setMetadataValue('poc.lastNewCount', String(totalEntries)),
+        setMetadataValue('poc.lastUpdatedCount', '0'),
+        setMetadataValue('poc.lastSkippedCount', '0'),
+        setMetadataValue('poc.lastRemovedCount', '0'),
+        setMetadataValue('poc.lastImportStrategy', 'full')
+      ])
       if (datasetTimestamp) {
-        setMetadata('poc.cachedAt', datasetTimestamp)
+        await setMetadataValue('poc.cachedAt', datasetTimestamp)
       }
 
       const summaryLabel = totalEntries
@@ -554,15 +556,17 @@ export const importGithubPocCatalog = async (
     })
 
     const importedAt = new Date().toISOString()
-    setMetadata('poc.lastImportAt', importedAt)
-    setMetadata('poc.totalCount', String(totalEntries))
-    setMetadata('poc.lastNewCount', String(newRecords.length))
-    setMetadata('poc.lastUpdatedCount', String(updatedRecords.length))
-    setMetadata('poc.lastSkippedCount', String(unchangedRecords.length))
-    setMetadata('poc.lastRemovedCount', String(removedIds.length))
-    setMetadata('poc.lastImportStrategy', 'incremental')
+    await Promise.all([
+      setMetadataValue('poc.lastImportAt', importedAt),
+      setMetadataValue('poc.totalCount', String(totalEntries)),
+      setMetadataValue('poc.lastNewCount', String(newRecords.length)),
+      setMetadataValue('poc.lastUpdatedCount', String(updatedRecords.length)),
+      setMetadataValue('poc.lastSkippedCount', String(unchangedRecords.length)),
+      setMetadataValue('poc.lastRemovedCount', String(removedIds.length)),
+      setMetadataValue('poc.lastImportStrategy', 'incremental')
+    ])
     if (datasetTimestamp) {
-      setMetadata('poc.cachedAt', datasetTimestamp)
+      await setMetadataValue('poc.cachedAt', datasetTimestamp)
     }
 
     const changeSegments: string[] = []

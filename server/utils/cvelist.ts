@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { syncSparseRepo, ensureDir } from './git'
-import { setMetadata } from './sqlite'
+import { setMetadataValue } from './metadata'
 import {
   CVELIST_REPO_DIR,
   readCveRecord,
@@ -455,7 +455,7 @@ export const syncCvelistRepo = async (
   }
 
   if (result.commit) {
-    setMetadata('cvelist.lastCommit', result.commit)
+    await setMetadataValue('cvelist.lastCommit', result.commit)
   }
 
   return result

@@ -11,14 +11,15 @@ import type {
   KevVulnerabilityCategory,
   MarketProgramType
 } from '~/types'
-import { tables } from '../database/client'
+import { tables, useDrizzle } from '../utils/drizzle'
 import {
   catalogRowToSummary,
   getMarketSignalsForProducts,
   type CatalogSummaryRow
 } from '../utils/catalog'
-import { getDatabase, getMetadata } from '../utils/sqlite'
-import type { DrizzleDatabase } from '../utils/sqlite'
+import { getMetadataMap } from '../utils/metadata'
+
+type DrizzleDatabase = ReturnType<typeof useDrizzle>
 
 type SortKey = 'publicationDate' | 'cvssScore' | 'epssScore' | 'cveId'
 type SortDirection = 'asc' | 'desc'
@@ -595,11 +596,11 @@ const buildOrderByExpressions = (
   ]
 }
 
-const queryEntries = (
+const queryEntries = async (
   db: DrizzleDatabase,
   filters: CatalogQuery,
   limitOverride?: number
-): KevEntrySummary[] => {
+): Promise<KevEntrySummary[]> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
@@ -641,16 +642,16 @@ const queryEntries = (
     query = query.where(whereCondition)
   }
 
-  const rows = query
+  const rows = (await query
     .orderBy(...orderBy)
     .limit(limit)
     .offset(offset)
-    .all() as CatalogSummaryRow[]
+    .all()) as CatalogSummaryRow[]
 
   const productKeys = Array.from(
     new Set(rows.map(row => row.product_key).filter((key): key is string => typeof key === 'string' && key.length > 0))
   )
-  const marketSignals = getMarketSignalsForProducts(
+  const marketSignals = await getMarketSignalsForProducts(
     db,
     productKeys,
     filters.marketProgramType
@@ -661,11 +662,11 @@ const queryEntries = (
   return rows.map(row => catalogRowToSummary(row, { marketSignals }))
 }
 
-const queryDimensionCounts = (
+const queryDimensionCounts = async (
   db: DrizzleDatabase,
   filters: CatalogQuery,
   dimension: 'domain' | 'exploit' | 'vulnerability'
-): KevCountDatum[] => {
+): Promise<KevCountDatum[]> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
@@ -679,7 +680,7 @@ const queryDimensionCounts = (
   const dim = alias(tables.catalogEntryDimensions, 'dim')
   const countExpr = sql<number>`count(*)`
 
-  const rows = db
+  const rows = await db
     .with(filtered)
     .select({
       key: dim.value,
@@ -698,10 +699,10 @@ const queryDimensionCounts = (
 
 const TOP_COUNT_LIMIT = 15
 
-const queryVendorCounts = (
+const queryVendorCounts = async (
   db: DrizzleDatabase,
   filters: CatalogQuery
-): KevCountDatum[] => {
+): Promise<KevCountDatum[]> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
@@ -714,7 +715,7 @@ const queryVendorCounts = (
   const filtered = db.$with('filtered_vendors').as(filteredBase)
   const countExpr = sql<number>`count(*)`
 
-  const rows = db
+  const rows = await db
     .with(filtered)
     .select({
       key: filtered.vendorKey,
@@ -736,10 +737,10 @@ const queryVendorCounts = (
   }))
 }
 
-const queryProductCounts = (
+const queryProductCounts = async (
   db: DrizzleDatabase,
   filters: CatalogQuery
-): KevCountDatum[] => {
+): Promise<KevCountDatum[]> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
@@ -759,7 +760,7 @@ const queryProductCounts = (
   const filtered = db.$with('filtered_products').as(filteredBase)
   const countExpr = sql<number>`count(*)`
 
-  const rows = db
+  const rows = await db
     .with(filtered)
     .select({
       key: filtered.productKey,
@@ -785,7 +786,7 @@ const queryProductCounts = (
   }))
 }
 
-const countEntries = (db: DrizzleDatabase, filters: CatalogQuery): number => {
+const countEntries = async (db: DrizzleDatabase, filters: CatalogQuery): Promise<number> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
@@ -796,15 +797,16 @@ const countEntries = (db: DrizzleDatabase, filters: CatalogQuery): number => {
     query = query.where(whereCondition)
   }
 
-  const row = query.get()
+  const row = await query.get()
   return row?.count ? Number(row.count) : 0
 }
 
-const getCatalogBounds = (
-  db: DrizzleDatabase
-): { earliest: string | null; latest: string | null } => {
-  const earliest = getMetadata('catalog.earliestDate')
-  const latest = getMetadata('catalog.latestDate')
+const getCatalogBounds = async (
+  db: DrizzleDatabase,
+  metadata: Record<string, string | null>
+): Promise<{ earliest: string | null; latest: string | null }> => {
+  const earliest = metadata['catalog.earliestDate']
+  const latest = metadata['catalog.latestDate']
 
   if (earliest || latest) {
     return {
@@ -814,7 +816,7 @@ const getCatalogBounds = (
   }
 
   const ce = tables.catalogEntries
-  const row = db
+  const row = await db
     .select({
       earliest: sql<string | null>`min(${ce.dateAdded})`,
       latest: sql<string | null>`max(${ce.dateAdded})`
@@ -828,12 +830,15 @@ const getCatalogBounds = (
   }
 }
 
-const computeUpdatedAt = (db: DrizzleDatabase): string => {
+const computeUpdatedAt = async (
+  db: DrizzleDatabase,
+  metadata: Record<string, string | null>
+): Promise<string> => {
   const candidates = [
-    getMetadata('dateReleased'),
-    getMetadata('lastImportAt'),
-    getMetadata('enisa.lastUpdatedAt'),
-    getMetadata('enisa.lastImportAt')
+    metadata['dateReleased'],
+    metadata['lastImportAt'],
+    metadata['enisa.lastUpdatedAt'],
+    metadata['enisa.lastImportAt']
   ].filter((value): value is string => typeof value === 'string' && value.length > 0)
 
   if (candidates.length > 0) {
@@ -842,7 +847,7 @@ const computeUpdatedAt = (db: DrizzleDatabase): string => {
   }
 
   const ce = tables.catalogEntries
-  const row = db
+  const row = await db
     .select({
       latest: sql<string | null>`max(coalesce(${ce.dateUpdated}, ${ce.dateAdded}))`
     })
@@ -877,17 +882,17 @@ const createEmptyMarketOverview = (): KevResponse['market'] => ({
   categoryCounts: []
 })
 
-const computeMarketOverview = (
+const computeMarketOverview = async (
   db: DrizzleDatabase,
   productKeys: string[],
   options?: { programType?: MarketProgramType }
-): KevResponse['market'] => {
+): Promise<KevResponse['market']> => {
   const offer = tables.marketOffers
   const target = tables.marketOfferTargets
   const program = tables.marketPrograms
   const category = tables.marketOfferCategories
 
-  const globalBoundsRow = db
+  const globalBoundsRow = await db
     .select({
       minRewardUsd: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
       maxRewardUsd: sql<number | null>`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd}))`
@@ -922,7 +927,7 @@ const computeMarketOverview = (
     ? and(productCondition, programCondition)
     : productCondition
 
-  const filteredRow = db
+  const filteredRow = await db
     .select({
       count: sql<number>`count(distinct ${offer.id})`,
       minRewardUsd: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
@@ -934,7 +939,7 @@ const computeMarketOverview = (
     .where(combinedCondition)
     .get()
 
-  const programCountRows = db
+  const programCountRows = await db
     .select({
       programType: program.programType,
       count: sql<number>`count(distinct ${offer.id})`
@@ -954,7 +959,7 @@ const computeMarketOverview = (
     }))
     .sort((first, second) => second.count - first.count)
 
-  const categoryRows = db
+  const categoryRows = await db
     .select({
       categoryType: category.categoryType,
       categoryKey: category.categoryKey,
@@ -1000,11 +1005,19 @@ const computeMarketOverview = (
 export default defineEventHandler(async (event): Promise<KevResponse> => {
   const filters = normaliseQuery(getQuery(event))
   const entryLimit = Math.max(1, Math.min(MAX_ENTRY_LIMIT, filters.limit ?? DEFAULT_ENTRY_LIMIT))
-  const db = getDatabase()
+  const db = useDrizzle()
+  const metadata = await getMetadataMap([
+    'catalog.earliestDate',
+    'catalog.latestDate',
+    'dateReleased',
+    'lastImportAt',
+    'enisa.lastUpdatedAt',
+    'enisa.lastImportAt'
+  ])
 
   if (filters.ownedOnly && !(filters.productKeys?.length ?? 0)) {
     return {
-      updatedAt: computeUpdatedAt(db),
+      updatedAt: await computeUpdatedAt(db, metadata),
       entries: [],
       counts: {
         domain: [],
@@ -1013,7 +1026,7 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         vendor: [],
         product: []
       },
-      catalogBounds: getCatalogBounds(db),
+      catalogBounds: await getCatalogBounds(db, metadata),
       totalEntries: 0,
       totalEntriesWithoutYear: 0,
       entryLimit,
@@ -1021,42 +1034,24 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     }
   }
 
-  const entries = queryEntries(db, filters, entryLimit)
-  const totalEntries = countEntries(db, filters)
+  const entries = await queryEntries(db, filters, entryLimit)
+  const totalEntries = await countEntries(db, filters)
   const hasYearFilter = typeof filters.startYear === 'number' || typeof filters.endYear === 'number'
   const totalEntriesWithoutYear = hasYearFilter
-    ? countEntries(db, omitFilters(filters, ['startYear', 'endYear']))
+    ? await countEntries(db, omitFilters(filters, ['startYear', 'endYear']))
     : totalEntries
 
-  const counts = {
-    domain: queryDimensionCounts(
-      db,
-      omitFilters(filters, ['domain']),
-      'domain'
-    ),
-    exploit: queryDimensionCounts(
-      db,
-      omitFilters(filters, ['exploit']),
-      'exploit'
-    ),
-    vulnerability: queryDimensionCounts(
-      db,
-      omitFilters(filters, ['vulnerability']),
-      'vulnerability'
-    ),
-    vendor: queryVendorCounts(
-      db,
-      omitFilters(filters, ['vendor', 'vendorKeys'])
-    ),
-    product: queryProductCounts(
-      db,
-      omitFilters(filters, ['product', 'productKeys'])
-    )
-  }
+  const [domainCounts, exploitCounts, vulnerabilityCounts, vendorCounts, productCounts] = await Promise.all([
+    queryDimensionCounts(db, omitFilters(filters, ['domain']), 'domain'),
+    queryDimensionCounts(db, omitFilters(filters, ['exploit']), 'exploit'),
+    queryDimensionCounts(db, omitFilters(filters, ['vulnerability']), 'vulnerability'),
+    queryVendorCounts(db, omitFilters(filters, ['vendor', 'vendorKeys'])),
+    queryProductCounts(db, omitFilters(filters, ['product', 'productKeys']))
+  ])
 
-  const catalogBounds = getCatalogBounds(db)
-  const updatedAt = computeUpdatedAt(db)
-  const market = computeMarketOverview(
+  const catalogBounds = await getCatalogBounds(db, metadata)
+  const updatedAt = await computeUpdatedAt(db, metadata)
+  const market = await computeMarketOverview(
     db,
     entries
       .map(entry => entry.productKey)
@@ -1067,7 +1062,13 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
   return {
     updatedAt,
     entries,
-    counts,
+    counts: {
+      domain: domainCounts,
+      exploit: exploitCounts,
+      vulnerability: vulnerabilityCounts,
+      vendor: vendorCounts,
+      product: productCounts
+    },
     catalogBounds,
     totalEntries,
     totalEntriesWithoutYear,

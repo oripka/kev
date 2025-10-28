@@ -5,7 +5,7 @@ import { matchExploitProduct } from '~/utils/exploitProductHints'
 import { matchVendorProductByTitle } from '../utils/metasploitVendorCatalog'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
-import type { DrizzleDatabase } from '../utils/sqlite'
+import type { DrizzleDatabase } from '../database/client'
 import {
   computeValuationScore,
   convertAmountToUsd,

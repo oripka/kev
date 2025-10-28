@@ -10,8 +10,7 @@ import type {
   MarketOfferTargetMatchMethod,
   MarketProgramType
 } from '~/types'
-import { tables } from '../../database/client'
-import { getDatabase } from '../../utils/sqlite'
+import { tables, useDrizzle } from '../../utils/drizzle'
 
 type Condition = SQL<unknown>
 
@@ -270,7 +269,7 @@ export default defineEventHandler(async event => {
     Math.min(parseIntParam(query.pageSize) ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
   )
 
-  const db = getDatabase()
+  const db = useDrizzle()
   const offer = tables.marketOffers
   const program = tables.marketPrograms
   const target = tables.marketOfferTargets
@@ -358,7 +357,8 @@ export default defineEventHandler(async event => {
     countQuery = countQuery.where(whereCondition)
   }
 
-  const total = countQuery.get()?.value ?? 0
+  const totalRow = await countQuery.get()
+  const total = totalRow?.value ?? 0
   const maxPage = total > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1
   const page = Math.min(requestedPage, maxPage)
   const offset = (page - 1) * pageSize
@@ -445,7 +445,7 @@ export default defineEventHandler(async event => {
     .limit(pageSize)
     .offset(offset)
 
-  const rows = dataQuery.all() as OfferRow[]
+  const rows = (await dataQuery.all()) as OfferRow[]
 
   type IntermediateOffer = {
     id: string
@@ -571,7 +571,7 @@ export default defineEventHandler(async event => {
   const catalogMatchesByProductKey = new Map<string, MarketOfferTargetMatch[]>()
 
   if (matchedCveAccumulator.size) {
-    const catalogRows = db
+    const catalogRows = (await db
       .select({
         cveId: catalog.cveId,
         productKey: catalog.productKey,
@@ -588,7 +588,7 @@ export default defineEventHandler(async event => {
       })
       .from(catalog)
       .where(inArray(catalog.cveId, Array.from(matchedCveAccumulator)))
-      .all() as CatalogEntryRow[]
+      .all()) as CatalogEntryRow[]
 
     for (const entry of catalogRows) {
       const domainCategories = parseStringArrayField(entry.domainCategories) as MarketOfferTargetMatch['domainCategories']

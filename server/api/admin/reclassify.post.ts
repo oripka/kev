@@ -1,7 +1,7 @@
 import { defineEventHandler } from 'h3'
 import { rebuildCatalog } from '../../utils/catalog'
 import { rebuildProductCatalog } from '../../utils/product-catalog'
-import { getDatabase } from '../../utils/sqlite'
+import { useDrizzle } from '../../database/client'
 import {
   completeClassificationProgress,
   failClassificationProgress,
@@ -14,12 +14,12 @@ import { requireAdminKey } from '../../utils/adminAuth'
 export default defineEventHandler(async event => {
   requireAdminKey(event)
 
-  const db = getDatabase()
+  const db = useDrizzle()
 
   startClassificationProgress('Preparing catalog reclassification…', 0)
 
   try {
-    const summary = rebuildCatalog(db, {
+    const summary = await rebuildCatalog(db, {
       onStart(total) {
         setClassificationPhase('rebuilding', {
           total,
@@ -39,7 +39,7 @@ export default defineEventHandler(async event => {
       }
     })
 
-    rebuildProductCatalog(db)
+    await rebuildProductCatalog(db)
 
     const message = `Reclassified ${summary.count.toLocaleString()} catalog entries`
     completeClassificationProgress(`${message}.`)

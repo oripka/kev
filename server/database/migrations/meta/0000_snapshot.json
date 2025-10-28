@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "915fb14a-cf94-4570-bcd0-62be4fbcb570",
+  "id": "aecac18e-e55c-48e1-9222-27f52a28fa18",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "catalog_entries": {
@@ -211,6 +211,20 @@
           "notNull": false,
           "autoincrement": false
         },
+        "poc_url": {
+          "name": "poc_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "poc_published_at": {
+          "name": "poc_published_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "reference_links": {
           "name": "reference_links",
           "type": "text",
@@ -302,6 +316,14 @@
         },
         "has_source_metasploit": {
           "name": "has_source_metasploit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "has_source_poc": {
+          "name": "has_source_poc",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1395,6 +1417,20 @@
           "notNull": false,
           "autoincrement": false
         },
+        "poc_url": {
+          "name": "poc_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "poc_published_at": {
+          "name": "poc_published_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "reference_links": {
           "name": "reference_links",
           "type": "text",
@@ -1639,15 +1675,16 @@
         }
       },
       "compositePrimaryKeys": {
-        "vulnerability_entry_impacts_entry_id_vendor_key_product_key_status_version_range_pk": {
+        "vulnerability_entry_impacts_entry_id_vendor_key_product_key_status_version_range_source_pk": {
           "columns": [
             "entry_id",
             "vendor_key",
             "product_key",
             "status",
-            "version_range"
+            "version_range",
+            "source"
           ],
-          "name": "vulnerability_entry_impacts_entry_id_vendor_key_product_key_status_version_range_pk"
+          "name": "vulnerability_entry_impacts_entry_id_vendor_key_product_key_status_version_range_source_pk"
         }
       },
       "uniqueConstraints": {},

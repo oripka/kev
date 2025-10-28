@@ -1,7 +1,5 @@
 import { getQuery } from 'h3'
-import { sql } from 'drizzle-orm'
-import { tables } from '../database/client'
-import { getDatabase } from '../utils/sqlite'
+import { sql, tables, useDrizzle } from '../utils/drizzle'
 import type { CatalogSource, ProductCatalogItem, ProductCatalogResponse } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 
@@ -53,14 +51,14 @@ const normaliseLimit = (value: unknown): number => {
   return 100
 }
 
-export default defineEventHandler((event): ProductCatalogResponse => {
+export default defineEventHandler(async (event): Promise<ProductCatalogResponse> => {
   const query = getQuery(event)
   const rawSearch = typeof query.q === 'string' ? query.q.trim().toLowerCase() : ''
   const search = rawSearch.length >= 2 ? rawSearch : ''
   const limit = normaliseLimit(query.limit)
 
-  const db = getDatabase()
-  const matchCountRows = db.all(
+  const db = useDrizzle()
+  const matchCountRows = await db.all(
     sql<MatchCountRow>`
       SELECT vendor, product, COUNT(*) as count
       FROM ${tables.vulnerabilityEntries}
@@ -80,7 +78,7 @@ export default defineEventHandler((event): ProductCatalogResponse => {
 
   if (search) {
     const pattern = `%${escapeLike(search)}%`
-    rows = db.all(
+    rows = await db.all(
       sql<ProductCatalogRow>`
         SELECT product_key, product_name, vendor_key, vendor_name, sources
         FROM ${tables.productCatalog}
@@ -88,7 +86,7 @@ export default defineEventHandler((event): ProductCatalogResponse => {
       `
     )
   } else {
-    rows = db
+    rows = await db
       .select({
         product_key: tables.productCatalog.productKey,
         product_name: tables.productCatalog.productName,

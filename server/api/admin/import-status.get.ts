@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defineEventHandler } from 'h3'
-import { getMetadata } from '../../utils/sqlite'
 import { requireAdminKey } from '../../utils/adminAuth'
+import { getMetadataMap } from '../../utils/metadata'
 import type { ImportTaskKey } from '~/types'
 
 type ImportSourceStatus = {
@@ -67,27 +67,59 @@ const loadCachedAt = async (fileName: string): Promise<string | null> => {
 export default defineEventHandler(async (event): Promise<ImportStatusResponse> => {
   requireAdminKey(event)
 
-  const [kevCachedAt, enisaCachedAt, pocCachedAt] = await Promise.all([
+  const metadataKeys = [
+    'cvelist.lastCommit',
+    'cvelist.lastRefreshAt',
+    'entryCount',
+    'catalog.entryCount',
+    'lastImportAt',
+    'kev.lastNewCount',
+    'kev.lastUpdatedCount',
+    'kev.lastSkippedCount',
+    'kev.lastRemovedCount',
+    'kev.lastImportStrategy',
+    'market.lastImportAt',
+    'market.cachedAt',
+    'market.offerCount',
+    'market.programCount',
+    'market.lastCaptureAt',
+    'catalogVersion',
+    'dateReleased',
+    'enisa.lastUpdatedAt',
+    'enisa.lastImportAt',
+    'enisa.totalCount',
+    'historic.lastImportAt',
+    'historic.totalCount',
+    'metasploit.lastCommit',
+    'metasploit.lastImportAt',
+    'metasploit.totalCount',
+    'poc.lastImportAt',
+    'poc.cachedAt',
+    'poc.totalCount'
+  ]
+
+  const [kevCachedAt, enisaCachedAt, pocCachedAt, metadata] = await Promise.all([
     loadCachedAt('kev-feed.json'),
     loadCachedAt('enisa-feed.json'),
-    loadCachedAt('github-poc-feed.json')
+    loadCachedAt('github-poc-feed.json'),
+    getMetadataMap(metadataKeys)
   ])
 
-  const cvelistLastCommit = normaliseString(getMetadata('cvelist.lastCommit'))
-  const cvelistLastRefreshAt = normaliseString(getMetadata('cvelist.lastRefreshAt'))
-  const kevEntryCount = parseNumber(getMetadata('entryCount') ?? getMetadata('catalog.entryCount'))
-  const kevLastImportedAt = normaliseString(getMetadata('lastImportAt'))
-  const kevNewCount = parseNumber(getMetadata('kev.lastNewCount')) ?? 0
-  const kevUpdatedCount = parseNumber(getMetadata('kev.lastUpdatedCount')) ?? 0
-  const kevSkippedCount = parseNumber(getMetadata('kev.lastSkippedCount')) ?? 0
-  const kevRemovedCount = parseNumber(getMetadata('kev.lastRemovedCount')) ?? 0
-  const kevStrategyRaw = normaliseString(getMetadata('kev.lastImportStrategy'))
+  const cvelistLastCommit = normaliseString(metadata['cvelist.lastCommit'])
+  const cvelistLastRefreshAt = normaliseString(metadata['cvelist.lastRefreshAt'])
+  const kevEntryCount = parseNumber(metadata['entryCount'] ?? metadata['catalog.entryCount'])
+  const kevLastImportedAt = normaliseString(metadata['lastImportAt'])
+  const kevNewCount = parseNumber(metadata['kev.lastNewCount']) ?? 0
+  const kevUpdatedCount = parseNumber(metadata['kev.lastUpdatedCount']) ?? 0
+  const kevSkippedCount = parseNumber(metadata['kev.lastSkippedCount']) ?? 0
+  const kevRemovedCount = parseNumber(metadata['kev.lastRemovedCount']) ?? 0
+  const kevStrategyRaw = normaliseString(metadata['kev.lastImportStrategy'])
   const kevStrategy: 'full' | 'incremental' = kevStrategyRaw === 'incremental' ? 'incremental' : 'full'
-  const marketLastImportedAt = normaliseString(getMetadata('market.lastImportAt'))
-  const marketCachedAt = normaliseString(getMetadata('market.cachedAt'))
-  const marketOfferCount = parseNumber(getMetadata('market.offerCount'))
-  const marketProgramCount = parseNumber(getMetadata('market.programCount'))
-  const marketLastCaptureAt = normaliseString(getMetadata('market.lastCaptureAt'))
+  const marketLastImportedAt = normaliseString(metadata['market.lastImportAt'])
+  const marketCachedAt = normaliseString(metadata['market.cachedAt'])
+  const marketOfferCount = parseNumber(metadata['market.offerCount'])
+  const marketProgramCount = parseNumber(metadata['market.programCount'])
+  const marketLastCaptureAt = normaliseString(metadata['market.lastCaptureAt'])
 
   return {
     sources: [
@@ -107,8 +139,8 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         key: 'kev',
         label: 'CISA KEV catalog',
         importKey: 'kev',
-        catalogVersion: normaliseString(getMetadata('catalogVersion')),
-        dateReleased: normaliseString(getMetadata('dateReleased')),
+        catalogVersion: normaliseString(metadata['catalogVersion']),
+        dateReleased: normaliseString(metadata['dateReleased']),
         lastImportedAt: kevLastImportedAt,
         cachedAt: kevCachedAt,
         totalCount: kevEntryCount,
@@ -119,11 +151,11 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         key: 'enisa',
         label: 'ENISA exploited catalog',
         importKey: 'enisa',
-        catalogVersion: normaliseString(getMetadata('enisa.lastUpdatedAt')),
+        catalogVersion: normaliseString(metadata['enisa.lastUpdatedAt']),
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('enisa.lastImportAt')),
+        lastImportedAt: normaliseString(metadata['enisa.lastImportAt']),
         cachedAt: enisaCachedAt,
-        totalCount: parseNumber(getMetadata('enisa.totalCount')),
+        totalCount: parseNumber(metadata['enisa.totalCount']),
         programCount: null,
         latestCaptureAt: null
       },
@@ -133,9 +165,9 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'historic',
         catalogVersion: null,
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('historic.lastImportAt')),
+        lastImportedAt: normaliseString(metadata['historic.lastImportAt']),
         cachedAt: null,
-        totalCount: parseNumber(getMetadata('historic.totalCount')),
+        totalCount: parseNumber(metadata['historic.totalCount']),
         programCount: null,
         latestCaptureAt: null
       },
@@ -143,11 +175,11 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         key: 'metasploit',
         label: 'Metasploit',
         importKey: 'metasploit',
-        catalogVersion: normaliseString(getMetadata('metasploit.lastCommit')),
+        catalogVersion: normaliseString(metadata['metasploit.lastCommit']),
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('metasploit.lastImportAt')),
+        lastImportedAt: normaliseString(metadata['metasploit.lastImportAt']),
         cachedAt: null,
-        totalCount: parseNumber(getMetadata('metasploit.totalCount')),
+        totalCount: parseNumber(metadata['metasploit.totalCount']),
         programCount: null,
         latestCaptureAt: null
       },
@@ -157,9 +189,9 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         importKey: 'poc',
         catalogVersion: null,
         dateReleased: null,
-        lastImportedAt: normaliseString(getMetadata('poc.lastImportAt')),
-        cachedAt: pocCachedAt ?? normaliseString(getMetadata('poc.cachedAt')),
-        totalCount: parseNumber(getMetadata('poc.totalCount')),
+        lastImportedAt: normaliseString(metadata['poc.lastImportAt']),
+        cachedAt: pocCachedAt ?? normaliseString(metadata['poc.cachedAt']),
+        totalCount: parseNumber(metadata['poc.totalCount']),
         programCount: null,
         latestCaptureAt: null
       },

@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { tables } from '../database/client'
-import { getDatabase } from '../utils/sqlite'
+import { tables, useDrizzle } from '../utils/drizzle'
 
-export default defineEventHandler(() => {
-  const db = getDatabase()
+export default defineEventHandler(async () => {
+  const db = useDrizzle()
   const sessionId = randomUUID()
 
-  db.insert(tables.userSessions).values({ id: sessionId }).run()
+  await db.insert(tables.userSessions).values({ id: sessionId }).run()
 
   return {
     sessionId

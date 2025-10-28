@@ -1,14 +1,14 @@
 import { defineEventHandler } from 'h3'
 import { requireAdminKey } from '../../utils/adminAuth'
 import { syncCvelistRepo } from '../../utils/cvelist'
-import { setMetadata } from '../../utils/sqlite'
+import { setMetadataValue } from '../../utils/metadata'
 
 export default defineEventHandler(async event => {
   requireAdminKey(event)
 
   const result = await syncCvelistRepo()
   const refreshedAt = new Date().toISOString()
-  setMetadata('cvelist.lastRefreshAt', refreshedAt)
+  await setMetadataValue('cvelist.lastRefreshAt', refreshedAt)
 
   return {
     refreshed: true,

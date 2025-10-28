@@ -28,6 +28,8 @@ CREATE TABLE `catalog_entries` (
 	`date_updated_ts` integer,
 	`exploited_since` text,
 	`source_url` text,
+	`poc_url` text,
+	`poc_published_at` text,
 	`reference_links` text NOT NULL,
 	`aliases` text NOT NULL,
 	`metasploit_module_path` text,
@@ -40,7 +42,8 @@ CREATE TABLE `catalog_entries` (
 	`has_source_kev` integer DEFAULT 0 NOT NULL,
 	`has_source_enisa` integer DEFAULT 0 NOT NULL,
 	`has_source_historic` integer DEFAULT 0 NOT NULL,
-	`has_source_metasploit` integer DEFAULT 0 NOT NULL
+	`has_source_metasploit` integer DEFAULT 0 NOT NULL,
+	`has_source_poc` integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `idx_catalog_entries_vendor_key` ON `catalog_entries` (`vendor_key`);--> statement-breakpoint
@@ -204,6 +207,8 @@ CREATE TABLE `vulnerability_entries` (
 	`date_updated` text,
 	`exploited_since` text,
 	`source_url` text,
+	`poc_url` text,
+	`poc_published_at` text,
 	`reference_links` text,
 	`aliases` text,
 	`affected_products` text DEFAULT '[]' NOT NULL,
@@ -234,7 +239,7 @@ CREATE TABLE `vulnerability_entry_impacts` (
 	`status` text DEFAULT '' NOT NULL,
 	`version_range` text NOT NULL,
 	`source` text NOT NULL,
-	PRIMARY KEY(`entry_id`, `vendor_key`, `product_key`, `status`, `version_range`),
+	PRIMARY KEY(`entry_id`, `vendor_key`, `product_key`, `status`, `version_range`, `source`),
 	FOREIGN KEY (`entry_id`) REFERENCES `vulnerability_entries`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

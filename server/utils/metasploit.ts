@@ -6,8 +6,8 @@ import type { KevBaseEntry } from '~/utils/classification'
 import { matchExploitProduct } from '~/utils/exploitProductHints'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
-import type { DrizzleDatabase } from './sqlite'
-import { setMetadata } from './sqlite'
+import type { DrizzleDatabase } from '../database/client'
+import { setMetadataValue } from './metadata'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   enrichBaseEntryWithCvelist,
@@ -1166,16 +1166,18 @@ export const importMetasploitCatalog = async (
 
     if (!baseEntries.length) {
       const importedAt = new Date().toISOString()
-      setMetadata('metasploit.lastImportAt', importedAt)
-      setMetadata('metasploit.totalCount', '0')
-      setMetadata('metasploit.moduleCount', String(processedModules.size))
-      setMetadata('metasploit.lastNewCount', '0')
-      setMetadata('metasploit.lastUpdatedCount', '0')
-      setMetadata('metasploit.lastSkippedCount', '0')
-      setMetadata('metasploit.lastRemovedCount', '0')
-      setMetadata('metasploit.lastImportStrategy', strategy)
+      await Promise.all([
+        setMetadataValue('metasploit.lastImportAt', importedAt),
+        setMetadataValue('metasploit.totalCount', '0'),
+        setMetadataValue('metasploit.moduleCount', String(processedModules.size)),
+        setMetadataValue('metasploit.lastNewCount', '0'),
+        setMetadataValue('metasploit.lastUpdatedCount', '0'),
+        setMetadataValue('metasploit.lastSkippedCount', '0'),
+        setMetadataValue('metasploit.lastRemovedCount', '0'),
+        setMetadataValue('metasploit.lastImportStrategy', strategy)
+      ])
       if (commit) {
-        setMetadata('metasploit.lastCommit', commit)
+        await setMetadataValue('metasploit.lastCommit', commit)
       }
       markTaskComplete('metasploit', 'No Metasploit entries required an update')
       return {
@@ -1293,16 +1295,18 @@ export const importMetasploitCatalog = async (
       })
 
       const importedAt = new Date().toISOString()
-      setMetadata('metasploit.lastImportAt', importedAt)
-      setMetadata('metasploit.totalCount', String(totalEntries))
-      setMetadata('metasploit.moduleCount', String(processedModules.size))
-      setMetadata('metasploit.lastNewCount', String(totalEntries))
-      setMetadata('metasploit.lastUpdatedCount', '0')
-      setMetadata('metasploit.lastSkippedCount', '0')
-      setMetadata('metasploit.lastRemovedCount', '0')
-      setMetadata('metasploit.lastImportStrategy', 'full')
+      await Promise.all([
+        setMetadataValue('metasploit.lastImportAt', importedAt),
+        setMetadataValue('metasploit.totalCount', String(totalEntries)),
+        setMetadataValue('metasploit.moduleCount', String(processedModules.size)),
+        setMetadataValue('metasploit.lastNewCount', String(totalEntries)),
+        setMetadataValue('metasploit.lastUpdatedCount', '0'),
+        setMetadataValue('metasploit.lastSkippedCount', '0'),
+        setMetadataValue('metasploit.lastRemovedCount', '0'),
+        setMetadataValue('metasploit.lastImportStrategy', 'full')
+      ])
       if (commit) {
-        setMetadata('metasploit.lastCommit', commit)
+        await setMetadataValue('metasploit.lastCommit', commit)
       }
 
       const fullSummary = `${totalEntries.toLocaleString()} Metasploit entries across ${processedModules.size.toLocaleString()} modules cached`
@@ -1391,16 +1395,18 @@ export const importMetasploitCatalog = async (
     })
 
     const importedAt = new Date().toISOString()
-    setMetadata('metasploit.lastImportAt', importedAt)
-    setMetadata('metasploit.totalCount', String(totalEntries))
-    setMetadata('metasploit.moduleCount', String(processedModules.size))
-    setMetadata('metasploit.lastNewCount', String(newRecords.length))
-    setMetadata('metasploit.lastUpdatedCount', String(updatedRecords.length))
-    setMetadata('metasploit.lastSkippedCount', String(unchangedRecords.length))
-    setMetadata('metasploit.lastRemovedCount', String(removedIds.length))
-    setMetadata('metasploit.lastImportStrategy', 'incremental')
+    await Promise.all([
+      setMetadataValue('metasploit.lastImportAt', importedAt),
+      setMetadataValue('metasploit.totalCount', String(totalEntries)),
+      setMetadataValue('metasploit.moduleCount', String(processedModules.size)),
+      setMetadataValue('metasploit.lastNewCount', String(newRecords.length)),
+      setMetadataValue('metasploit.lastUpdatedCount', String(updatedRecords.length)),
+      setMetadataValue('metasploit.lastSkippedCount', String(unchangedRecords.length)),
+      setMetadataValue('metasploit.lastRemovedCount', String(removedIds.length)),
+      setMetadataValue('metasploit.lastImportStrategy', 'incremental')
+    ])
     if (commit) {
-      setMetadata('metasploit.lastCommit', commit)
+      await setMetadataValue('metasploit.lastCommit', commit)
     }
 
     const changeSegments: string[] = []

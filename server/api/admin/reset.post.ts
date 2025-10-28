@@ -1,7 +1,7 @@
 import { defineEventHandler } from 'h3'
 import { resetClassificationProgress } from '../../utils/classification-progress'
 import { resetImportProgress } from '../../utils/import-progress'
-import { resetDatabase } from '../../utils/sqlite'
+import { resetDatabase } from '../../database/client'
 import { requireAdminKey } from '../../utils/adminAuth'
 
 export default defineEventHandler(event => {

@@ -1,9 +1,8 @@
 import { sql } from 'drizzle-orm'
-import { tables } from '../database/client'
+import { tables, type DrizzleDatabase } from '../database/client'
 import { runMarketImport } from '../market/importer'
 import { marketPrograms } from '../market/programs'
-import type { DrizzleDatabase } from './sqlite'
-import { setMetadata } from './sqlite'
+import { setMetadataValue } from './metadata'
 import {
   markTaskComplete,
   markTaskError,
@@ -65,32 +64,27 @@ export const importMarketIntel = async (
     const target = tables.marketOfferTargets
     const snapshot = tables.marketProgramSnapshots
 
-    const offerStats =
+    const [offerStats, programStats, productStats, snapshotStats] = await Promise.all([
       db
         .select({
           offerCount: sql<number>`count(*)`,
           lastCaptureAt: sql<string | null>`max(${offer.sourceCaptureDate})`
         })
         .from(offer)
-        .get() ?? null
-
-    const programStats =
+        .get(),
       db
         .select({ programCount: sql<number>`count(distinct ${program.id})` })
         .from(program)
-        .get() ?? null
-
-    const productStats =
+        .get(),
       db
         .select({ productCount: sql<number>`count(distinct ${target.productKey})` })
         .from(target)
-        .get() ?? null
-
-    const snapshotStats =
+        .get(),
       db
         .select({ lastSnapshotAt: sql<string | null>`max(${snapshot.fetchedAt})` })
         .from(snapshot)
-        .get() ?? null
+        .get()
+    ])
 
     const offerCount = toCount(offerStats?.offerCount)
     const programCount = toCount(programStats?.programCount)
@@ -122,9 +116,7 @@ export const importMarketIntel = async (
       metadataEntries.push(['market.cachedAt', lastSnapshotAt])
     }
 
-    for (const [key, value] of metadataEntries) {
-      setMetadata(key, value)
-    }
+    await Promise.all(metadataEntries.map(([key, value]) => setMetadataValue(key, value)))
 
     const completionLabel =
       offerCount > 0

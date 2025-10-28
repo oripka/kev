@@ -3,10 +3,10 @@ import {
   normaliseQuickFilterSummaryConfig,
   QUICK_FILTER_SUMMARY_METADATA_KEY,
 } from "~/utils/quickFilterSummaryConfig";
-import { getMetadata } from "../utils/sqlite";
+import { getMetadataValue } from "../utils/metadata";
 
-export default defineEventHandler(() => {
-  const raw = getMetadata(QUICK_FILTER_SUMMARY_METADATA_KEY);
+export default defineEventHandler(async () => {
+  const raw = await getMetadataValue(QUICK_FILTER_SUMMARY_METADATA_KEY);
 
   if (!raw) {
     return defaultQuickFilterSummaryConfig;

@@ -24,8 +24,8 @@ import {
   updateImportProgress
 } from '../utils/import-progress'
 import { rebuildCatalog } from '../utils/catalog'
-import { getDatabase, getMetadata } from '../utils/sqlite'
-import { tables } from '../database/client'
+import { getMetadataMap } from '../utils/metadata'
+import { tables, useDrizzle } from '../database/client'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 import { importMetasploitCatalog } from '../utils/metasploit'
 import { importGithubPocCatalog } from '../utils/github-poc'
@@ -152,12 +152,20 @@ export default defineEventHandler(async event => {
 
   const shouldImport = (key: ImportTaskKey) => sourcesToImport.includes(key)
 
-  const fallbackCatalogVersion = getMetadata('catalogVersion') ?? ''
-  const fallbackDateReleased = getMetadata('dateReleased') ?? ''
-  const fallbackEnisaUpdated = getMetadata('enisa.lastUpdatedAt')
-  const fallbackMetasploitCommit = getMetadata('metasploit.lastCommit')
+  const metadata = await getMetadataMap([
+    'catalogVersion',
+    'dateReleased',
+    'enisa.lastUpdatedAt',
+    'metasploit.lastCommit',
+    'metasploit.moduleCount'
+  ])
+
+  const fallbackCatalogVersion = metadata.catalogVersion ?? ''
+  const fallbackDateReleased = metadata.dateReleased ?? ''
+  const fallbackEnisaUpdated = metadata['enisa.lastUpdatedAt']
+  const fallbackMetasploitCommit = metadata['metasploit.lastCommit']
   const fallbackMetasploitModules =
-    Number.parseInt(getMetadata('metasploit.moduleCount') ?? '0', 10) || 0
+    Number.parseInt(metadata['metasploit.moduleCount'] ?? '0', 10) || 0
 
   const importStartedAt = new Date().toISOString()
 
@@ -205,7 +213,7 @@ export default defineEventHandler(async event => {
   let marketLastCaptureAt: string | null = null
   let marketLastSnapshotAt: string | null = null
 
-  const db = getDatabase()
+  const db = useDrizzle()
 
   try {
     if (!shouldImport('kev')) {
@@ -325,7 +333,7 @@ export default defineEventHandler(async event => {
 
       if (baseCveIds.length > 0) {
         const baseCveIdSet = new Set(baseCveIds)
-        const existingRows = db
+        const existingRows: ExistingCvssRow[] = await db
           .select({
             cve_id: tables.vulnerabilityEntries.cveId,
             cvss_score: tables.vulnerabilityEntries.cvssScore,
@@ -335,7 +343,7 @@ export default defineEventHandler(async event => {
           })
           .from(tables.vulnerabilityEntries)
           .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-          .all() as ExistingCvssRow[]
+          .all()
 
         for (const row of existingRows) {
           if (!baseCveIdSet.has(row.cve_id)) {
@@ -655,66 +663,64 @@ export default defineEventHandler(async event => {
       const totalEntries = entryRecords.length
 
       if (!useIncrementalKev) {
-        db.transaction(tx => {
-          tx
-            .delete(tables.vulnerabilityEntries)
-            .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-            .run()
+        await db
+          .delete(tables.vulnerabilityEntries)
+          .where(eq(tables.vulnerabilityEntries.source, 'kev'))
+          .run()
 
-          setImportPhase('saving', {
-            message: 'Saving entries to the local cache',
-            completed: 0,
-            total: totalEntries
-          })
-          markTaskProgress('kev', 0, totalEntries, 'Saving entries to the local cache')
-
-          for (let index = 0; index < entryRecords.length; index += 1) {
-            const record = entryRecords[index]
-
-            tx.insert(tables.vulnerabilityEntries).values(record.values).run()
-
-            if (record.impacts.length) {
-              tx.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
-            }
-
-            if (record.categories.length) {
-              tx.insert(tables.vulnerabilityEntryCategories).values(record.categories).run()
-            }
-
-            if ((index + 1) % 25 === 0 || index + 1 === totalEntries) {
-              const message = `Saving entries to the local cache (${index + 1} of ${totalEntries})`
-              setImportPhase('saving', {
-                completed: index + 1,
-                total: totalEntries,
-                message
-              })
-              markTaskProgress('kev', index + 1, totalEntries, message)
-            }
-          }
-
-          const metadataRows = [
-            { key: 'dateReleased', value: parsed.data.dateReleased },
-            { key: 'catalogVersion', value: parsed.data.catalogVersion },
-            { key: 'entryCount', value: String(totalEntries) },
-            { key: 'lastImportAt', value: importedAt },
-            { key: 'kev.lastNewCount', value: String(totalEntries) },
-            { key: 'kev.lastUpdatedCount', value: '0' },
-            { key: 'kev.lastSkippedCount', value: '0' },
-            { key: 'kev.lastRemovedCount', value: '0' },
-            { key: 'kev.lastImportStrategy', value: 'full' }
-          ]
-
-          for (const record of metadataRows) {
-            tx
-              .insert(tables.kevMetadata)
-              .values(record)
-              .onConflictDoUpdate({
-                target: tables.kevMetadata.key,
-                set: { value: sql`excluded.value` }
-              })
-              .run()
-          }
+        setImportPhase('saving', {
+          message: 'Saving entries to the local cache',
+          completed: 0,
+          total: totalEntries
         })
+        markTaskProgress('kev', 0, totalEntries, 'Saving entries to the local cache')
+
+        for (let index = 0; index < entryRecords.length; index += 1) {
+          const record = entryRecords[index]
+
+          await db.insert(tables.vulnerabilityEntries).values(record.values).run()
+
+          if (record.impacts.length) {
+            await db.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
+          }
+
+          if (record.categories.length) {
+            await db.insert(tables.vulnerabilityEntryCategories).values(record.categories).run()
+          }
+
+          if ((index + 1) % 25 === 0 || index + 1 === totalEntries) {
+            const message = `Saving entries to the local cache (${index + 1} of ${totalEntries})`
+            setImportPhase('saving', {
+              completed: index + 1,
+              total: totalEntries,
+              message
+            })
+            markTaskProgress('kev', index + 1, totalEntries, message)
+          }
+        }
+
+        const metadataRows = [
+          { key: 'dateReleased', value: parsed.data.dateReleased },
+          { key: 'catalogVersion', value: parsed.data.catalogVersion },
+          { key: 'entryCount', value: String(totalEntries) },
+          { key: 'lastImportAt', value: importedAt },
+          { key: 'kev.lastNewCount', value: String(totalEntries) },
+          { key: 'kev.lastUpdatedCount', value: '0' },
+          { key: 'kev.lastSkippedCount', value: '0' },
+          { key: 'kev.lastRemovedCount', value: '0' },
+          { key: 'kev.lastImportStrategy', value: 'full' }
+        ]
+
+        for (const record of metadataRows) {
+          await db
+            .insert(tables.kevMetadata)
+            .values(record)
+            .onConflictDoUpdate({
+              target: tables.kevMetadata.key,
+              set: { value: sql`excluded.value` }
+            })
+            .run()
+        }
 
         kevImported = totalEntries
         kevNewCount = totalEntries
@@ -806,7 +812,7 @@ export default defineEventHandler(async event => {
           internetExposed: typeof row.internetExposed === 'number' ? row.internetExposed : 0
         })
 
-        const existingRows = db
+        const existingRows: ExistingEntryRow[] = await db
           .select({
             id: tables.vulnerabilityEntries.id,
             cveId: tables.vulnerabilityEntries.cveId,
@@ -844,7 +850,7 @@ export default defineEventHandler(async event => {
           })
           .from(tables.vulnerabilityEntries)
           .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-          .all() as ExistingEntryRow[]
+          .all()
 
         const existingMap = new Map<string, { values: EntryRowValues; impacts: ImpactRecord[]; categories: CategoryRecord[]; signature: string }>()
 
@@ -860,7 +866,7 @@ export default defineEventHandler(async event => {
         const existingIds = Array.from(existingMap.keys())
 
         if (existingIds.length > 0) {
-          const impactRows = db
+          const impactRows: ExistingImpactRow[] = await db
             .select({
               entryId: tables.vulnerabilityEntryImpacts.entryId,
               vendor: tables.vulnerabilityEntryImpacts.vendor,
@@ -873,7 +879,7 @@ export default defineEventHandler(async event => {
             })
             .from(tables.vulnerabilityEntryImpacts)
             .where(inArray(tables.vulnerabilityEntryImpacts.entryId, existingIds))
-            .all() as ExistingImpactRow[]
+            .all()
 
           for (const impact of impactRows) {
             const bucket = existingMap.get(impact.entryId)
@@ -891,7 +897,7 @@ export default defineEventHandler(async event => {
             }
           }
 
-          const categoryRows = db
+          const categoryRows: ExistingCategoryRow[] = await db
             .select({
               entryId: tables.vulnerabilityEntryCategories.entryId,
               categoryType: tables.vulnerabilityEntryCategories.categoryType,
@@ -900,7 +906,7 @@ export default defineEventHandler(async event => {
             })
             .from(tables.vulnerabilityEntryCategories)
             .where(inArray(tables.vulnerabilityEntryCategories.entryId, existingIds))
-            .all() as ExistingCategoryRow[]
+            .all()
 
           for (const category of categoryRows) {
             const bucket = existingMap.get(category.entryId)
@@ -943,101 +949,103 @@ export default defineEventHandler(async event => {
         const removedIds = existingIds.filter(id => !seenExisting.has(id))
         const totalChanges = newRecords.length + updatedRecords.length
 
-        db.transaction(tx => {
-          if (totalChanges > 0) {
-            const message = 'Saving KEV changes to the local cache'
-            setImportPhase('saving', { message, completed: 0, total: totalChanges })
-            markTaskProgress('kev', 0, totalChanges, message)
-          } else if (removedIds.length > 0) {
-            const message = `Removing ${removedIds.length.toLocaleString()} retired KEV entr${removedIds.length === 1 ? 'y' : 'ies'}`
-            setImportPhase('saving', { message, completed: 0, total: 0 })
-            markTaskProgress('kev', 0, 0, message)
+        if (totalChanges > 0) {
+          const message = 'Saving KEV changes to the local cache'
+          setImportPhase('saving', { message, completed: 0, total: totalChanges })
+          markTaskProgress('kev', 0, totalChanges, message)
+        } else if (removedIds.length > 0) {
+          const message = `Removing ${removedIds.length.toLocaleString()} retired KEV entr${removedIds.length === 1 ? 'y' : 'ies'}`
+          setImportPhase('saving', { message, completed: 0, total: 0 })
+          markTaskProgress('kev', 0, 0, message)
+        } else {
+          const message = 'KEV catalog already up to date'
+          setImportPhase('saving', { message, completed: 0, total: 0 })
+          markTaskProgress('kev', 0, 0, message)
+        }
+
+        const persistRecord = async (
+          record: EntryDiffRecord,
+          action: 'insert' | 'update',
+          index: number
+        ) => {
+          const { values, impacts, categories } = record
+
+          if (action === 'insert') {
+            await db.insert(tables.vulnerabilityEntries).values(values).run()
           } else {
-            const message = 'KEV catalog already up to date'
-            setImportPhase('saving', { message, completed: 0, total: 0 })
-            markTaskProgress('kev', 0, 0, message)
-          }
-
-          const persistRecord = (record: EntryDiffRecord, action: 'insert' | 'update', index: number) => {
-            const { values, impacts, categories } = record
-
-            if (action === 'insert') {
-              tx.insert(tables.vulnerabilityEntries).values(values).run()
-            } else {
-              const { id, ...updateValues } = values
-              tx
-                .update(tables.vulnerabilityEntries)
-                .set(updateValues)
-                .where(eq(tables.vulnerabilityEntries.id, id))
-                .run()
-            }
-
-            tx
-              .delete(tables.vulnerabilityEntryImpacts)
-              .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
-              .run()
-
-            if (impacts.length) {
-              tx.insert(tables.vulnerabilityEntryImpacts).values(impacts).run()
-            }
-
-            tx
-              .delete(tables.vulnerabilityEntryCategories)
-              .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
-              .run()
-
-            if (categories.length) {
-              tx.insert(tables.vulnerabilityEntryCategories).values(categories).run()
-            }
-
-            if (totalChanges > 0) {
-              const completed = index + 1
-              const progressMessage = `Saving KEV changes to the local cache (${completed} of ${totalChanges})`
-              setImportPhase('saving', { completed, total: totalChanges, message: progressMessage })
-              markTaskProgress('kev', completed, totalChanges, progressMessage)
-            }
-          }
-
-          let processed = 0
-          for (const record of newRecords) {
-            persistRecord(record, 'insert', processed)
-            processed += 1
-          }
-          for (const record of updatedRecords) {
-            persistRecord(record, 'update', processed)
-            processed += 1
-          }
-
-          if (removedIds.length > 0) {
-            tx
-              .delete(tables.vulnerabilityEntries)
-              .where(inArray(tables.vulnerabilityEntries.id, removedIds))
+            const { id, ...updateValues } = values
+            await db
+              .update(tables.vulnerabilityEntries)
+              .set(updateValues)
+              .where(eq(tables.vulnerabilityEntries.id, id))
               .run()
           }
 
-          const metadataRows = [
-            { key: 'dateReleased', value: parsed.data.dateReleased },
-            { key: 'catalogVersion', value: parsed.data.catalogVersion },
-            { key: 'entryCount', value: String(totalEntries) },
-            { key: 'lastImportAt', value: importedAt },
-            { key: 'kev.lastNewCount', value: String(newRecords.length) },
-            { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
-            { key: 'kev.lastSkippedCount', value: String(unchangedRecords.length) },
-            { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
-            { key: 'kev.lastImportStrategy', value: 'incremental' }
-          ]
+          await db
+            .delete(tables.vulnerabilityEntryImpacts)
+            .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
+            .run()
 
-          for (const record of metadataRows) {
-            tx
-              .insert(tables.kevMetadata)
-              .values(record)
-              .onConflictDoUpdate({
-                target: tables.kevMetadata.key,
-                set: { value: sql`excluded.value` }
-              })
-              .run()
+          if (impacts.length) {
+            await db.insert(tables.vulnerabilityEntryImpacts).values(impacts).run()
           }
-        })
+
+          await db
+            .delete(tables.vulnerabilityEntryCategories)
+            .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
+            .run()
+
+          if (categories.length) {
+            await db.insert(tables.vulnerabilityEntryCategories).values(categories).run()
+          }
+
+          if (totalChanges > 0) {
+            const completed = index + 1
+            const progressMessage = `Saving KEV changes to the local cache (${completed} of ${totalChanges})`
+            setImportPhase('saving', { completed, total: totalChanges, message: progressMessage })
+            markTaskProgress('kev', completed, totalChanges, progressMessage)
+          }
+        }
+
+        let processed = 0
+        for (const record of newRecords) {
+          await persistRecord(record, 'insert', processed)
+          processed += 1
+        }
+        for (const record of updatedRecords) {
+          await persistRecord(record, 'update', processed)
+          processed += 1
+        }
+
+        if (removedIds.length > 0) {
+          await db
+            .delete(tables.vulnerabilityEntries)
+            .where(inArray(tables.vulnerabilityEntries.id, removedIds))
+            .run()
+        }
+
+        const metadataRows = [
+          { key: 'dateReleased', value: parsed.data.dateReleased },
+          { key: 'catalogVersion', value: parsed.data.catalogVersion },
+          { key: 'entryCount', value: String(totalEntries) },
+          { key: 'lastImportAt', value: importedAt },
+          { key: 'kev.lastNewCount', value: String(newRecords.length) },
+          { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
+          { key: 'kev.lastSkippedCount', value: String(unchangedRecords.length) },
+          { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
+          { key: 'kev.lastImportStrategy', value: 'incremental' }
+        ]
+
+        for (const record of metadataRows) {
+          await db
+            .insert(tables.kevMetadata)
+            .values(record)
+            .onConflictDoUpdate({
+              target: tables.kevMetadata.key,
+              set: { value: sql`excluded.value` }
+            })
+            .run()
+        }
 
         kevImported = newRecords.length + updatedRecords.length
         kevNewCount = newRecords.length
@@ -1208,8 +1216,8 @@ export default defineEventHandler(async event => {
       markTaskSkipped('market', 'Skipped this run')
     }
 
-    const catalogSummary = rebuildCatalog(db)
-    rebuildProductCatalog(db)
+    const catalogSummary = await rebuildCatalog(db)
+    await rebuildProductCatalog(db)
 
     const totalImported =
       kevImported +

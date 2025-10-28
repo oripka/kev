@@ -1,7 +1,6 @@
 import { defineEventHandler } from 'h3'
 import { eq, sql } from 'drizzle-orm'
-import { tables } from '../../database/client'
-import { getDatabase } from '../../utils/sqlite'
+import { tables, useDrizzle } from '../../utils/drizzle'
 import type { MarketStatsResponse } from '~/types'
 
 const normaliseReward = (value: number | null | undefined): number | null => {
@@ -42,15 +41,15 @@ const createDefaultStats = (): MarketStatsResponse => ({
   topOffers: []
 })
 
-export default defineEventHandler((): MarketStatsResponse => {
-  const db = getDatabase()
+export default defineEventHandler(async (): Promise<MarketStatsResponse> => {
+  const db = useDrizzle()
   const offer = tables.marketOffers
   const target = tables.marketOfferTargets
   const program = tables.marketPrograms
   const category = tables.marketOfferCategories
   const productCatalog = tables.productCatalog
 
-  const totalsRow = db
+  const totalsRow = await db
     .select({
       offerCount: sql<number>`count(distinct ${offer.id})`,
       programCount: sql<number>`count(distinct ${offer.programId})`,
@@ -62,7 +61,7 @@ export default defineEventHandler((): MarketStatsResponse => {
     .from(offer)
     .get()
 
-  const programCountRows = db
+  const programCountRows = await db
     .select({
       programType: program.programType,
       count: sql<number>`count(distinct ${offer.id})`
@@ -80,7 +79,7 @@ export default defineEventHandler((): MarketStatsResponse => {
     }))
     .sort((first, second) => second.count - first.count)
 
-  const categoryRows = db
+  const categoryRows = await db
     .select({
       categoryType: category.categoryType,
       categoryKey: category.categoryKey,
@@ -101,7 +100,7 @@ export default defineEventHandler((): MarketStatsResponse => {
     }))
     .sort((first, second) => second.count - first.count)
 
-  const topOfferRows = db
+  const topOfferRows = await db
     .select({
       id: offer.id,
       title: offer.title,
