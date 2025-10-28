@@ -82,3 +82,7 @@ The import pipeline keeps shallow clones of third-party feeds in `data/cache`.
 - `data/cache/metasploit` — sparse checkout of the Metasploit Framework repository.
 
 The CVEList cache is refreshed automatically when running the KEV importer. The most recent commit hash is stored in the `metadata` table under `cvelist.lastCommit` for observability. Admin users can trigger a manual refresh by calling `POST /api/admin/refresh-cvelist`, which also records the refresh timestamp under `cvelist.lastRefreshAt`.
+
+## Import configuration
+
+Set `NUXT_DISABLE_GITHUB_POC_IMPORT=true` (or `DISABLE_GITHUB_POC_IMPORT=true`) in your environment to skip the GitHub PoC importer. This keeps the database lighter by omitting the large GitHub PoC feed while leaving the rest of the ingestion pipeline untouched.

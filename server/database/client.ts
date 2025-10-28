@@ -19,6 +19,18 @@ type D1Client = Parameters<typeof drizzleD1>[0]
 
 type HubGlobal = typeof globalThis & {
   hubDatabase?: () => D1Client
+  __env__?: Record<string, unknown>
+  DB?: D1Client
+}
+
+const resolveDatabaseBinding = (): D1Client | null => {
+  const hub = globalThis as HubGlobal
+  const binding =
+    (typeof process !== 'undefined' && (process.env.DB as D1Client | undefined)) ||
+    (hub.__env__?.DB as D1Client | undefined) ||
+    hub.DB
+
+  return binding ?? null
 }
 
 type SqliteDrizzleDatabase = BetterSQLite3Database<typeof schema>
@@ -27,6 +39,11 @@ type D1DrizzleDatabase = DrizzleD1Database<typeof schema>
 export type DrizzleDatabase = SqliteDrizzleDatabase | D1DrizzleDatabase
 
 const resolveHubDatabase = (): D1Client | null => {
+  const directBinding = resolveDatabaseBinding()
+  if (directBinding) {
+    return directBinding
+  }
+
   const hub = (globalThis as HubGlobal).hubDatabase
   if (typeof hub !== 'function') {
     return null
@@ -77,8 +94,15 @@ const ensureBaselineMigrations = (sqlite: SqliteDatabase) => {
 
 const ensureDirectory = (filepath: string) => {
   const directory = dirname(filepath)
-  if (!existsSync(directory)) {
-    mkdirSync(directory, { recursive: true })
+  try {
+    if (!existsSync(directory)) {
+      mkdirSync(directory, { recursive: true })
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('not implemented')) {
+      return
+    }
+    throw error
   }
 }
 
@@ -139,6 +163,13 @@ export const resetDatabase = () => {
 
   const databasePath = join(process.cwd(), 'data', DB_FILENAME)
   if (existsSync(databasePath)) {
-    rmSync(databasePath)
+    try {
+      rmSync(databasePath)
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('not implemented')) {
+        return
+      }
+      throw error
+    }
   }
 }

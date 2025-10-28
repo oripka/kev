@@ -38,6 +38,18 @@ const POC_HISTORY_LOOKBACK_DAYS = 365
 const SOURCE_URL = 'https://raw.githubusercontent.com/0xMarcio/cve/main/docs/CVE_list.json'
 const SOURCE_REPO_URL = 'https://github.com/0xMarcio/cve/tree/main'
 const CACHE_KEY = 'github-poc-feed'
+const DISABLE_POC_ENV_KEYS = [
+  'NUXT_DISABLE_GITHUB_POC_IMPORT',
+  'DISABLE_GITHUB_POC_IMPORT',
+  'NUXT_PUBLIC_DISABLE_GITHUB_POC_IMPORT'
+] as const
+
+const isTruthyEnv = (value: string | undefined) =>
+  typeof value === 'string' && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
+
+const isGithubPocImportDisabled = DISABLE_POC_ENV_KEYS.some(envKey =>
+  isTruthyEnv(process.env[envKey])
+)
 
 const pocEntrySchema = z.object({
   cve: z.string(),
@@ -131,7 +143,7 @@ const toBaseEntry = (
     }
   )
 
-  const references = Array.from(new Set([...filteredLinks, SOURCE_REPO_URL]))
+  const references = primaryPocUrl ? [primaryPocUrl] : []
 
   return {
     id: `poc:${cveId}`,
@@ -216,6 +228,27 @@ export const importGithubPocCatalog = async (
   const strategy = options.strategy ?? 'full'
 
   try {
+    if (isGithubPocImportDisabled) {
+      const message = 'GitHub PoC import disabled via environment flag'
+      markTaskRunning('poc', message)
+      setImportPhase('fetchingPoc', {
+        message,
+        completed: 0,
+        total: 0
+      })
+      markTaskComplete('poc', message)
+      return {
+        imported: 0,
+        totalCount: 0,
+        newCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        removedCount: 0,
+        strategy,
+        cachedAt: null
+      }
+    }
+
     markTaskRunning('poc', 'Checking GitHub PoC feed cache')
     setImportPhase('fetchingPoc', {
       message: 'Checking GitHub PoC feed cache',
