@@ -27,6 +27,8 @@ import { matchVendorProductByTitle } from './metasploitVendorCatalog'
 import {
   buildEntryDiffRecords,
   diffEntryRecords,
+  insertCategoryRecords,
+  insertImpactRecords,
   loadExistingEntryRecords,
   persistEntryRecord
 } from './entry-diff'
@@ -187,8 +189,8 @@ const collectModulePublishedDates = async (
   return results
 }
 
-const loadExistingModulePublishedDates = (db: DrizzleDatabase): Map<string, string | null> => {
-  const rows = db
+const loadExistingModulePublishedDates = async (db: DrizzleDatabase): Promise<Map<string, string | null>> => {
+  const rows = await db
     .select({
       path: tables.vulnerabilityEntries.metasploitModulePath,
       publishedAt: tables.vulnerabilityEntries.metasploitModulePublishedAt
@@ -946,7 +948,10 @@ const createBaseEntries = (
   })
 }
 
-const applyVendorProductOverrides = (entries: KevBaseEntry[], db: DrizzleDatabase): KevBaseEntry[] => {
+const applyVendorProductOverrides = async (
+  entries: KevBaseEntry[],
+  db: DrizzleDatabase
+): Promise<KevBaseEntry[]> => {
   if (!entries.length) {
     return entries
   }
@@ -956,21 +961,32 @@ const applyVendorProductOverrides = (entries: KevBaseEntry[], db: DrizzleDatabas
     return entries
   }
 
-  const rows = db
-    .select({
-      cveId: tables.vulnerabilityEntries.cveId,
-      vendor: tables.vulnerabilityEntries.vendor,
-      product: tables.vulnerabilityEntries.product,
-      source: tables.vulnerabilityEntries.source
-    })
-    .from(tables.vulnerabilityEntries)
-    .where(
-      and(
-        inArray(tables.vulnerabilityEntries.cveId, cveIds),
-        ne(tables.vulnerabilityEntries.source, 'metasploit')
+  const rows: Array<{
+    cveId: string | null
+    vendor: string | null
+    product: string | null
+    source: string | null
+  }> = []
+  const MAX_IDS_PER_QUERY = 80
+  for (let index = 0; index < cveIds.length; index += MAX_IDS_PER_QUERY) {
+    const chunk = cveIds.slice(index, index + MAX_IDS_PER_QUERY)
+    const chunkRows = await db
+      .select({
+        cveId: tables.vulnerabilityEntries.cveId,
+        vendor: tables.vulnerabilityEntries.vendor,
+        product: tables.vulnerabilityEntries.product,
+        source: tables.vulnerabilityEntries.source
+      })
+      .from(tables.vulnerabilityEntries)
+      .where(
+        and(
+          inArray(tables.vulnerabilityEntries.cveId, chunk),
+          ne(tables.vulnerabilityEntries.source, 'metasploit')
+        )
       )
-    )
-    .all()
+      .all()
+    rows.push(...chunkRows)
+  }
 
   const priorities: Record<string, number> = { kev: 3, historic: 2, enisa: 1 }
   const overrides = new Map<
@@ -1088,7 +1104,7 @@ export const importMetasploitCatalog = async (
     const rubyFiles = await walkRubyFiles(MODULES_DIR)
 
     const moduleRelativePaths = rubyFiles.map(file => relative(REPO_DIR, file))
-    const existingPublishedDates = loadExistingModulePublishedDates(db)
+    const existingPublishedDates = await loadExistingModulePublishedDates(db)
 
     if (moduleRelativePaths.length) {
       setImportPhase('fetchingMetasploit', {
@@ -1234,7 +1250,7 @@ export const importMetasploitCatalog = async (
       }
     }
 
-    const vendorAdjustedEntries = applyVendorProductOverrides(
+    const vendorAdjustedEntries = await applyVendorProductOverrides(
       cvelistResults.map(result => result.entry),
       db
     )
@@ -1260,39 +1276,34 @@ export const importMetasploitCatalog = async (
         'Saving Metasploit entries to the local cache'
       )
 
-      db.transaction(tx => {
-        tx
-          .delete(tables.vulnerabilityEntries)
-          .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
-          .run()
+      await db
+        .delete(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'metasploit'))
+        .run()
 
-        for (let index = 0; index < entryRecords.length; index += 1) {
-          const record = entryRecords[index]
+      for (let index = 0; index < entryRecords.length; index += 1) {
+        const record = entryRecords[index]
 
-          tx.insert(tables.vulnerabilityEntries).values(record.values).run()
+        await db.insert(tables.vulnerabilityEntries).values(record.values).run()
 
-          if (record.impacts.length) {
-            tx.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
-          }
-
-          if (record.categories.length) {
-            tx
-              .insert(tables.vulnerabilityEntryCategories)
-              .values(record.categories)
-              .run()
-          }
-
-          if ((index + 1) % 25 === 0 || index + 1 === entryRecords.length) {
-            const message = `Saving Metasploit entries (${index + 1} of ${entryRecords.length})`
-            setImportPhase('savingMetasploit', {
-              message,
-              completed: index + 1,
-              total: entryRecords.length
-            })
-            markTaskProgress('metasploit', index + 1, entryRecords.length, message)
-          }
+        if (record.impacts.length) {
+          await insertImpactRecords(db, record.impacts)
         }
-      })
+
+        if (record.categories.length) {
+          await insertCategoryRecords(db, record.categories)
+        }
+
+        if ((index + 1) % 25 === 0 || index + 1 === entryRecords.length) {
+          const message = `Saving Metasploit entries (${index + 1} of ${entryRecords.length})`
+          setImportPhase('savingMetasploit', {
+            message,
+            completed: index + 1,
+            total: entryRecords.length
+          })
+          markTaskProgress('metasploit', index + 1, entryRecords.length, message)
+        }
+      }
 
       const importedAt = new Date().toISOString()
       await Promise.all([
@@ -1325,74 +1336,77 @@ export const importMetasploitCatalog = async (
       }
     }
 
-    const existingMap = loadExistingEntryRecords(db, 'metasploit')
+    const existingMap = await loadExistingEntryRecords(db, 'metasploit')
     const { newRecords, updatedRecords, unchangedRecords, removedIds } =
       diffEntryRecords(entryRecords, existingMap)
     const totalChanges = newRecords.length + updatedRecords.length
 
-    db.transaction(tx => {
+    if (totalChanges > 0) {
+      const message = 'Saving Metasploit changes to the local cache'
+      setImportPhase('savingMetasploit', {
+        message,
+        completed: 0,
+        total: totalChanges
+      })
+      markTaskProgress('metasploit', 0, totalChanges, message)
+    } else if (removedIds.length > 0) {
+      const message = `Removing ${removedIds.length.toLocaleString()} retired Metasploit entr${removedIds.length === 1 ? 'y' : 'ies'}`
+      setImportPhase('savingMetasploit', {
+        message,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('metasploit', 0, 0, message)
+    } else {
+      const message = 'Metasploit catalog already up to date'
+      setImportPhase('savingMetasploit', {
+        message,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('metasploit', 0, 0, message)
+    }
+
+    let processed = 0
+    for (const record of newRecords) {
+      await persistEntryRecord(db, record, 'insert')
       if (totalChanges > 0) {
-        const message = 'Saving Metasploit changes to the local cache'
+        const completed = processed + 1
+        const progressMessage = `Saving Metasploit changes (${completed} of ${totalChanges})`
         setImportPhase('savingMetasploit', {
-          message,
-          completed: 0,
+          message: progressMessage,
+          completed,
           total: totalChanges
         })
-        markTaskProgress('metasploit', 0, totalChanges, message)
-      } else if (removedIds.length > 0) {
-        const message = `Removing ${removedIds.length.toLocaleString()} retired Metasploit entr${removedIds.length === 1 ? 'y' : 'ies'}`
+        markTaskProgress('metasploit', completed, totalChanges, progressMessage)
+      }
+      processed += 1
+    }
+    for (const record of updatedRecords) {
+      await persistEntryRecord(db, record, 'update')
+      if (totalChanges > 0) {
+        const completed = processed + 1
+        const progressMessage = `Saving Metasploit changes (${completed} of ${totalChanges})`
         setImportPhase('savingMetasploit', {
-          message,
-          completed: 0,
-          total: 0
+          message: progressMessage,
+          completed,
+          total: totalChanges
         })
-        markTaskProgress('metasploit', 0, 0, message)
-      } else {
-        const message = 'Metasploit catalog already up to date'
-        setImportPhase('savingMetasploit', {
-          message,
-          completed: 0,
-          total: 0
-        })
-        markTaskProgress('metasploit', 0, 0, message)
+        markTaskProgress('metasploit', completed, totalChanges, progressMessage)
       }
+      processed += 1
+    }
 
-      const persist = (
-        record: typeof newRecords[number],
-        action: 'insert' | 'update',
-        index: number
-      ) => {
-        persistEntryRecord(tx, record, action)
-
-        if (totalChanges > 0) {
-          const completed = index + 1
-          const progressMessage = `Saving Metasploit changes (${completed} of ${totalChanges})`
-          setImportPhase('savingMetasploit', {
-            message: progressMessage,
-            completed,
-            total: totalChanges
-          })
-          markTaskProgress('metasploit', completed, totalChanges, progressMessage)
-        }
-      }
-
-      let processed = 0
-      for (const record of newRecords) {
-        persist(record, 'insert', processed)
-        processed += 1
-      }
-      for (const record of updatedRecords) {
-        persist(record, 'update', processed)
-        processed += 1
-      }
-
-      if (removedIds.length > 0) {
-        tx
+    if (removedIds.length > 0) {
+      const chunkSize = 25
+      for (let index = 0; index < removedIds.length; index += chunkSize) {
+        const idChunk = removedIds.slice(index, index + chunkSize)
+        await db
           .delete(tables.vulnerabilityEntries)
-          .where(inArray(tables.vulnerabilityEntries.id, removedIds))
+          .where(inArray(tables.vulnerabilityEntries.id, idChunk))
           .run()
       }
-    })
+    }
 
     const importedAt = new Date().toISOString()
     await Promise.all([

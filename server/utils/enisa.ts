@@ -9,6 +9,8 @@ import { setMetadataValue } from './metadata'
 import {
   buildEntryDiffRecords,
   diffEntryRecords,
+  insertCategoryRecords,
+  insertImpactRecords,
   loadExistingEntryRecords,
   persistEntryRecord
 } from './entry-diff'
@@ -390,39 +392,34 @@ export const importEnisaCatalog = async (
         'Saving ENISA entries to the local cache'
       )
 
-      db.transaction(tx => {
-        tx
-          .delete(tables.vulnerabilityEntries)
-          .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
-          .run()
+      await db
+        .delete(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
+        .run()
 
-        for (let index = 0; index < entryRecords.length; index += 1) {
-          const record = entryRecords[index]
+      for (let index = 0; index < entryRecords.length; index += 1) {
+        const record = entryRecords[index]
 
-          tx.insert(tables.vulnerabilityEntries).values(record.values).run()
+        await db.insert(tables.vulnerabilityEntries).values(record.values).run()
 
-          if (record.impacts.length) {
-            tx.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
-          }
-
-          if (record.categories.length) {
-            tx
-              .insert(tables.vulnerabilityEntryCategories)
-              .values(record.categories)
-              .run()
-          }
-
-          if ((index + 1) % 25 === 0 || index + 1 === entryRecords.length) {
-            const message = `Saving ENISA entries to the local cache (${index + 1} of ${entryRecords.length})`
-            setImportPhase('savingEnisa', {
-              message,
-              completed: index + 1,
-              total: entryRecords.length
-            })
-            markTaskProgress('enisa', index + 1, entryRecords.length, message)
-          }
+        if (record.impacts.length) {
+          await insertImpactRecords(db, record.impacts)
         }
-      })
+
+        if (record.categories.length) {
+          await insertCategoryRecords(db, record.categories)
+        }
+
+        if ((index + 1) % 25 === 0 || index + 1 === entryRecords.length) {
+          const message = `Saving ENISA entries to the local cache (${index + 1} of ${entryRecords.length})`
+          setImportPhase('savingEnisa', {
+            message,
+            completed: index + 1,
+            total: entryRecords.length
+          })
+          markTaskProgress('enisa', index + 1, entryRecords.length, message)
+        }
+      }
 
       const importedAt = new Date().toISOString()
       await Promise.all([
@@ -456,74 +453,77 @@ export const importEnisaCatalog = async (
       }
     }
 
-    const existingMap = loadExistingEntryRecords(db, 'enisa')
+    const existingMap = await loadExistingEntryRecords(db, 'enisa')
     const { newRecords, updatedRecords, unchangedRecords, removedIds } =
       diffEntryRecords(entryRecords, existingMap)
     const totalChanges = newRecords.length + updatedRecords.length
 
-    db.transaction(tx => {
+    if (totalChanges > 0) {
+      const message = 'Saving ENISA changes to the local cache'
+      setImportPhase('savingEnisa', {
+        message,
+        completed: 0,
+        total: totalChanges
+      })
+      markTaskProgress('enisa', 0, totalChanges, message)
+    } else if (removedIds.length > 0) {
+      const message = `Removing ${removedIds.length.toLocaleString()} retired ENISA entr${removedIds.length === 1 ? 'y' : 'ies'}`
+      setImportPhase('savingEnisa', {
+        message,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('enisa', 0, 0, message)
+    } else {
+      const message = 'ENISA catalog already up to date'
+      setImportPhase('savingEnisa', {
+        message,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('enisa', 0, 0, message)
+    }
+
+    let processed = 0
+    for (const record of newRecords) {
+      await persistEntryRecord(db, record, 'insert')
       if (totalChanges > 0) {
-        const message = 'Saving ENISA changes to the local cache'
+        const completed = processed + 1
+        const progressMessage = `Saving ENISA changes to the local cache (${completed} of ${totalChanges})`
         setImportPhase('savingEnisa', {
-          message,
-          completed: 0,
+          message: progressMessage,
+          completed,
           total: totalChanges
         })
-        markTaskProgress('enisa', 0, totalChanges, message)
-      } else if (removedIds.length > 0) {
-        const message = `Removing ${removedIds.length.toLocaleString()} retired ENISA entr${removedIds.length === 1 ? 'y' : 'ies'}`
+        markTaskProgress('enisa', completed, totalChanges, progressMessage)
+      }
+      processed += 1
+    }
+    for (const record of updatedRecords) {
+      await persistEntryRecord(db, record, 'update')
+      if (totalChanges > 0) {
+        const completed = processed + 1
+        const progressMessage = `Saving ENISA changes to the local cache (${completed} of ${totalChanges})`
         setImportPhase('savingEnisa', {
-          message,
-          completed: 0,
-          total: 0
+          message: progressMessage,
+          completed,
+          total: totalChanges
         })
-        markTaskProgress('enisa', 0, 0, message)
-      } else {
-        const message = 'ENISA catalog already up to date'
-        setImportPhase('savingEnisa', {
-          message,
-          completed: 0,
-          total: 0
-        })
-        markTaskProgress('enisa', 0, 0, message)
+        markTaskProgress('enisa', completed, totalChanges, progressMessage)
       }
+      processed += 1
+    }
 
-      const persist = (
-        record: typeof newRecords[number],
-        action: 'insert' | 'update',
-        index: number
-      ) => {
-        persistEntryRecord(tx, record, action)
-
-        if (totalChanges > 0) {
-          const completed = index + 1
-          const progressMessage = `Saving ENISA changes to the local cache (${completed} of ${totalChanges})`
-          setImportPhase('savingEnisa', {
-            message: progressMessage,
-            completed,
-            total: totalChanges
-          })
-          markTaskProgress('enisa', completed, totalChanges, progressMessage)
-        }
-      }
-
-      let processed = 0
-      for (const record of newRecords) {
-        persist(record, 'insert', processed)
-        processed += 1
-      }
-      for (const record of updatedRecords) {
-        persist(record, 'update', processed)
-        processed += 1
-      }
-
-      if (removedIds.length > 0) {
-        tx
+    if (removedIds.length > 0) {
+      const chunkSize = 25
+      for (let index = 0; index < removedIds.length; index += chunkSize) {
+        const idChunk = removedIds.slice(index, index + chunkSize)
+        await db
           .delete(tables.vulnerabilityEntries)
-          .where(inArray(tables.vulnerabilityEntries.id, removedIds))
+          .where(inArray(tables.vulnerabilityEntries.id, idChunk))
           .run()
       }
-    })
+    }
 
     const importedAt = new Date().toISOString()
     await Promise.all([

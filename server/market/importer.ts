@@ -64,7 +64,7 @@ const normaliseInputLabel = (value: string | null | undefined): string | null =>
   return trimmed.length ? trimmed : null
 }
 
-const lookupProductForCve = (tx: DrizzleDatabase, cveId: string | null | undefined) => {
+const lookupProductForCve = async (db: DrizzleDatabase, cveId: string | null | undefined) => {
   const normalised = normaliseCveId(cveId)
   if (!normalised) {
     return null
@@ -74,7 +74,7 @@ const lookupProductForCve = (tx: DrizzleDatabase, cveId: string | null | undefin
     return cveProductCache.get(normalised) ?? null
   }
 
-  const row = tx
+  const row = await db
     .select({
       vendor: tables.vulnerabilityEntries.vendor,
       product: tables.vulnerabilityEntries.product
@@ -130,8 +130,8 @@ const parseSources = (value: string | null | undefined): CatalogSource[] => {
   return []
 }
 
-const loadProductCatalog = (db: DrizzleDatabase): Map<string, ProductCatalogRecord> => {
-  const rows = db
+const loadProductCatalog = async (db: DrizzleDatabase): Promise<Map<string, ProductCatalogRecord>> => {
+  const rows = await db
     .select({
       productKey: tables.productCatalog.productKey,
       productName: tables.productCatalog.productName,
@@ -159,8 +159,8 @@ const loadProductCatalog = (db: DrizzleDatabase): Map<string, ProductCatalogReco
 const toSearchTerms = (vendorName: string, productName: string): string =>
   `${vendorName} ${productName}`.toLowerCase()
 
-const ensureCatalogRecord = (
-  tx: DrizzleDatabase,
+const ensureCatalogRecord = async (
+  db: DrizzleDatabase,
   catalog: Map<string, ProductCatalogRecord>,
   source: CatalogSource,
   vendorLabel: string,
@@ -177,7 +177,7 @@ const ensureCatalogRecord = (
     const sources = new Set(existing.sources)
     if (!sources.has(source)) {
       sources.add(source)
-      tx
+      await db
         .update(tables.productCatalog)
         .set({
           sources: JSON.stringify(Array.from(sources))
@@ -197,7 +197,7 @@ const ensureCatalogRecord = (
       updated = true
     }
     if (updated) {
-      tx
+      await db
         .update(tables.productCatalog)
         .set({
           productName: existing.productName,
@@ -211,7 +211,7 @@ const ensureCatalogRecord = (
   }
 
   const sources = new Set<CatalogSource>([source])
-  tx
+  await db
     .insert(tables.productCatalog)
     .values({
       productKey,
@@ -234,12 +234,12 @@ const ensureCatalogRecord = (
   return record
 }
 
-const prepareTargets = (
-  tx: DrizzleDatabase,
+const prepareTargets = async (
+  db: DrizzleDatabase,
   catalog: Map<string, ProductCatalogRecord>,
   program: MarketProgramDefinition,
   offer: MarketOfferInput
-): NormalisedTarget[] => {
+): Promise<NormalisedTarget[]> => {
   const results: NormalisedTarget[] = []
   const seen = new Set<string>()
 
@@ -277,7 +277,7 @@ const prepareTargets = (
 
     if ((!resolvedVendor || !resolvedProduct) && targetCveIds.size) {
       for (const cveId of targetCveIds) {
-        const match = lookupProductForCve(tx, cveId)
+        const match = await lookupProductForCve(db, cveId)
         if (match) {
           if (!resolvedVendor) {
             resolvedVendor = match.vendor
@@ -331,7 +331,13 @@ const prepareTargets = (
       resolvedProduct = fallbackProduct
     }
 
-    const record = ensureCatalogRecord(tx, catalog, 'market', resolvedVendor, resolvedProduct)
+    const record = await ensureCatalogRecord(
+      db,
+      catalog,
+      'market',
+      resolvedVendor,
+      resolvedProduct
+    )
     if (seen.has(record.productKey)) {
       continue
     }
@@ -370,12 +376,12 @@ const prepareTargets = (
   return results
 }
 
-const upsertProgram = (
-  tx: DrizzleDatabase,
+const upsertProgram = async (
+  db: DrizzleDatabase,
   program: MarketProgramDefinition
 ) => {
   const now = new Date().toISOString()
-  tx
+  await db
     .insert(tables.marketPrograms)
     .values({
       id: program.slug,
@@ -403,14 +409,14 @@ const upsertProgram = (
     .run()
 }
 
-const recordSnapshot = (
-  tx: DrizzleDatabase,
+const recordSnapshot = async (
+  db: DrizzleDatabase,
   programId: string,
   snapshot: MarketProgramSnapshot,
   parserVersion: string
 ) => {
   const hash = createHash('sha256').update(snapshot.raw).digest('hex')
-  tx
+  await db
     .insert(tables.marketProgramSnapshots)
     .values({
       id: randomUUID(),
@@ -423,15 +429,15 @@ const recordSnapshot = (
     .run()
 }
 
-const saveOffer = (
-  tx: DrizzleDatabase,
+const saveOffer = async (
+  db: DrizzleDatabase,
   program: MarketProgramDefinition,
   snapshot: MarketProgramSnapshot,
   offer: MarketOfferInput,
   catalog: Map<string, ProductCatalogRecord>,
   rates: ExchangeRates
-): string | null => {
-  const targets = prepareTargets(tx, catalog, program, offer)
+): Promise<string | null> => {
+  const targets = await prepareTargets(db, catalog, program, offer)
   if (!targets.length) {
     return null
   }
@@ -468,7 +474,7 @@ const saveOffer = (
   hashParts.push(...targets.map(target => target.productKey).sort())
   const termsHash = createOfferTermsHash(program.slug, hashParts)
 
-  const existing = tx
+  const existing = await db
     .select({ id: tables.marketOffers.id })
     .from(tables.marketOffers)
     .where(and(eq(tables.marketOffers.programId, program.slug), eq(tables.marketOffers.termsHash, termsHash)))
@@ -478,7 +484,7 @@ const saveOffer = (
   let offerId: string
   if (existing) {
     offerId = existing.id
-    tx
+    await db
       .update(tables.marketOffers)
       .set({
         title: offer.title,
@@ -500,7 +506,7 @@ const saveOffer = (
       .run()
   } else {
     offerId = randomUUID()
-    tx
+    await db
       .insert(tables.marketOffers)
       .values({
         id: offerId,
@@ -524,9 +530,12 @@ const saveOffer = (
       .run()
   }
 
-  tx.delete(tables.marketOfferTargets).where(eq(tables.marketOfferTargets.offerId, offerId)).run()
+  await db
+    .delete(tables.marketOfferTargets)
+    .where(eq(tables.marketOfferTargets.offerId, offerId))
+    .run()
   for (const target of targets) {
-    tx
+    await db
       .insert(tables.marketOfferTargets)
       .values({
         offerId,
@@ -538,9 +547,12 @@ const saveOffer = (
       .run()
   }
 
-  tx.delete(tables.marketOfferCategories).where(eq(tables.marketOfferCategories.offerId, offerId)).run()
+  await db
+    .delete(tables.marketOfferCategories)
+    .where(eq(tables.marketOfferCategories.offerId, offerId))
+    .run()
   for (const category of categories) {
-    tx
+    await db
       .insert(tables.marketOfferCategories)
       .values({
         offerId,
@@ -558,8 +570,11 @@ const saveOffer = (
     sourceCaptureDate: captureDate
   })
 
-  tx.delete(tables.marketOfferMetrics).where(eq(tables.marketOfferMetrics.offerId, offerId)).run()
-  tx
+  await db
+    .delete(tables.marketOfferMetrics)
+    .where(eq(tables.marketOfferMetrics.offerId, offerId))
+    .run()
+  await db
     .insert(tables.marketOfferMetrics)
     .values({
       id: randomUUID(),
@@ -573,27 +588,25 @@ const saveOffer = (
   return offerId
 }
 
-const saveProgram = (
+const saveProgram = async (
   db: DrizzleDatabase,
   program: MarketProgramDefinition,
   snapshot: MarketProgramSnapshot,
   offers: MarketOfferInput[],
   catalog: Map<string, ProductCatalogRecord>,
   rates: ExchangeRates
-): number => {
-  return db.transaction(tx => {
-    upsertProgram(tx, program)
-    recordSnapshot(tx, program.slug, snapshot, program.parserVersion)
+): Promise<number> => {
+  await upsertProgram(db, program)
+  await recordSnapshot(db, program.slug, snapshot, program.parserVersion)
 
-    let processed = 0
-    for (const offer of offers) {
-      const result = saveOffer(tx, program, snapshot, offer, catalog, rates)
-      if (result) {
-        processed += 1
-      }
+  let processed = 0
+  for (const offer of offers) {
+    const result = await saveOffer(db, program, snapshot, offer, catalog, rates)
+    if (result) {
+      processed += 1
     }
-    return processed
-  })
+  }
+  return processed
 }
 
 export type MarketImportResult = {
@@ -621,7 +634,7 @@ export const runMarketImport = async (
   })
   const rates = ratesResult.data
 
-  const catalog = loadProductCatalog(db)
+  const catalog = await loadProductCatalog(db)
   const programSummaries: MarketProgramProgress[] = []
   let offersProcessed = 0
   const totalPrograms = marketPrograms.length
@@ -642,7 +655,7 @@ export const runMarketImport = async (
       )
       const snapshot = snapshotResult.data
       const offers = await program.parseOffers(snapshot)
-      const processed = saveProgram(db, program, snapshot, offers, catalog, rates)
+      const processed = await saveProgram(db, program, snapshot, offers, catalog, rates)
       offersProcessed += processed
       programSummaries.push({ program, offersProcessed: processed })
       onProgramComplete?.({ program, index, total: totalPrograms, offersProcessed: processed })

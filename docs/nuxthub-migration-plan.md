@@ -24,6 +24,12 @@ Migrate the application from the local `better-sqlite3` database to NuxtHub's Cl
 
 - [x] Converted `server/api/admin/import-status.get.ts` to use the `server/utils/drizzle.ts` client via a new async metadata helper, replacing the synchronous `server/utils/sqlite.ts` access pattern.
 - [x] Replaced synchronous metadata fallbacks in `server/api/fetchKev.post.ts` with the async `getMetadataMap` helper.
+- [x] Cleared legacy KEV impact/category rows before full rebuilds in `server/api/fetchKev.post.ts` so D1 imports avoid primary key collisions from stale cache data.
+- [x] Refactored KEV importer batching to reuse shared impact/category helpers and eliminate bulk insert parameter spikes for D1.
+- [x] Added shared async helpers in `server/utils/entry-diff.ts` for chunked inserts and reader utilities so every importer uses D1-friendly batching.
+- [x] Reworked historic, ENISA, Metasploit, and GitHub PoC importers to drop Drizzle transactions, await the new helpers, and chunk deletes, addressing D1 “BEGIN” errors and non-iterable row bugs.
+- [x] Converted the market importer to fully async operations (catalog load, target prep, offer persistence) without transactions, so program snapshots and offers persist safely on D1.
+- [x] Chunked Metasploit vendor/product override lookups to keep `inArray` queries under D1’s parameter ceiling.
 - [x] Updated `server/api/quick-filter-summary.get.ts` to load metadata via the async helper, removing its `server/utils/sqlite.ts` dependency.
 - [x] Migrated `server/api/session.post.ts` to `useDrizzle()` and awaited inserts for Cloudflare D1 compatibility.
 - [x] Updated `server/api/admin/software.get.ts` to query NuxtHub D1 via `useDrizzle()` and async Drizzle aggregations.
@@ -36,7 +42,7 @@ Migrate the application from the local `better-sqlite3` database to NuxtHub's Cl
 - [x] Migrated `server/api/admin/refresh-cvelist.post.ts` to update metadata via the async NuxtHub Drizzle helper.
 - [x] Migrated `server/utils/product-catalog.ts` to the NuxtHub Drizzle client with async operations, replacing the sqlite transaction helper.
 - [x] Updated `server/utils/catalog.ts` and the admin reclassify endpoint to rebuild aggregates with awaited NuxtHub Drizzle writes, replacing the legacy sqlite transaction flow.
-- [x] Replaced the obsolete `server/utils/sqlite.ts` helper with a thin async wrapper around the NuxtHub Drizzle client and updated remaining import handlers to call the shared client directly.
+- [x] Removed the obsolete `server/utils/sqlite.ts` wrapper now that all modules depend on the shared NuxtHub Drizzle client directly.
 
 ## Usage
 
@@ -103,9 +109,8 @@ export default eventHandler(async (event) => {
 - Remove `better-sqlite3`-specific pragmas/logic (WAL, busy timeout, file paths) and replace with any D1 equivalents or guard code for local fallback if required.
 
 - i will do thi ,anualyl add commands to nuke the db and recreate from scrathUse `npx drizzle-kit generate` or `npx nuxthub database migrations create` to regenerate baseline migrations, verifying they run via `nuxthub database migrations list`.
-- Add documentation or scripts to seed data through NuxtHub post-migration hooks if the old `scripts/export-to-d1.mjs` workflow is no longer needed.
 
 ### 4. Simplify tooling around the new database
-- Audit `scripts/export-to-d1.mjs` and other CLI helpers; remove or refactor them to call NuxtHub APIs (or eliminate if redundant).
+- Audit `scripts/export-to-d1.mjs` -> us with the local nuxthub db because we still need to import data to d1 ( or is this not necessary)
 - Replace any test/dev fixtures that read `data/db.sqlite` with seed commands hitting the NuxtHub DB or mock layers.
 - Clean up dependencies (`better-sqlite3`, `sqlite3`) from `package.json` once nothing requires them.

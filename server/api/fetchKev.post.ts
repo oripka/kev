@@ -5,7 +5,7 @@ import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import type { ImportTaskKey, KevEntry } from '~/types'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { eq, inArray, like, sql } from 'drizzle-orm'
 import { getCachedData } from '../utils/cache'
 import { fetchCvssMetrics } from '../utils/cvss'
 import { importEnisaCatalog } from '../utils/enisa'
@@ -42,6 +42,7 @@ import {
   type VulnerabilityImpactRecord
 } from '../utils/cvelist'
 import { mapWithConcurrency } from '../utils/concurrency'
+import { insertCategoryRecords, insertImpactRecords } from '../utils/entry-diff'
 
 const kevSchema = z.object({
   title: z.string(),
@@ -596,16 +597,34 @@ export default defineEventHandler(async event => {
       }
 
       const normaliseImpacts = (impacts: VulnerabilityImpactRecord[]): ImpactRecord[] => {
-        return impacts.map(impact => ({
-          entryId: impact.entryId,
-          vendor: impact.vendor,
-          vendorKey: impact.vendorKey,
-          product: impact.product,
-          productKey: impact.productKey,
-          status: impact.status ?? '',
-          versionRange: impact.versionRange ?? '',
-          source: impact.source
-        }))
+        const deduped = new Map<string, ImpactRecord>()
+
+        for (const impact of impacts) {
+          const record: ImpactRecord = {
+            entryId: impact.entryId,
+            vendor: impact.vendor,
+            vendorKey: impact.vendorKey,
+            product: impact.product,
+            productKey: impact.productKey,
+            status: impact.status ?? '',
+            versionRange: impact.versionRange ?? '',
+            source: impact.source
+          }
+
+          const key = [
+            record.vendorKey,
+            record.productKey,
+            record.status,
+            record.versionRange,
+            record.source
+          ].join('|')
+
+          if (!deduped.has(key)) {
+            deduped.set(key, record)
+          }
+        }
+
+        return [...deduped.values()]
       }
 
       const sortImpacts = (records: ImpactRecord[]) => {
@@ -663,6 +682,17 @@ export default defineEventHandler(async event => {
       const totalEntries = entryRecords.length
 
       if (!useIncrementalKev) {
+        // Clear any lingering KEV impact/category rows before rebuilding the source data.
+        await db
+          .delete(tables.vulnerabilityEntryImpacts)
+          .where(like(tables.vulnerabilityEntryImpacts.entryId, 'kev:%'))
+          .run()
+
+        await db
+          .delete(tables.vulnerabilityEntryCategories)
+          .where(like(tables.vulnerabilityEntryCategories.entryId, 'kev:%'))
+          .run()
+
         await db
           .delete(tables.vulnerabilityEntries)
           .where(eq(tables.vulnerabilityEntries.source, 'kev'))
@@ -681,11 +711,11 @@ export default defineEventHandler(async event => {
           await db.insert(tables.vulnerabilityEntries).values(record.values).run()
 
           if (record.impacts.length) {
-            await db.insert(tables.vulnerabilityEntryImpacts).values(record.impacts).run()
+            await insertImpactRecords(db, record.impacts)
           }
 
           if (record.categories.length) {
-            await db.insert(tables.vulnerabilityEntryCategories).values(record.categories).run()
+            await insertCategoryRecords(db, record.categories)
           }
 
           if ((index + 1) % 25 === 0 || index + 1 === totalEntries) {
@@ -987,7 +1017,7 @@ export default defineEventHandler(async event => {
             .run()
 
           if (impacts.length) {
-            await db.insert(tables.vulnerabilityEntryImpacts).values(impacts).run()
+            await insertImpactRecords(db, impacts)
           }
 
           await db
@@ -996,7 +1026,7 @@ export default defineEventHandler(async event => {
             .run()
 
           if (categories.length) {
-            await db.insert(tables.vulnerabilityEntryCategories).values(categories).run()
+            await insertCategoryRecords(db, categories)
           }
 
           if (totalChanges > 0) {

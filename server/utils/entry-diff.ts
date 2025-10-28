@@ -66,12 +66,6 @@ export type EntryDiffRecord = {
   signature: string
 }
 
-type TransactionContext = Parameters<DrizzleDatabase['transaction']>[0] extends (
-  ...args: any
-) => any
-  ? Parameters<Parameters<DrizzleDatabase['transaction']>[0]>[0]
-  : never
-
 const toJson = (value: unknown): string => JSON.stringify(value ?? [])
 
 const normaliseStoredSeverity = (
@@ -156,17 +150,36 @@ export const buildCategoryRecords = (entry: KevEntry): CategoryRecord[] => {
 
 export const normaliseImpacts = (
   impacts: VulnerabilityImpactRecord[]
-): ImpactRecord[] =>
-  impacts.map(impact => ({
-    entryId: impact.entryId,
-    vendor: impact.vendor,
-    vendorKey: impact.vendorKey,
-    product: impact.product,
-    productKey: impact.productKey,
-    status: impact.status ?? '',
-    versionRange: impact.versionRange ?? '',
-    source: impact.source
-  }))
+): ImpactRecord[] => {
+  const deduped = new Map<string, ImpactRecord>()
+
+  for (const impact of impacts) {
+    const record: ImpactRecord = {
+      entryId: impact.entryId,
+      vendor: impact.vendor,
+      vendorKey: impact.vendorKey,
+      product: impact.product,
+      productKey: impact.productKey,
+      status: impact.status ?? '',
+      versionRange: impact.versionRange ?? '',
+      source: impact.source
+    }
+
+    const key = [
+      record.vendorKey,
+      record.productKey,
+      record.status,
+      record.versionRange,
+      record.source
+    ].join('|')
+
+    if (!deduped.has(key)) {
+      deduped.set(key, record)
+    }
+  }
+
+  return [...deduped.values()]
+}
 
 const sortImpacts = (records: ImpactRecord[]) =>
   records
@@ -309,11 +322,52 @@ type ExistingEntryBucket = {
   signature: string
 }
 
-export const loadExistingEntryRecords = (
+const MAX_BATCH_PARAMETERS = 80
+const IMPACT_COLUMN_COUNT = 8
+const CATEGORY_COLUMN_COUNT = 4
+const IMPACT_BATCH_SIZE = Math.max(1, Math.floor(MAX_BATCH_PARAMETERS / IMPACT_COLUMN_COUNT))
+const CATEGORY_BATCH_SIZE = Math.max(1, Math.floor(MAX_BATCH_PARAMETERS / CATEGORY_COLUMN_COUNT))
+
+const chunk = <T>(items: T[], size: number): T[][] => {
+  if (items.length <= size) {
+    return [items]
+  }
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
+export const insertImpactRecords = async (
+  db: DrizzleDatabase,
+  records: ImpactRecord[]
+) => {
+  if (!records.length) {
+    return
+  }
+  for (const batch of chunk(records, IMPACT_BATCH_SIZE)) {
+    await db.insert(tables.vulnerabilityEntryImpacts).values(batch).run()
+  }
+}
+
+export const insertCategoryRecords = async (
+  db: DrizzleDatabase,
+  records: CategoryRecord[]
+) => {
+  if (!records.length) {
+    return
+  }
+  for (const batch of chunk(records, CATEGORY_BATCH_SIZE)) {
+    await db.insert(tables.vulnerabilityEntryCategories).values(batch).run()
+  }
+}
+
+export const loadExistingEntryRecords = async (
   db: DrizzleDatabase,
   source: string
-): Map<string, ExistingEntryBucket> => {
-  const rows = db
+): Promise<Map<string, ExistingEntryBucket>> => {
+  const rows = await db
     .select({
       id: tables.vulnerabilityEntries.id,
       cveId: tables.vulnerabilityEntries.cveId,
@@ -352,11 +406,13 @@ export const loadExistingEntryRecords = (
     })
     .from(tables.vulnerabilityEntries)
     .where(eq(tables.vulnerabilityEntries.source, source))
-    .all() as ExistingEntryRow[]
+    .all()
+
+  const typedRows = rows as ExistingEntryRow[]
 
   const map = new Map<string, ExistingEntryBucket>()
 
-  for (const row of rows) {
+  for (const row of typedRows) {
     const values = createEntryValuesFromRow(row, source)
     map.set(row.id, { values, impacts: [], categories: [], signature: '' })
   }
@@ -366,20 +422,24 @@ export const loadExistingEntryRecords = (
     return map
   }
 
-  const impactRows = db
-    .select({
-      entryId: tables.vulnerabilityEntryImpacts.entryId,
-      vendor: tables.vulnerabilityEntryImpacts.vendor,
-      vendorKey: tables.vulnerabilityEntryImpacts.vendorKey,
-      product: tables.vulnerabilityEntryImpacts.product,
-      productKey: tables.vulnerabilityEntryImpacts.productKey,
-      status: tables.vulnerabilityEntryImpacts.status,
-      versionRange: tables.vulnerabilityEntryImpacts.versionRange,
-      source: tables.vulnerabilityEntryImpacts.source
-    })
-    .from(tables.vulnerabilityEntryImpacts)
-    .where(inArray(tables.vulnerabilityEntryImpacts.entryId, existingIds))
-    .all() as ImpactRecord[]
+  const impactRows: ImpactRecord[] = []
+  for (const idChunk of chunk(existingIds, IMPACT_BATCH_SIZE)) {
+    const rows = await db
+      .select({
+        entryId: tables.vulnerabilityEntryImpacts.entryId,
+        vendor: tables.vulnerabilityEntryImpacts.vendor,
+        vendorKey: tables.vulnerabilityEntryImpacts.vendorKey,
+        product: tables.vulnerabilityEntryImpacts.product,
+        productKey: tables.vulnerabilityEntryImpacts.productKey,
+        status: tables.vulnerabilityEntryImpacts.status,
+        versionRange: tables.vulnerabilityEntryImpacts.versionRange,
+        source: tables.vulnerabilityEntryImpacts.source
+      })
+      .from(tables.vulnerabilityEntryImpacts)
+      .where(inArray(tables.vulnerabilityEntryImpacts.entryId, idChunk))
+      .all()
+    impactRows.push(...(rows as ImpactRecord[]))
+  }
 
   for (const impact of impactRows) {
     const bucket = map.get(impact.entryId)
@@ -398,16 +458,20 @@ export const loadExistingEntryRecords = (
     })
   }
 
-  const categoryRows = db
-    .select({
-      entryId: tables.vulnerabilityEntryCategories.entryId,
-      categoryType: tables.vulnerabilityEntryCategories.categoryType,
-      value: tables.vulnerabilityEntryCategories.value,
-      name: tables.vulnerabilityEntryCategories.name
-    })
-    .from(tables.vulnerabilityEntryCategories)
-    .where(inArray(tables.vulnerabilityEntryCategories.entryId, existingIds))
-    .all() as CategoryRecord[]
+  const categoryRows: CategoryRecord[] = []
+  for (const idChunk of chunk(existingIds, CATEGORY_BATCH_SIZE)) {
+    const rows = await db
+      .select({
+        entryId: tables.vulnerabilityEntryCategories.entryId,
+        categoryType: tables.vulnerabilityEntryCategories.categoryType,
+        value: tables.vulnerabilityEntryCategories.value,
+        name: tables.vulnerabilityEntryCategories.name
+      })
+      .from(tables.vulnerabilityEntryCategories)
+      .where(inArray(tables.vulnerabilityEntryCategories.entryId, idChunk))
+      .all()
+    categoryRows.push(...(rows as CategoryRecord[]))
+  }
 
   for (const category of categoryRows) {
     const bucket = map.get(category.entryId)
@@ -465,40 +529,35 @@ export const diffEntryRecords = (
   return { newRecords, updatedRecords, unchangedRecords, removedIds }
 }
 
-export const persistEntryRecord = (
-  tx: TransactionContext,
+export const persistEntryRecord = async (
+  db: DrizzleDatabase,
   record: EntryDiffRecord,
   action: 'insert' | 'update'
 ) => {
   const { values, impacts, categories } = record
 
   if (action === 'insert') {
-    tx.insert(tables.vulnerabilityEntries).values(values).run()
+    await db.insert(tables.vulnerabilityEntries).values(values).run()
   } else {
     const { id, ...updateValues } = values
-    tx
+    await db
       .update(tables.vulnerabilityEntries)
       .set(updateValues)
       .where(eq(tables.vulnerabilityEntries.id, id))
       .run()
   }
 
-  tx
+  await db
     .delete(tables.vulnerabilityEntryImpacts)
     .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
     .run()
 
-  if (impacts.length) {
-    tx.insert(tables.vulnerabilityEntryImpacts).values(impacts).run()
-  }
+  await insertImpactRecords(db, impacts)
 
-  tx
+  await db
     .delete(tables.vulnerabilityEntryCategories)
     .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
     .run()
 
-  if (categories.length) {
-    tx.insert(tables.vulnerabilityEntryCategories).values(categories).run()
-  }
+  await insertCategoryRecords(db, categories)
 }
-
