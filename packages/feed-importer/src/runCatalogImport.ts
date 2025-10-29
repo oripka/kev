@@ -1200,9 +1200,10 @@ export const runCatalogImport = async (
     if (shouldImport('enisa')) {
       enisaSummary = await importEnisaCatalog(db, {
         ttlMs: ONE_DAY_MS,
-        forceRefresh,
+        forceRefresh: forceRefresh || (strategy === 'incremental' && !allowStale),
         allowStale,
-        strategy
+        strategy,
+        lastKnownUpdatedAt: enisaLastUpdated ?? null
       })
       enisaImported = enisaSummary.imported
       enisaNewCount = enisaSummary.newCount

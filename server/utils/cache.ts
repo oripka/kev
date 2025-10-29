@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-type CacheEntry<T> = {
+export type CacheEntry<T> = {
   cachedAt: string
   data: T
 }
@@ -21,11 +21,14 @@ export type CacheResult<T> = {
 
 const CACHE_DIR = join(process.cwd(), 'data', 'cache')
 
+const cachePathForKey = (key: string) => join(CACHE_DIR, `${key}.json`)
+
 const ensureCacheDir = async () => {
   await mkdir(CACHE_DIR, { recursive: true })
 }
 
-const loadCacheEntry = async <T>(filePath: string): Promise<CacheEntry<T> | null> => {
+export const loadCacheEntry = async <T>(key: string): Promise<CacheEntry<T> | null> => {
+  const filePath = cachePathForKey(key)
   try {
     const raw = await readFile(filePath, 'utf8')
     const parsed = JSON.parse(raw) as CacheEntry<T> | null
@@ -54,16 +57,26 @@ const resolveCachedAt = async (entry: CacheEntry<unknown> | null, filePath: stri
   }
 }
 
+export const saveCacheEntry = async <T>(key: string, data: T): Promise<CacheEntry<T>> => {
+  await ensureCacheDir()
+  const entry: CacheEntry<T> = {
+    cachedAt: new Date().toISOString(),
+    data
+  }
+  await writeFile(cachePathForKey(key), JSON.stringify(entry), 'utf8')
+  return entry
+}
+
 export const getCachedData = async <T>(
   key: string,
   fetcher: () => Promise<T>,
   options: CacheOptions
 ): Promise<CacheResult<T>> => {
   const { ttlMs, forceRefresh = false, allowStale = false } = options
-  const cachePath = join(CACHE_DIR, `${key}.json`)
+  const cachePath = cachePathForKey(key)
 
   if (!forceRefresh) {
-    const entry = await loadCacheEntry<T>(cachePath)
+    const entry = await loadCacheEntry<T>(key)
     if (entry) {
       const cachedAtMs = await resolveCachedAt(entry, cachePath)
       if (cachedAtMs !== null) {
@@ -89,14 +102,8 @@ export const getCachedData = async <T>(
   }
 
   const data = await fetcher()
-  const cachedAt = new Date()
-
-  await ensureCacheDir()
-  const entry: CacheEntry<T> = {
-    cachedAt: cachedAt.toISOString(),
-    data
-  }
-  await writeFile(cachePath, JSON.stringify(entry), 'utf8')
+  const entry = await saveCacheEntry(key, data)
+  const cachedAt = new Date(entry.cachedAt)
 
   return {
     data,

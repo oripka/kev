@@ -4,8 +4,8 @@ import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
 import type { KevEntry } from '~/types'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
-import { getCachedData } from './cache'
-import { setMetadataValue } from './metadata'
+import { getCachedData, loadCacheEntry } from './cache'
+import { getMetadataValue, setMetadataValue } from './metadata'
 import {
   buildEntryDiffRecords,
   diffEntryRecords,
@@ -70,6 +70,7 @@ type EnisaApiResponse = {
 
 const ENISA_ENDPOINT = 'https://euvdservices.enisa.europa.eu/api/search'
 const PAGE_SIZE = 100
+const MAX_INCREMENTAL_PAGES = 8
 
 const splitLines = (value?: string | null): string[] =>
   (value ?? '')
@@ -240,6 +241,7 @@ type ImportOptions = {
   forceRefresh?: boolean
   allowStale?: boolean
   strategy?: ImportStrategy
+  lastKnownUpdatedAt?: string | null
 }
 
 type EnisaImportSummary = {
@@ -257,7 +259,12 @@ export const importEnisaCatalog = async (
   db: DrizzleDatabase,
   options: ImportOptions = {}
 ): Promise<EnisaImportSummary> => {
-  const { ttlMs = 86_400_000, forceRefresh = false, allowStale = false } = options
+  const {
+    ttlMs = 86_400_000,
+    forceRefresh = false,
+    allowStale = false,
+    lastKnownUpdatedAt: providedLastUpdatedAt
+  } = options
   const strategy = options.strategy ?? 'full'
 
   markTaskRunning('enisa', 'Checking ENISA cache')
@@ -270,51 +277,184 @@ export const importEnisaCatalog = async (
     })
     markTaskProgress('enisa', 0, 0, 'Checking ENISA cache')
 
-    const dataset = await getCachedData<EnisaCacheBundle>(
-      'enisa-feed',
-      async () => {
-        setImportPhase('fetchingEnisa', {
-          message: 'Fetching exploited ENISA vulnerabilities',
-          completed: 0,
-          total: 0
-        })
-        markTaskProgress('enisa', 0, 0, 'Fetching exploited ENISA vulnerabilities')
+    const cachedEntry =
+      strategy === 'incremental' ? await loadCacheEntry<EnisaCacheBundle>('enisa-feed') : null
+    const previousDataset = cachedEntry?.data ?? null
+    const lastKnownUpdatedAt =
+      strategy === 'incremental'
+        ? providedLastUpdatedAt !== undefined
+          ? providedLastUpdatedAt
+          : await getMetadataValue('enisa.lastUpdatedAt')
+        : null
 
-        let page = 0
-        const items: EnisaApiItem[] = []
-        let total = 0
+    const fetchFullDataset = async (): Promise<EnisaCacheBundle> => {
+      setImportPhase('fetchingEnisa', {
+        message: 'Fetching exploited ENISA vulnerabilities',
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('enisa', 0, 0, 'Fetching exploited ENISA vulnerabilities')
 
-        // Fetch paginated results
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const response = await fetchPage(page, PAGE_SIZE)
+      let page = 0
+      const items: EnisaApiItem[] = []
+      let total = 0
 
-          if (page === 0) {
-            total = response.total
-          }
+      while (true) {
+        const response = await fetchPage(page, PAGE_SIZE)
 
-          items.push(...response.items)
-
-          const completed = Math.min(items.length, total)
-          const message = `Fetching exploited ENISA vulnerabilities (${completed} of ${total})`
-          setImportPhase('fetchingEnisa', {
-            message,
-            completed,
-            total
-          })
-          markTaskProgress('enisa', completed, total, message)
-
-          if (items.length >= total || response.items.length === 0) {
-            break
-          }
-
-          page += 1
+        if (page === 0) {
+          total = response.total
         }
 
-        return { total, items }
-      },
+        items.push(...response.items)
+
+        const completedCount = Math.min(items.length, total)
+        const message = `Fetching exploited ENISA vulnerabilities (${completedCount} of ${total})`
+        setImportPhase('fetchingEnisa', {
+          message,
+          completed: completedCount,
+          total
+        })
+        markTaskProgress('enisa', completedCount, total, message)
+
+        if (items.length >= total || response.items.length === 0) {
+          break
+        }
+
+        page += 1
+      }
+
+      return { total, items }
+    }
+
+    const fetchIncrementalDataset = async (): Promise<EnisaCacheBundle> => {
+      if (!previousDataset || !previousDataset.items.length) {
+        markTaskProgress(
+          'enisa',
+          0,
+          0,
+          'Incremental ENISA requested; cached dataset unavailable, performing full fetch'
+        )
+        return fetchFullDataset()
+      }
+
+      if (!lastKnownUpdatedAt) {
+        markTaskProgress(
+          'enisa',
+          0,
+          0,
+          'Incremental ENISA requested; no reference timestamp, performing full fetch'
+        )
+        return fetchFullDataset()
+      }
+
+      markTaskProgress('enisa', 0, 0, 'Fetching latest ENISA updates incrementally')
+
+      const knownItems = new Map<string, EnisaApiItem>()
+      for (const item of previousDataset.items) {
+        const key = getItemUniqueKey(item)
+        if (!key || knownItems.has(key)) {
+          continue
+        }
+        knownItems.set(key, item)
+      }
+
+      const updates = new Map<string, EnisaApiItem>()
+      let page = 0
+      let pagesFetched = 0
+      let total = previousDataset.total
+
+      while (true) {
+        const response = await fetchPage(page, PAGE_SIZE)
+        pagesFetched += 1
+        total = response.total || total
+
+        let pageHasNewer = false
+        let processed = 0
+
+        for (const item of response.items) {
+          const key = getItemUniqueKey(item)
+          if (!key) {
+            continue
+          }
+          processed += 1
+          updates.set(key, item)
+          const activity = resolveItemActivityTimestamp(item)
+          if (!activity || activity > lastKnownUpdatedAt) {
+            pageHasNewer = true
+          }
+        }
+
+        const progressMessage = `Incremental ENISA fetch page ${page + 1} (${processed} entries)`
+        const progressTotal = MAX_INCREMENTAL_PAGES
+        const progressCompleted = Math.min(page + 1, progressTotal)
+        setImportPhase('fetchingEnisa', {
+          message: progressMessage,
+          completed: progressCompleted,
+          total: progressTotal
+        })
+        markTaskProgress('enisa', progressCompleted, progressTotal, progressMessage)
+
+        if (response.items.length === 0) {
+          break
+        }
+
+        if (!pageHasNewer || pagesFetched >= MAX_INCREMENTAL_PAGES) {
+          break
+        }
+
+        page += 1
+      }
+
+      if (!updates.size) {
+        markTaskProgress('enisa', 0, 0, 'No newer ENISA entries detected; using cached dataset')
+        return previousDataset
+      }
+
+      for (const [key, item] of updates) {
+        knownItems.set(key, item)
+      }
+
+      const mergedItems = Array.from(knownItems.values()).sort((first, second) => {
+        const firstTime = resolveItemActivityTimestamp(first)
+        const secondTime = resolveItemActivityTimestamp(second)
+        if (firstTime && secondTime) {
+          return secondTime.localeCompare(firstTime)
+        }
+        if (firstTime) {
+          return -1
+        }
+        if (secondTime) {
+          return 1
+        }
+        return 0
+      })
+
+      const updateMessage = `Merged ${updates.size.toLocaleString()} ENISA entr${
+        updates.size === 1 ? 'y' : 'ies'
+      } from incremental fetch`
+      markTaskProgress('enisa', 0, 0, updateMessage)
+
+      return {
+        total: Math.max(total, mergedItems.length),
+        items: mergedItems
+      }
+    }
+
+    const dataset = await getCachedData<EnisaCacheBundle>(
+      'enisa-feed',
+      () => (strategy === 'incremental' ? fetchIncrementalDataset() : fetchFullDataset()),
       { ttlMs, forceRefresh, allowStale }
     )
+
+    if (dataset.cacheHit) {
+      const cacheMessage = dataset.stale
+        ? 'Using cached ENISA feed (stale but accepted)'
+        : 'Using cached ENISA feed'
+      markTaskProgress('enisa', 0, 0, cacheMessage)
+    } else {
+      markTaskProgress('enisa', 0, 0, 'Fetched fresh ENISA feed data')
+    }
 
     const entryById = new Map<string, KevBaseEntry>()
 
@@ -573,4 +713,23 @@ export const importEnisaCatalog = async (
     markTaskError('enisa', message)
     throw error instanceof Error ? error : new Error(message)
   }
+}
+
+const resolveItemActivityTimestamp = (item: EnisaApiItem): string | null => {
+  return (
+    parseDate(item.dateUpdated) ??
+    parseDate(item.exploitedSince) ??
+    parseDate(item.datePublished) ??
+    null
+  )
+}
+
+const getItemUniqueKey = (item: EnisaApiItem): string | null => {
+  const aliases = splitLines(item.aliases)
+  const cveId = extractCveId(aliases)
+  const uniqueId = item.id?.trim() || item.enisaUuid?.trim() || cveId
+  if (!uniqueId) {
+    return null
+  }
+  return `enisa:${uniqueId}`
 }

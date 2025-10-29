@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { enrichEntry } from '~/utils/classification'
@@ -39,6 +39,7 @@ const METASPLOIT_BRANCH = 'master'
 const CACHE_DIR = join(process.cwd(), 'data', 'cache', 'metasploit')
 const REPO_DIR = join(CACHE_DIR, 'metasploit-framework')
 const MODULES_DIR = join(REPO_DIR, 'modules', 'exploits')
+const MODULE_DATE_CACHE_PATH = join(CACHE_DIR, 'module-published-dates.json')
 
 const RE_CVE_GENERIC = /CVE[-\s_]*(\d{4})[-\s_]?([0-9]{4,7})/gi
 const RE_VENDOR_ADVISORY = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{4}-\d{2,}$/i
@@ -60,6 +61,33 @@ const syncRepository = async (
   return { commit }
 }
 
+type ModuleDateCacheRecord = {
+  publishedAt: string | null
+  cachedAt: string
+}
+
+type ModuleDateCache = {
+  records: Record<string, ModuleDateCacheRecord>
+}
+
+const loadModuleDateCache = async (): Promise<ModuleDateCache> => {
+  try {
+    const raw = await readFile(MODULE_DATE_CACHE_PATH, 'utf8')
+    const parsed = JSON.parse(raw) as ModuleDateCache | null
+    if (!parsed || typeof parsed !== 'object' || !parsed.records) {
+      return { records: {} }
+    }
+    return parsed
+  } catch {
+    return { records: {} }
+  }
+}
+
+const persistModuleDateCache = async (cache: ModuleDateCache) => {
+  await ensureDir(CACHE_DIR)
+  await writeFile(MODULE_DATE_CACHE_PATH, JSON.stringify(cache, null, 2), 'utf8')
+}
+
 const collectModulePublishedDates = async (
   modulePaths: string[],
   onProgress?: (completed: number, total: number) => void,
@@ -67,14 +95,22 @@ const collectModulePublishedDates = async (
     allowNetworkFetch?: boolean
     existingDates?: Map<string, string | null>
   } = {}
-): Promise<Map<string, string | null>> => {
+): Promise<{
+  dates: Map<string, string | null>
+  stats: { reusedFromExisting: number; reusedFromCache: number; resolved: number }
+}> => {
   const { allowNetworkFetch = true, existingDates } = options
   const uniquePaths = Array.from(new Set(modulePaths))
   const total = uniquePaths.length
   const pending = new Set(uniquePaths)
   const results = new Map<string, string | null>()
+  const cache = await loadModuleDateCache()
+  let cacheDirty = false
 
   let completed = 0
+  let reusedFromExisting = 0
+  let reusedFromCache = 0
+  let resolved = 0
 
   if (existingDates) {
     for (const path of uniquePaths) {
@@ -87,6 +123,20 @@ const collectModulePublishedDates = async (
       results.set(path, existingDates.get(path) ?? null)
       pending.delete(path)
       completed += 1
+      reusedFromExisting += 1
+    }
+  }
+
+  if (pending.size) {
+    for (const path of Array.from(pending)) {
+      const cached = cache.records[path]
+      if (!cached) {
+        continue
+      }
+      results.set(path, cached.publishedAt ?? null)
+      pending.delete(path)
+      completed += 1
+      reusedFromCache += 1
     }
   }
 
@@ -143,6 +193,7 @@ const collectModulePublishedDates = async (
           results.set(path, publishedAt)
           completed += 1
           reportProgress()
+          resolved += 1
         }
       })()
     )
@@ -186,7 +237,26 @@ const collectModulePublishedDates = async (
     }
   }
 
-  return results
+  if (uniquePaths.length) {
+    const timestamp = new Date().toISOString()
+    for (const path of uniquePaths) {
+      const publishedAt = results.get(path) ?? null
+      const cached = cache.records[path]
+      if (!cached || cached.publishedAt !== publishedAt) {
+        cache.records[path] = { publishedAt, cachedAt: timestamp }
+        cacheDirty = true
+      }
+    }
+  }
+
+  if (cacheDirty) {
+    await persistModuleDateCache(cache)
+  }
+
+  return {
+    dates: results,
+    stats: { reusedFromExisting, reusedFromCache, resolved }
+  }
 }
 
 const loadExistingModulePublishedDates = async (db: DrizzleDatabase): Promise<Map<string, string | null>> => {
@@ -1120,7 +1190,7 @@ export const importMetasploitCatalog = async (
       )
     }
 
-    const publishedDateMap = await collectModulePublishedDates(
+    const { dates: publishedDateMap, stats: publishedDateStats } = await collectModulePublishedDates(
       moduleRelativePaths,
       (completed, total) => {
         if (!total) {
@@ -1137,6 +1207,26 @@ export const importMetasploitCatalog = async (
         existingDates: existingPublishedDates
       }
     )
+
+    const reuseSegments: string[] = []
+    if (publishedDateStats.reusedFromExisting > 0) {
+      reuseSegments.push(
+        `${publishedDateStats.reusedFromExisting.toLocaleString()} from previous imports`
+      )
+    }
+    if (publishedDateStats.reusedFromCache > 0) {
+      reuseSegments.push(
+        `${publishedDateStats.reusedFromCache.toLocaleString()} from local cache`
+      )
+    }
+    if (reuseSegments.length) {
+      const reuseMessage = `Metasploit publish dates reused (${reuseSegments.join(', ')})`
+      markTaskProgress('metasploit', 0, 0, reuseMessage)
+    }
+    if (publishedDateStats.resolved > 0) {
+      const resolvedMessage = `Resolved publish dates for ${publishedDateStats.resolved.toLocaleString()} modules`
+      markTaskProgress('metasploit', 0, 0, resolvedMessage)
+    }
 
     setImportPhase('fetchingMetasploit', {
       message: 'Parsing Metasploit data',
