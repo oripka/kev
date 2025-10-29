@@ -21,7 +21,7 @@ import {
   markTaskRunning,
   setImportPhase
 } from './import-progress'
-import { ensureDir, runGit, syncSparseRepo } from './git'
+import { ensureDir, pathExists, runGit, syncSparseRepo } from './git'
 import { mapWithConcurrency } from './concurrency'
 import { matchVendorProductByTitle } from './metasploitVendorCatalog'
 import {

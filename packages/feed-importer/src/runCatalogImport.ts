@@ -1,19 +1,118 @@
-import { createError, readBody } from 'h3'
-import type { ImportTaskKey } from '~/types'
-import { requireAdminKey } from '../utils/adminAuth'
-import { useDrizzle } from '../database/client'
-import type { ImportStrategy } from '../utils/import-types'
+import { ofetch } from 'ofetch'
+import { z } from 'zod'
+import { eq, inArray, like, sql } from 'drizzle-orm'
+import { enrichEntry } from '~/utils/classification'
+import type { KevBaseEntry } from '~/utils/classification'
+import { normaliseVendorProduct } from '~/utils/vendorProduct'
+import type { ImportTaskKey, KevEntry } from '~/types'
+import type { ImportStrategy } from 'server/utils/import-types'
+import { getCachedData } from 'server/utils/cache'
+import { fetchCvssMetrics } from 'server/utils/cvss'
+import { importEnisaCatalog } from 'server/utils/enisa'
+import { importHistoricCatalog } from 'server/utils/historic'
+import {
+  completeImportProgress,
+  failImportProgress,
+  markTaskComplete,
+  markTaskError,
+  markTaskProgress,
+  markTaskRunning,
+  markTaskSkipped,
+  publishTaskEvent,
+  setImportPhase,
+  startImportProgress,
+  updateImportProgress
+} from 'server/utils/import-progress'
+import { rebuildCatalog } from 'server/utils/catalog'
+import { getMetadataMap } from 'server/utils/metadata'
+import { tables } from 'server/database/client'
+import type { DrizzleDatabase } from 'server/database/client'
+import { rebuildProductCatalog } from 'server/utils/product-catalog'
+import { importMetasploitCatalog } from 'server/utils/metasploit'
+import { importGithubPocCatalog } from 'server/utils/github-poc'
+import { importMarketIntel } from 'server/utils/market'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   clearCvelistMemoryCache,
   enrichBaseEntryWithCvelist,
-  syncCvelistRepo,
   flushCvelistCache,
+  syncCvelistRepo,
   type EnrichBaseEntryResult,
   type VulnerabilityImpactRecord
-} from '../utils/cvelist'
-import { mapWithConcurrency } from '../utils/concurrency'
-import { insertCategoryRecords, insertImpactRecords } from '../utils/entry-diff'
+} from 'server/utils/cvelist'
+import { mapWithConcurrency } from 'server/utils/concurrency'
+import { insertCategoryRecords, insertImpactRecords } from 'server/utils/entry-diff'
+
+const ONE_DAY_MS = 86_400_000
+
+export type CatalogImportMode = 'auto' | 'force' | 'cache'
+
+export class CatalogImportError extends Error {
+  statusCode?: number
+  details?: unknown
+
+  constructor(message: string, options: { statusCode?: number; details?: unknown } = {}) {
+    super(message)
+    this.name = 'CatalogImportError'
+    this.statusCode = options.statusCode
+    this.details = options.details
+  }
+}
+
+export type CatalogImportOptions = {
+  db: DrizzleDatabase
+  sources: ImportTaskKey[]
+  forceRefresh: boolean
+  allowStale: boolean
+  strategy: ImportStrategy
+}
+
+export type CatalogImportResult = {
+  imported: number
+  kevImported: number
+  kevNewCount: number
+  kevUpdatedCount: number
+  kevSkippedCount: number
+  kevRemovedCount: number
+  kevImportStrategy: ImportStrategy
+  historicImported: number
+  historicNewCount: number
+  historicUpdatedCount: number
+  historicSkippedCount: number
+  historicRemovedCount: number
+  historicImportStrategy: ImportStrategy
+  enisaImported: number
+  enisaNewCount: number
+  enisaUpdatedCount: number
+  enisaSkippedCount: number
+  enisaRemovedCount: number
+  enisaImportStrategy: ImportStrategy
+  metasploitImported: number
+  metasploitNewCount: number
+  metasploitUpdatedCount: number
+  metasploitSkippedCount: number
+  metasploitRemovedCount: number
+  metasploitImportStrategy: ImportStrategy
+  metasploitModules: number
+  metasploitCommit: string | null
+  pocImported: number
+  pocNewCount: number
+  pocUpdatedCount: number
+  pocSkippedCount: number
+  pocRemovedCount: number
+  pocImportStrategy: ImportStrategy
+  marketImported: number
+  marketOfferCount: number
+  marketProgramCount: number
+  marketProductCount: number
+  marketLastCaptureAt: string | null
+  marketLastSnapshotAt: string | null
+  dateReleased: string
+  catalogVersion: string
+  enisaLastUpdated: string | null
+  importedAt: string
+  sources: ImportTaskKey[]
+}
 
 const kevSchema = z.object({
   title: z.string(),
@@ -77,52 +176,31 @@ type CvssMetric = {
   severity: KevEntry['cvssSeverity'] | null
 }
 
-const ONE_DAY_MS = 86_400_000
+export const IMPORT_SOURCE_ORDER: ImportTaskKey[] = [
+  'kev',
+  'historic',
+  'enisa',
+  'metasploit',
+  'poc',
+  'market'
+]
 
-type ImportMode = 'auto' | 'force' | 'cache'
-type ImportRequestBody = { mode?: ImportMode; source?: string; strategy?: string }
-
-const IMPORT_SOURCE_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'poc', 'market']
-
-const isImportSourceKey = (value: string): value is ImportTaskKey => {
+export const isImportSourceKey = (value: string): value is ImportTaskKey => {
   return IMPORT_SOURCE_ORDER.includes(value as ImportTaskKey)
 }
 
-export default defineEventHandler(async event => {
-  requireAdminKey(event)
-
-  if (process.env.NODE_ENV !== 'development') {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Catalog import is restricted to development mode'
-    })
-  }
-
-  const body = await readBody<ImportRequestBody>(event).catch(
-    () => ({}) as ImportRequestBody
-  )
-
-  const mode: CatalogImportMode = body?.mode ?? 'auto'
-  const forceRefresh = mode === 'force'
-  const allowStale = mode === 'cache'
-  const rawSource = typeof body?.source === 'string' ? body.source : undefined
-  const rawStrategy = typeof body?.strategy === 'string' ? body.strategy.toLowerCase() : 'full'
-  const strategy: ImportStrategy = rawStrategy === 'incremental' ? 'incremental' : 'full'
+export const runCatalogImport = async (
+  options: CatalogImportOptions
+): Promise<CatalogImportResult> => {
+  const { db, sources, forceRefresh, allowStale, strategy } = options
 
   if (allowStale) {
     clearCvelistMemoryCache()
   }
 
-  const sourcesToImport: ImportTaskKey[] =
-    rawSource === 'all'
-      ? IMPORT_SOURCE_ORDER
-      : isImportSourceKey(rawSource)
-        ? [rawSource]
-        : IMPORT_SOURCE_ORDER
+  startImportProgress('Starting vulnerability catalog import', sources)
 
-  startImportProgress('Starting vulnerability catalog import', sourcesToImport)
-
-  const shouldImport = (key: ImportTaskKey) => sourcesToImport.includes(key)
+  const shouldImport = (key: ImportTaskKey) => sources.includes(key)
 
   const metadata = await getMetadataMap([
     'catalogVersion',
@@ -185,8 +263,6 @@ export default defineEventHandler(async event => {
   let marketLastCaptureAt: string | null = null
   let marketLastSnapshotAt: string | null = null
 
-  const db = useDrizzle()
-
   try {
     if (!shouldImport('kev')) {
       markTaskSkipped('kev', 'Skipped this run')
@@ -232,10 +308,9 @@ export default defineEventHandler(async event => {
         const parsed = kevSchema.safeParse(kevDataset.data)
 
         if (!parsed.success) {
-          throw createError({
+          throw new CatalogImportError('Unable to parse KEV feed', {
             statusCode: 502,
-            statusMessage: 'Unable to parse KEV feed',
-            data: parsed.error.flatten()
+            details: parsed.error.flatten()
           })
         }
 
@@ -1414,7 +1489,7 @@ export default defineEventHandler(async event => {
       catalogVersion,
       enisaLastUpdated,
       importedAt: importTimestamp,
-      sources: sourcesToImport
+      sources
     }
   } catch (error) {
     const message =
@@ -1426,4 +1501,4 @@ export default defineEventHandler(async event => {
     failImportProgress(message)
     throw error
   }
-})
+}

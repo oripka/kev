@@ -1,9 +1,14 @@
-import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1'
+import { drizzle as drizzleD1 } from 'drizzle-orm/d1'
 export { sql, eq, and, or, inArray } from 'drizzle-orm'
 
 import * as schema from '../database/schema'
+import {
+  useDrizzle as useFallbackDrizzle,
+  tables as fallbackTables,
+  type DrizzleDatabase as FallbackDrizzleDatabase
+} from '../database/client'
 
-type D1Client = Parameters<typeof drizzle>[0]
+type D1Client = Parameters<typeof drizzleD1>[0]
 
 type HubGlobal = typeof globalThis & {
   hubDatabase?: () => D1Client
@@ -11,7 +16,7 @@ type HubGlobal = typeof globalThis & {
   DB?: D1Client
 }
 
-const resolveDatabaseBinding = (): D1Client => {
+const resolveDatabaseBinding = (): D1Client | null => {
   const hub = globalThis as HubGlobal
 
   const processBinding =
@@ -37,12 +42,12 @@ const resolveDatabaseBinding = (): D1Client => {
     }
   }
 
-  throw new Error('NuxtHub database binding is not available')
+  return null
 }
 
-export const tables = schema
+export const tables = fallbackTables
 
-export type DrizzleDatabase = DrizzleD1Database<typeof schema>
+export type DrizzleDatabase = FallbackDrizzleDatabase
 
 let cached: DrizzleDatabase | null = null
 
@@ -52,7 +57,12 @@ export function useDrizzle(): DrizzleDatabase {
   }
 
   const binding = resolveDatabaseBinding()
-  cached = drizzle(binding, { schema })
+  if (binding) {
+    cached = drizzleD1(binding, { schema })
+    return cached
+  }
+
+  cached = useFallbackDrizzle()
   return cached
 }
 
