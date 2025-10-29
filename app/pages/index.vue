@@ -4893,30 +4893,57 @@ const tableMeta = computed(() => ({
         'mx-auto px-4 sm:px-6 xl:px-10 2xl:px-12',
       ]"
     >
-      <div
-        class="mb-6 flex w-full lg:sticky lg:top-24 lg:z-50"
-        :class="showFilterPanel ? 'justify-center' : 'justify-start'"
-      >
-        <QuickFilterSummary
-          :quick-stat-items="quickStatItems"
-          :active-filters="activeFilters"
-          :has-active-filters="hasActiveFilters"
-          :has-active-filter-chips="hasActiveFilterChips"
-          :show-filter-chips="showQuickFilterChips"
-          :show-reset-button="showQuickFilterResetButton"
-          :year-range="yearRange"
-          :year-bounds="yearBounds"
-          :has-custom-year-range="hasCustomYearRange"
-          :is-year-range-limited="isYearRangeLimited"
-          :search-input="searchInput"
-          search-placeholder="Filter catalog"
-          @reset="resetFilters"
-          @clear-filter="clearFilter"
-          @update:year-range="handleQuickYearRangeUpdate"
-          @reset-year-range="resetYearRange"
-          @clear-year-range="clearYearRange"
-          @update:search-input="handleQuickSearchUpdate"
-        />
+      <div class="mb-6 w-full lg:sticky lg:top-24 lg:z-50">
+        <div class="flex w-full flex-col gap-4">
+          <div
+            class="overflow-hidden rounded-3xl border border-neutral-200/70 bg-gradient-to-r from-primary-500/10 via-primary-500/5 to-white/60 p-6 shadow-sm backdrop-blur dark:border-neutral-800/70 dark:from-primary-400/20 dark:via-primary-400/10 dark:to-transparent"
+          >
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div class="space-y-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary-700 dark:text-primary-300">
+                  Exploit intelligence overview
+                </p>
+                <p class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                  Track actively exploited vulnerabilities in real time
+                </p>
+                <p class="text-sm text-neutral-600 dark:text-neutral-300">
+                  Explore the CISA KEV, ENSISA, and curated research feeds with consistent enrichment so you can triage the vendors, products, and exploitation dynamics that matter most.
+                </p>
+              </div>
+              <div class="flex flex-col items-start gap-2 text-xs font-medium text-primary-700 dark:text-primary-200 sm:items-end">
+                <span class="inline-flex items-center gap-2 rounded-2xl bg-white/80 px-3 py-1 shadow-sm ring-1 ring-primary-500/20 backdrop-blur dark:bg-neutral-900/70">
+                  <UIcon name="i-lucide-activity" class="size-4" />
+                  Live CVE updates
+                </span>
+                <span class="inline-flex items-center gap-2 rounded-2xl bg-white/80 px-3 py-1 shadow-sm ring-1 ring-primary-500/20 backdrop-blur dark:bg-neutral-900/70">
+                  <UIcon name="i-lucide-filter" class="size-4" />
+                  Powerful quick filters
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <QuickFilterSummary
+            :quick-stat-items="quickStatItems"
+            :active-filters="activeFilters"
+            :has-active-filters="hasActiveFilters"
+            :has-active-filter-chips="hasActiveFilterChips"
+            :show-filter-chips="showQuickFilterChips"
+            :show-reset-button="showQuickFilterResetButton"
+            :year-range="yearRange"
+            :year-bounds="yearBounds"
+            :has-custom-year-range="hasCustomYearRange"
+            :is-year-range-limited="isYearRangeLimited"
+            :search-input="searchInput"
+            search-placeholder="Filter catalog"
+            @reset="resetFilters"
+            @clear-filter="clearFilter"
+            @update:year-range="handleQuickYearRangeUpdate"
+            @reset-year-range="resetYearRange"
+            @clear-year-range="clearYearRange"
+            @update:search-input="handleQuickSearchUpdate"
+          />
+        </div>
       </div>
 
       <UCard class="mt-10 lg:mt-16 xl:mt-24">

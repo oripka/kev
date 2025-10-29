@@ -41,6 +41,22 @@ const REPO_DIR = join(CACHE_DIR, 'metasploit-framework')
 const MODULES_DIR = join(REPO_DIR, 'modules', 'exploits')
 const MODULE_DATE_CACHE_PATH = join(CACHE_DIR, 'module-published-dates.json')
 
+const describeTimestamp = (value: string | null | undefined) => {
+  if (!value) {
+    return 'unknown'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toISOString()
+}
+
+const describeCommit = (value: string | null | undefined) =>
+  value && value.length > 0 ? value.slice(0, 12) : 'unknown'
+
 const fetchRemoteMetasploitCommit = async (): Promise<string | null> => {
   try {
     const { stdout } = await runGit(['ls-remote', METASPLOIT_REPO_URL, METASPLOIT_BRANCH], {
@@ -1219,6 +1235,8 @@ export const importMetasploitCatalog = async (
     const reprocessCachedEntries = options.reprocessCachedEntries === true
     const previousCommit =
       strategy === 'incremental' ? await fetchMetadataValue(db, 'metasploit.lastCommit') : null
+    const previousImportAt =
+      strategy === 'incremental' ? await fetchMetadataValue(db, 'metasploit.lastImportAt') : null
     const resolveSkipSummary = async (
       commit: string | null,
       progressMessage: string,
@@ -1258,7 +1276,8 @@ export const importMetasploitCatalog = async (
       markTaskProgress('metasploit', 0, 0, progressMessage)
 
       const moduleSuffix = moduleCount > 0 ? ` across ${moduleCount.toLocaleString()} modules` : ''
-      const resolvedSummary = summaryMessage ?? `Metasploit catalog already up to date${moduleSuffix}`
+      const summaryBase = summaryMessage ?? 'Metasploit catalog already up to date'
+      const resolvedSummary = `${summaryBase}${moduleSuffix}`
 
       const metadataUpdates = [
         setMetadataValue('metasploit.lastImportAt', importedAt),
@@ -1292,15 +1311,37 @@ export const importMetasploitCatalog = async (
     }
 
     if (strategy === 'incremental' && !reprocessCachedEntries && previousCommit) {
+      const quickMessage = `Performing quick Metasploit update check (last import: ${describeTimestamp(previousImportAt)}, previous commit: ${describeCommit(previousCommit)})`
+      setImportPhase('fetchingMetasploit', {
+        message: quickMessage,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('metasploit', 0, 0, quickMessage)
+
       const remoteCommit = await fetchRemoteMetasploitCommit()
       if (remoteCommit && remoteCommit === previousCommit) {
         return resolveSkipSummary(
           remoteCommit,
-          'Metasploit quick check: repository already at latest commit'
+          `Metasploit quick check: repository already at latest commit ${describeCommit(remoteCommit)}`,
+          `Metasploit catalog already up to date (quick check) — commit ${describeCommit(remoteCommit)}`
+        )
+      }
+      if (remoteCommit && remoteCommit !== previousCommit) {
+        markTaskProgress(
+          'metasploit',
+          0,
+          0,
+          `Metasploit quick check detected new commit ${describeCommit(remoteCommit)} (previous ${describeCommit(previousCommit)}) — syncing repository`
         )
       }
       if (!remoteCommit) {
-        markTaskProgress('metasploit', 0, 0, 'Quick Metasploit check unavailable; syncing repository')
+        markTaskProgress(
+          'metasploit',
+          0,
+          0,
+          'Quick Metasploit check unavailable; syncing repository'
+        )
       }
     }
 

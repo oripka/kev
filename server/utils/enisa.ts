@@ -72,6 +72,19 @@ const ENISA_ENDPOINT = 'https://euvdservices.enisa.europa.eu/api/search'
 const PAGE_SIZE = 100
 const MAX_INCREMENTAL_PAGES = 8
 
+const describeTimestamp = (value: string | null | undefined) => {
+  if (!value) {
+    return 'unknown'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toISOString()
+}
+
 const splitLines = (value?: string | null): string[] =>
   (value ?? '')
     .split('\n')
@@ -286,9 +299,11 @@ export const importEnisaCatalog = async (
           ? providedLastUpdatedAt
           : await getMetadataValue('enisa.lastUpdatedAt')
         : null
+    const lastImportAt =
+      strategy === 'incremental' ? await getMetadataValue('enisa.lastImportAt') : null
 
     if (strategy === 'incremental' && !forceRefresh && lastKnownUpdatedAt) {
-      const quickMessage = 'Performing quick ENISA update check'
+      const quickMessage = `Performing quick ENISA update check (last import: ${describeTimestamp(lastImportAt)}, last known activity: ${describeTimestamp(lastKnownUpdatedAt)})`
       setImportPhase('fetchingEnisa', {
         message: quickMessage,
         completed: 0,
@@ -301,10 +316,15 @@ export const importEnisaCatalog = async (
         const latestItem = quickResponse.items[0]
         const latestTimestamp = latestItem ? resolveItemActivityTimestamp(latestItem) : null
 
+        const quickResultMessage = latestTimestamp
+          ? `Quick ENISA check compared latest activity ${describeTimestamp(latestTimestamp)} with cached ${describeTimestamp(lastKnownUpdatedAt)}`
+          : 'Quick ENISA check did not return any items; falling back to full comparison'
+        markTaskProgress('enisa', 0, 0, quickResultMessage)
+
         if (latestTimestamp && latestTimestamp <= lastKnownUpdatedAt) {
           const totalCount = Number.parseInt((await getMetadataValue('enisa.totalCount')) ?? '0', 10) || 0
           const importedAt = new Date().toISOString()
-          const skipMessage = 'ENISA catalog already up to date (quick check)'
+          const skipMessage = `ENISA catalog already up to date (quick check) — latest activity ${describeTimestamp(lastKnownUpdatedAt)}`
 
           setImportPhase('fetchingEnisa', {
             message: skipMessage,
@@ -330,6 +350,12 @@ export const importEnisaCatalog = async (
 
           await Promise.all(metadataUpdates)
 
+          markTaskProgress(
+            'enisa',
+            0,
+            0,
+            `Quick ENISA check skipped import — previous import ${describeTimestamp(lastImportAt)}, check recorded at ${describeTimestamp(importedAt)}`
+          )
           return {
             imported: 0,
             totalCount,

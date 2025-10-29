@@ -99,7 +99,8 @@ const lookupProductForCve = async (db: DrizzleDatabase, cveId: string | null | u
 }
 
 const EXCHANGE_RATES_TTL_MS = 43_200_000
-const SNAPSHOT_TTL_MS = 86_400_000
+// Cache market program snapshots for one week to avoid redundant refreshes.
+const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 type ImportOptions = {
   onProgramStart?: (info: { program: MarketProgramDefinition; index: number; total: number }) => void

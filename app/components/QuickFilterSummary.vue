@@ -116,7 +116,7 @@ const handleClearSearch = () => {
   <UCard
     variant="subtle"
     :ui="{
-      root: 'pointer-events-auto w-full max-w-5xl rounded-3xl border border-neutral-200/80 bg-white/80 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/75 dark:border-neutral-800 dark:bg-neutral-900/85',
+      root: 'pointer-events-auto w-full rounded-3xl border border-neutral-200/80 bg-white/80 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/75 dark:border-neutral-800 dark:bg-neutral-900/85',
       body: 'flex flex-wrap items-center gap-3 px-4 py-3'
     }"
   >

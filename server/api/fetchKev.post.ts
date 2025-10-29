@@ -80,6 +80,21 @@ const buildKevDatasetSignature = (payload: { catalogVersion: string; dateRelease
   return `${version}|${release}|${count}`
 }
 
+const describeTimestamp = (value: string | null | undefined) => {
+  if (!value) {
+    return 'unknown'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toISOString()
+}
+
+const describeSignature = (value: string | null | undefined) => value ?? 'unavailable'
+
 const fetchHeadSignature = async (url: string, timeoutMs = HEAD_REQUEST_TIMEOUT_MS): Promise<string | null> => {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -176,6 +191,7 @@ export default defineEventHandler(async event => {
     'catalogVersion',
     'dateReleased',
     'entryCount',
+    'lastImportAt',
     'kev.sourceSignature',
     'enisa.lastUpdatedAt',
     'metasploit.lastCommit',
@@ -249,18 +265,31 @@ export default defineEventHandler(async event => {
       let skipKevProcessing = false
 
       if (strategy === 'incremental' && !forceRefresh) {
-        const quickMessage = 'Performing quick KEV update check'
+        const lastImportAt = metadata.lastImportAt
+        const lastReleasedAt = metadata.dateReleased
+        const quickMessage = `Performing quick KEV update check (last import: ${describeTimestamp(lastImportAt)}, last release: ${describeTimestamp(lastReleasedAt)}, previous signature: ${describeSignature(previousKevSignature)})`
         setImportPhase('preparing', { message: quickMessage, completed: 0, total: 0 })
         markTaskProgress('kev', 0, 0, quickMessage)
 
         kevFeedSignature = await fetchHeadSignature(SOURCE_URL)
 
+        const quickResultMessage = kevFeedSignature
+          ? `Quick KEV check compared remote signature ${kevFeedSignature} with previous ${describeSignature(previousKevSignature)}`
+          : 'Quick KEV check could not retrieve remote signature; falling back to dataset download'
+        markTaskProgress('kev', 0, 0, quickResultMessage)
+
         if (kevFeedSignature && previousKevSignature && kevFeedSignature === previousKevSignature) {
           const importedAt = new Date().toISOString()
-          const skipMessage = 'KEV catalog already up to date (quick check)'
+          const skipMessage = `KEV catalog already up to date (quick check) — last release ${describeTimestamp(lastReleasedAt)}`
 
           setImportPhase('preparing', { message: skipMessage, completed: 0, total: 0 })
           markTaskProgress('kev', 0, 0, skipMessage)
+          markTaskProgress(
+            'kev',
+            0,
+            0,
+            `Quick KEV check skipped import — previous import ${describeTimestamp(lastImportAt)}, check recorded at ${describeTimestamp(importedAt)}`
+          )
 
           const metadataRows = [
             { key: 'entryCount', value: previousKevEntryCount.toString() },
@@ -294,6 +323,9 @@ export default defineEventHandler(async event => {
           kevImportStrategy = 'incremental'
           importTimestamp = importedAt
           skipKevProcessing = true
+        } else if (kevFeedSignature && previousKevSignature && kevFeedSignature !== previousKevSignature) {
+          const changeMessage = `Quick KEV check detected catalog changes (previous signature ${previousKevSignature}, latest ${kevFeedSignature}); continuing with import`
+          markTaskProgress('kev', 0, 0, changeMessage)
         } else if (!kevFeedSignature) {
           markTaskProgress('kev', 0, 0, 'Quick KEV check unavailable; continuing with full import')
         }

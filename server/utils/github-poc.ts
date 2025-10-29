@@ -49,6 +49,21 @@ const DISABLE_POC_ENV_KEYS = [
 
 const HEAD_REQUEST_TIMEOUT_MS = 7000
 
+const describeTimestamp = (value: string | null | undefined) => {
+  if (!value) {
+    return 'unknown'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toISOString()
+}
+
+const describeSignature = (value: string | null | undefined) => value ?? 'unavailable'
+
 const fetchHeadSignature = async (url: string, timeoutMs = HEAD_REQUEST_TIMEOUT_MS): Promise<string | null> => {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -301,7 +316,12 @@ export const importGithubPocCatalog = async (
       total: 0
     })
 
-    const metadata = await getMetadataMap(['poc.cachedAt', 'poc.totalCount', 'poc.sourceSignature'])
+    const metadata = await getMetadataMap([
+      'poc.cachedAt',
+      'poc.totalCount',
+      'poc.sourceSignature',
+      'poc.lastImportAt'
+    ])
     const cacheInfo = await getCacheEntryInfo(CACHE_KEY)
     const cacheTimestamp = cacheInfo?.cachedAt.getTime() ?? null
     const metadataTimestamp = parseTimestamp(metadata['poc.cachedAt'])
@@ -309,10 +329,11 @@ export const importGithubPocCatalog = async (
       cacheTimestamp !== null && (allowStale || Date.now() - cacheTimestamp <= ttlMs)
     const cacheAlreadyProcessed = isSameTimestamp(cacheTimestamp, metadataTimestamp)
     const previousSignature = metadata['poc.sourceSignature']
+    const previousImportAt = metadata['poc.lastImportAt']
     let pocSourceSignature: string | null = null
 
     if (strategy === 'incremental' && !forceRefresh) {
-      const quickMessage = 'Performing quick GitHub PoC update check'
+      const quickMessage = `Performing quick GitHub PoC update check (last import: ${describeTimestamp(previousImportAt)}, previous signature: ${describeSignature(previousSignature)})`
       setImportPhase('fetchingPoc', {
         message: quickMessage,
         completed: 0,
@@ -321,6 +342,11 @@ export const importGithubPocCatalog = async (
       markTaskProgress('poc', 0, 0, quickMessage)
 
       pocSourceSignature = await fetchHeadSignature(SOURCE_URL)
+
+      const quickResultMessage = pocSourceSignature
+        ? `Quick GitHub PoC check compared remote signature ${pocSourceSignature} with previous ${describeSignature(previousSignature)}`
+        : 'Quick GitHub PoC check could not retrieve remote signature; falling back to cache evaluation'
+      markTaskProgress('poc', 0, 0, quickResultMessage)
 
       if (pocSourceSignature && previousSignature && pocSourceSignature === previousSignature) {
         const cachedAtIso =
@@ -331,7 +357,7 @@ export const importGithubPocCatalog = async (
               : null
         const totalCount = Number.parseInt(metadata['poc.totalCount'] ?? '0', 10) || 0
         const importedAt = new Date().toISOString()
-        const skipMessage = 'GitHub PoC catalog already up to date (quick check)'
+        const skipMessage = `GitHub PoC catalog already up to date (quick check) — ${totalCount.toLocaleString()} entries`
 
         setImportPhase('fetchingPoc', {
           message: skipMessage,
@@ -358,6 +384,12 @@ export const importGithubPocCatalog = async (
 
         await Promise.all(metadataUpdates)
 
+        markTaskProgress(
+          'poc',
+          0,
+          0,
+          `Quick GitHub PoC check skipped import — previous import ${describeTimestamp(previousImportAt)}, check recorded at ${describeTimestamp(importedAt)}`
+        )
         return {
           imported: 0,
           totalCount,
@@ -368,6 +400,14 @@ export const importGithubPocCatalog = async (
           strategy: 'incremental',
           cachedAt: cachedAtIso
         }
+      }
+      if (pocSourceSignature && previousSignature && pocSourceSignature !== previousSignature) {
+        markTaskProgress(
+          'poc',
+          0,
+          0,
+          `Quick GitHub PoC check detected catalog changes (previous signature ${previousSignature}, latest ${pocSourceSignature}); continuing with import`
+        )
       }
       if (!pocSourceSignature) {
         markTaskProgress('poc', 0, 0, 'Quick GitHub PoC check unavailable; continuing with cache evaluation')
