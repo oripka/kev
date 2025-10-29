@@ -3898,6 +3898,7 @@ const tableMeta = computed(() => ({
 </script>
 
 <template>
+
   <div class="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-10 2xl:gap-12">
     <aside
       v-if="showFilterPanel"

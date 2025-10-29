@@ -52,6 +52,23 @@ import {
 } from 'server/utils/entry-diff'
 
 const ONE_DAY_MS = 86_400_000
+const MAX_INCREMENTAL_KEV_CVE_EVENT_IDS = 25
+
+const formatNewKevCveSummary = (ids: string[]): string => {
+  if (ids.length === 0) {
+    return 'New CVEs: none detected'
+  }
+
+  const shown = ids.slice(0, MAX_INCREMENTAL_KEV_CVE_EVENT_IDS)
+  const remaining = ids.length - shown.length
+  const base = `New CVEs: ${shown.join(', ')}`
+
+  if (remaining <= 0) {
+    return base
+  }
+
+  return `${base} … +${remaining.toLocaleString()} more`
+}
 
 export type CatalogImportMode = 'auto' | 'force' | 'cache'
 
@@ -747,7 +764,8 @@ export const runCatalogImport = async (
         const detailSummary = detailSegments.length
           ? detailSegments.join(', ')
           : 'no changes detected'
-        const summaryMessage = `Incremental KEV import: ${detailSummary} (catalog size: ${totalEntries.toLocaleString()})`
+        const baseSummary = `Incremental KEV import: ${detailSummary} (catalog size: ${totalEntries.toLocaleString()})`
+        const summaryMessage = `${baseSummary}. ${formatNewKevCveSummary(newKevIds)}`
         publishTaskEvent('kev', summaryMessage)
         markTaskComplete('kev', summaryMessage)
       }

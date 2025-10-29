@@ -44,6 +44,45 @@ const MODULE_DATE_CACHE_PATH = join(CACHE_DIR, 'module-published-dates.json')
 const RE_CVE_GENERIC = /CVE[-\s_]*(\d{4})[-\s_]?([0-9]{4,7})/gi
 const RE_VENDOR_ADVISORY = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{4}-\d{2,}$/i
 
+const fetchMetadataValue = async (db: DrizzleDatabase, key: string): Promise<string | null> => {
+  const row = await db
+    .select({ value: tables.kevMetadata.value })
+    .from(tables.kevMetadata)
+    .where(eq(tables.kevMetadata.key, key))
+    .get()
+
+  return row?.value ?? null
+}
+
+const fetchMetadataValues = async (
+  db: DrizzleDatabase,
+  keys: string[]
+): Promise<Record<string, string | null>> => {
+  if (!keys.length) {
+    return {}
+  }
+
+  const rows = await db
+    .select({ key: tables.kevMetadata.key, value: tables.kevMetadata.value })
+    .from(tables.kevMetadata)
+    .where(inArray(tables.kevMetadata.key, keys))
+    .all()
+
+  const defaults: Record<string, string | null> = {}
+  for (const key of keys) {
+    defaults[key] = null
+  }
+
+  for (const row of rows) {
+    if (!row.key) {
+      continue
+    }
+    defaults[row.key] = row.value ?? null
+  }
+
+  return defaults
+}
+
 const syncRepository = async (
   options: { useCachedRepository?: boolean } = {}
 ): Promise<{ commit: string | null }> => {
@@ -1169,6 +1208,72 @@ export const importMetasploitCatalog = async (
 
     const { commit } = await syncRepository({ useCachedRepository: options.useCachedRepository })
 
+    const reprocessCachedEntries = options.reprocessCachedEntries === true
+    const previousCommit =
+      strategy === 'incremental' ? await fetchMetadataValue(db, 'metasploit.lastCommit') : null
+
+    if (
+      strategy === 'incremental' &&
+      !reprocessCachedEntries &&
+      commit &&
+      previousCommit &&
+      commit === previousCommit
+    ) {
+      const metadataMap = await fetchMetadataValues(db, [
+        'metasploit.totalCount',
+        'metasploit.moduleCount'
+      ])
+
+      const parseCount = (value: string | null): number => {
+        const parsed = Number.parseInt(value ?? '', 10)
+        return Number.isNaN(parsed) ? 0 : parsed
+      }
+
+      const totalCount = parseCount(metadataMap['metasploit.totalCount'])
+      const moduleCount = parseCount(metadataMap['metasploit.moduleCount'])
+
+      const repositoryMessage = 'Metasploit repository already at latest commit'
+      setImportPhase('fetchingMetasploit', { message: repositoryMessage, completed: 0, total: 0 })
+      markTaskProgress('metasploit', 0, 0, repositoryMessage)
+
+      const moduleSuffix = moduleCount > 0 ? ` across ${moduleCount.toLocaleString()} modules` : ''
+      const completeMessage = `Metasploit catalog already up to date${moduleSuffix}`
+
+      const importedAt = new Date().toISOString()
+      const totalCountString = totalCount.toString()
+      const moduleCountString = moduleCount.toString()
+
+      const metadataUpdates = [
+        setMetadataValue('metasploit.lastImportAt', importedAt),
+        setMetadataValue('metasploit.totalCount', totalCountString),
+        setMetadataValue('metasploit.moduleCount', moduleCountString),
+        setMetadataValue('metasploit.lastNewCount', '0'),
+        setMetadataValue('metasploit.lastUpdatedCount', '0'),
+        setMetadataValue('metasploit.lastSkippedCount', totalCountString),
+        setMetadataValue('metasploit.lastRemovedCount', '0'),
+        setMetadataValue('metasploit.lastImportStrategy', 'incremental')
+      ]
+
+      if (commit) {
+        metadataUpdates.push(setMetadataValue('metasploit.lastCommit', commit))
+      }
+
+      await Promise.all(metadataUpdates)
+      markTaskComplete('metasploit', completeMessage)
+
+      return {
+        imported: 0,
+        totalCount,
+        newCount: 0,
+        updatedCount: 0,
+        skippedCount: totalCount,
+        removedCount: 0,
+        strategy: 'incremental',
+        commit,
+        modules: moduleCount
+      }
+    }
+
     const modulesDirExists = await pathExists(MODULES_DIR)
     if (!modulesDirExists) {
       throw new Error('Metasploit repository directory not available after clone')
@@ -1303,7 +1408,6 @@ export const importMetasploitCatalog = async (
     }
 
     const offline = options.offline ?? false
-    const reprocessCachedEntries = options.reprocessCachedEntries ?? false
     const preferCache = offline && !reprocessCachedEntries
 
     const cvelistResults = await mapWithConcurrency(

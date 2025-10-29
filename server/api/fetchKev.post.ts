@@ -79,6 +79,23 @@ type CvssMetric = {
 }
 
 const ONE_DAY_MS = 86_400_000
+const MAX_INCREMENTAL_KEV_CVE_EVENT_IDS = 25
+
+const formatNewKevCveSummary = (ids: string[]): string => {
+  if (ids.length === 0) {
+    return 'New CVEs: none detected'
+  }
+
+  const shown = ids.slice(0, MAX_INCREMENTAL_KEV_CVE_EVENT_IDS)
+  const remaining = ids.length - shown.length
+  const base = `New CVEs: ${shown.join(', ')}`
+
+  if (remaining <= 0) {
+    return base
+  }
+
+  return `${base} … +${remaining.toLocaleString()} more`
+}
 
 type ImportMode = 'auto' | 'force' | 'cache'
 type ImportRequestBody = { mode?: ImportMode; source?: string; strategy?: string }
@@ -950,6 +967,7 @@ export default defineEventHandler(async event => {
 
         const removedIds = existingIds.filter(id => !seenExisting.has(id))
         const totalChanges = newRecords.length + updatedRecords.length
+        const newKevIds = newRecords.map(record => record.values.cveId)
 
         if (totalChanges > 0) {
           const message = 'Saving KEV changes to the local cache'
@@ -1076,7 +1094,8 @@ export default defineEventHandler(async event => {
         const detailSummary = detailSegments.length
           ? detailSegments.join(', ')
           : 'no changes detected'
-        const summaryMessage = `Incremental KEV import: ${detailSummary} (catalog size: ${totalEntries.toLocaleString()})`
+        const baseSummary = `Incremental KEV import: ${detailSummary} (catalog size: ${totalEntries.toLocaleString()})`
+        const summaryMessage = `${baseSummary}. ${formatNewKevCveSummary(newKevIds)}`
         publishTaskEvent('kev', summaryMessage)
         markTaskComplete('kev', summaryMessage)
       }
