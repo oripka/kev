@@ -2,6 +2,7 @@
 
 import { execSync } from 'node:child_process'
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -11,6 +12,7 @@ import {
 } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import Database from 'better-sqlite3'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -109,6 +111,57 @@ const cleanDump = (content) => {
     .join('\n')
 }
 
+const VULNERABILITY_ENTRY_COLUMNS = [
+  'id',
+  'cve_id',
+  'source',
+  'vendor',
+  'product',
+  'vendor_key',
+  'product_key',
+  'vulnerability_name',
+  'description',
+  'required_action',
+  'date_added',
+  'due_date',
+  'ransomware_use',
+  'notes',
+  'cwes',
+  'cvss_score',
+  'cvss_vector',
+  'cvss_version',
+  'cvss_severity',
+  'epss_score',
+  'assigner',
+  'date_published',
+  'date_updated',
+  'exploited_since',
+  'source_url',
+  'poc_url',
+  'poc_published_at',
+  'reference_links',
+  'aliases',
+  'affected_products',
+  'problem_types',
+  'metasploit_module_path',
+  'metasploit_module_published_at',
+  'internet_exposed',
+  'updated_at'
+]
+
+const LARGE_TEXT_COLUMNS = new Set([
+  'description',
+  'notes',
+  'cwes',
+  'reference_links',
+  'aliases',
+  'affected_products',
+  'problem_types'
+])
+
+const LARGE_COLUMN_THRESHOLD = 40_000
+const LARGE_COLUMN_CHUNK_SIZE = 40_000
+
 const ensureDataDir = () => {
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true })
@@ -202,6 +255,116 @@ const prepareDumpFile = () => {
   const raw = readFileSync(dumpPath, 'utf8')
   const cleaned = cleanDump(raw)
   writeFileSync(dumpPath, `${cleaned}\n`, 'utf8')
+}
+
+const sqlLiteral = (value) => {
+  if (value === null || value === undefined) {
+    return 'NULL'
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  if (typeof value === 'bigint') {
+    return value.toString()
+  }
+  const stringValue = String(value)
+  const escaped = stringValue.replace(/'/g, "''")
+  return `'${escaped}'`
+}
+
+const chunkString = (value, size) => {
+  const chunks = []
+  for (let index = 0; index < value.length; index += size) {
+    chunks.push(value.slice(index, index + size))
+  }
+  return chunks
+}
+
+const buildVulnerabilityEntryStatements = (localDbPath) => {
+  const db = new Database(localDbPath, { readonly: true })
+  try {
+    const hasTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vulnerability_entries'")
+      .get()
+
+    if (!hasTable) {
+      return []
+    }
+
+    const selectSql = `SELECT ${VULNERABILITY_ENTRY_COLUMNS.map((column) => `"${column}"`).join(', ')} FROM vulnerability_entries`
+    const statement = db.prepare(selectSql)
+    const statements = []
+
+    for (const row of statement.iterate()) {
+      const insertValues = []
+      const updates = []
+      const idLiteral = sqlLiteral(row.id)
+
+      for (const column of VULNERABILITY_ENTRY_COLUMNS) {
+        const value = row[column]
+
+        if (
+          typeof value === 'string' &&
+          LARGE_TEXT_COLUMNS.has(column) &&
+          value.length > LARGE_COLUMN_THRESHOLD
+        ) {
+          insertValues.push('NULL')
+          const chunks = chunkString(value, LARGE_COLUMN_CHUNK_SIZE)
+          if (chunks.length > 0) {
+            const [firstChunk, ...remaining] = chunks
+            updates.push(`UPDATE vulnerability_entries SET "${column}" = ${sqlLiteral(firstChunk)} WHERE "id" = ${idLiteral};`)
+            for (const chunk of remaining) {
+              updates.push(
+                `UPDATE vulnerability_entries SET "${column}" = "${column}" || ${sqlLiteral(chunk)} WHERE "id" = ${idLiteral};`
+              )
+            }
+          }
+        } else {
+          insertValues.push(sqlLiteral(value))
+        }
+      }
+
+      const columnList = VULNERABILITY_ENTRY_COLUMNS.map((column) => `"${column}"`).join(', ')
+      const insertStatement = `INSERT INTO vulnerability_entries (${columnList}) VALUES (${insertValues.join(', ')});`
+      statements.push(insertStatement)
+      statements.push(...updates)
+    }
+
+    return statements
+  } finally {
+    db.close()
+  }
+}
+
+const rewriteVulnerabilityEntriesDump = (localDbPath) => {
+  console.info('Rewriting vulnerability_entries export for D1 statement limits …')
+
+  const raw = readFileSync(dumpPath, 'utf8')
+  const filtered = raw
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trimStart()
+      return !(
+        trimmed.startsWith('INSERT INTO "vulnerability_entries"') ||
+        trimmed.startsWith('INSERT INTO vulnerability_entries') ||
+        trimmed.startsWith('UPDATE vulnerability_entries SET') ||
+        trimmed.startsWith('-- Exported vulnerability_entries')
+      )
+    })
+    .join('\n')
+
+  writeFileSync(dumpPath, `${filtered}\n`, 'utf8')
+
+  const statements = buildVulnerabilityEntryStatements(localDbPath)
+  if (!statements.length) {
+    console.warn('No vulnerability_entries rows found to export.')
+    return
+  }
+
+  const header = '\n-- Exported vulnerability_entries with chunked large columns\n'
+  appendFileSync(dumpPath, header + statements.join('\n') + '\n', 'utf8')
+  const rowInsertCount = statements.filter((line) => line.startsWith('INSERT INTO vulnerability_entries')).length
+  console.info(`Exported ${rowInsertCount.toLocaleString()} vulnerability_entries rows.`)
 }
 
 const uploadDump = () => {
@@ -329,6 +492,7 @@ const main = () => {
     console.info(`Using local NuxtHub D1 database at ${localDbPath}`)
     exportLocalDatabase(localDbPath)
     prepareDumpFile()
+    rewriteVulnerabilityEntriesDump(localDbPath)
     uploadDump()
     console.info('✅ Remote D1 database refreshed successfully.')
   } catch (error) {
