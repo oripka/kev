@@ -162,6 +162,11 @@ const LARGE_TEXT_COLUMNS = new Set([
 const LARGE_COLUMN_THRESHOLD = 40_000
 const LARGE_COLUMN_CHUNK_SIZE = 40_000
 
+const LARGE_COLUMN_INSERT_FALLBACKS = new Map([
+  ['affected_products', '[]'],
+  ['problem_types', '[]']
+])
+
 const ensureDataDir = () => {
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true })
@@ -280,6 +285,53 @@ const chunkString = (value, size) => {
   return chunks
 }
 
+const splitSqlStatements = (sql) => {
+  const statements = []
+  let buffer = ''
+  let inString = false
+  let quoteChar = ''
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]
+    buffer += char
+
+    if (inString) {
+      if (char === quoteChar) {
+        const nextChar = sql[index + 1]
+        if (nextChar === quoteChar) {
+          buffer += nextChar
+          index += 1
+        } else {
+          inString = false
+          quoteChar = ''
+        }
+      }
+      continue
+    }
+
+    if (char === "'" || char === '"') {
+      inString = true
+      quoteChar = char
+      continue
+    }
+
+    if (char === ';') {
+      const statement = buffer.trim()
+      if (statement.length > 0) {
+        statements.push(statement)
+      }
+      buffer = ''
+    }
+  }
+
+  const trailing = buffer.trim()
+  if (trailing.length > 0) {
+    statements.push(trailing)
+  }
+
+  return statements
+}
+
 const buildVulnerabilityEntryStatements = (localDbPath) => {
   const db = new Database(localDbPath, { readonly: true })
   try {
@@ -308,7 +360,10 @@ const buildVulnerabilityEntryStatements = (localDbPath) => {
           LARGE_TEXT_COLUMNS.has(column) &&
           value.length > LARGE_COLUMN_THRESHOLD
         ) {
-          insertValues.push('NULL')
+          const fallback = LARGE_COLUMN_INSERT_FALLBACKS.has(column)
+            ? sqlLiteral(LARGE_COLUMN_INSERT_FALLBACKS.get(column))
+            : sqlLiteral('')
+          insertValues.push(fallback)
           const chunks = chunkString(value, LARGE_COLUMN_CHUNK_SIZE)
           if (chunks.length > 0) {
             const [firstChunk, ...remaining] = chunks
@@ -340,30 +395,29 @@ const rewriteVulnerabilityEntriesDump = (localDbPath) => {
   console.info('Rewriting vulnerability_entries export for D1 statement limits …')
 
   const raw = readFileSync(dumpPath, 'utf8')
-  const filtered = raw
-    .split('\n')
-    .filter((line) => {
-      const trimmed = line.trimStart()
-      return !(
-        trimmed.startsWith('INSERT INTO "vulnerability_entries"') ||
-        trimmed.startsWith('INSERT INTO vulnerability_entries') ||
-        trimmed.startsWith('UPDATE vulnerability_entries SET') ||
-        trimmed.startsWith('-- Exported vulnerability_entries')
-      )
-    })
-    .join('\n')
+  const parsedStatements = splitSqlStatements(raw)
+  const filteredStatements = parsedStatements.filter((statement) => {
+    const normalized = statement.trimStart()
+    return !(
+      normalized.startsWith('INSERT INTO "vulnerability_entries"') ||
+      normalized.startsWith('INSERT INTO vulnerability_entries') ||
+      normalized.startsWith('UPDATE "vulnerability_entries" SET') ||
+      normalized.startsWith('UPDATE vulnerability_entries SET') ||
+      normalized.startsWith('-- Exported vulnerability_entries')
+    )
+  })
 
-  writeFileSync(dumpPath, `${filtered}\n`, 'utf8')
+  writeFileSync(dumpPath, `${filteredStatements.join('\n')}\n`, 'utf8')
 
-  const statements = buildVulnerabilityEntryStatements(localDbPath)
-  if (!statements.length) {
+  const entryStatements = buildVulnerabilityEntryStatements(localDbPath)
+  if (!entryStatements.length) {
     console.warn('No vulnerability_entries rows found to export.')
     return
   }
 
   const header = '\n-- Exported vulnerability_entries with chunked large columns\n'
-  appendFileSync(dumpPath, header + statements.join('\n') + '\n', 'utf8')
-  const rowInsertCount = statements.filter((line) => line.startsWith('INSERT INTO vulnerability_entries')).length
+  appendFileSync(dumpPath, header + entryStatements.join('\n') + '\n', 'utf8')
+  const rowInsertCount = entryStatements.filter((line) => line.startsWith('INSERT INTO vulnerability_entries')).length
   console.info(`Exported ${rowInsertCount.toLocaleString()} vulnerability_entries rows.`)
 }
 

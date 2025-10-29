@@ -107,6 +107,25 @@ type CvssMetric = {
 }
 
 const ONE_DAY_MS = 86_400_000
+/**
+ * D1 starts rejecting statements once a query has ~500 bind params even though
+ * vanilla SQLite allows 999, so keep batches far below that ceiling.
+ */
+const SQLITE_MAX_VARIABLES = 100
+
+const chunkArray = <T>(items: T[], chunkSize: number): T[][] => {
+  if (chunkSize <= 0) {
+    return [items]
+  }
+
+  const chunks: T[][] = []
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize))
+  }
+
+  return chunks
+}
 
 type ImportMode = 'auto' | 'force' | 'cache'
 type ImportRequestBody = { mode?: ImportMode; source?: string; strategy?: string }
@@ -896,20 +915,26 @@ export default defineEventHandler(async event => {
         const existingIds = Array.from(existingMap.keys())
 
         if (existingIds.length > 0) {
-          const impactRows: ExistingImpactRow[] = await db
-            .select({
-              entryId: tables.vulnerabilityEntryImpacts.entryId,
-              vendor: tables.vulnerabilityEntryImpacts.vendor,
-              vendorKey: tables.vulnerabilityEntryImpacts.vendorKey,
-              product: tables.vulnerabilityEntryImpacts.product,
-              productKey: tables.vulnerabilityEntryImpacts.productKey,
-              status: tables.vulnerabilityEntryImpacts.status,
-              versionRange: tables.vulnerabilityEntryImpacts.versionRange,
-              source: tables.vulnerabilityEntryImpacts.source
-            })
-            .from(tables.vulnerabilityEntryImpacts)
-            .where(inArray(tables.vulnerabilityEntryImpacts.entryId, existingIds))
-            .all()
+          const impactRows: ExistingImpactRow[] = []
+
+          for (const chunk of chunkArray(existingIds, SQLITE_MAX_VARIABLES)) {
+            const rows = await db
+              .select({
+                entryId: tables.vulnerabilityEntryImpacts.entryId,
+                vendor: tables.vulnerabilityEntryImpacts.vendor,
+                vendorKey: tables.vulnerabilityEntryImpacts.vendorKey,
+                product: tables.vulnerabilityEntryImpacts.product,
+                productKey: tables.vulnerabilityEntryImpacts.productKey,
+                status: tables.vulnerabilityEntryImpacts.status,
+                versionRange: tables.vulnerabilityEntryImpacts.versionRange,
+                source: tables.vulnerabilityEntryImpacts.source
+              })
+              .from(tables.vulnerabilityEntryImpacts)
+              .where(inArray(tables.vulnerabilityEntryImpacts.entryId, chunk))
+              .all()
+
+            impactRows.push(...rows)
+          }
 
           for (const impact of impactRows) {
             const bucket = existingMap.get(impact.entryId)
@@ -927,16 +952,22 @@ export default defineEventHandler(async event => {
             }
           }
 
-          const categoryRows: ExistingCategoryRow[] = await db
-            .select({
-              entryId: tables.vulnerabilityEntryCategories.entryId,
-              categoryType: tables.vulnerabilityEntryCategories.categoryType,
-              value: tables.vulnerabilityEntryCategories.value,
-              name: tables.vulnerabilityEntryCategories.name
-            })
-            .from(tables.vulnerabilityEntryCategories)
-            .where(inArray(tables.vulnerabilityEntryCategories.entryId, existingIds))
-            .all()
+          const categoryRows: ExistingCategoryRow[] = []
+
+          for (const chunk of chunkArray(existingIds, SQLITE_MAX_VARIABLES)) {
+            const rows = await db
+              .select({
+                entryId: tables.vulnerabilityEntryCategories.entryId,
+                categoryType: tables.vulnerabilityEntryCategories.categoryType,
+                value: tables.vulnerabilityEntryCategories.value,
+                name: tables.vulnerabilityEntryCategories.name
+              })
+              .from(tables.vulnerabilityEntryCategories)
+              .where(inArray(tables.vulnerabilityEntryCategories.entryId, chunk))
+              .all()
+
+            categoryRows.push(...rows)
+          }
 
           for (const category of categoryRows) {
             const bucket = existingMap.get(category.entryId)
@@ -1048,10 +1079,12 @@ export default defineEventHandler(async event => {
         }
 
         if (removedIds.length > 0) {
-          await db
-            .delete(tables.vulnerabilityEntries)
-            .where(inArray(tables.vulnerabilityEntries.id, removedIds))
-            .run()
+          for (const chunk of chunkArray(removedIds, SQLITE_MAX_VARIABLES)) {
+            await db
+              .delete(tables.vulnerabilityEntries)
+              .where(inArray(tables.vulnerabilityEntries.id, chunk))
+              .run()
+          }
         }
 
         const metadataRows = [
