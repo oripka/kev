@@ -112,3 +112,16 @@ export const getCachedData = async <T>(
     stale: false
   }
 }
+
+export const getCacheEntryInfo = async (
+  key: string
+): Promise<{ cachedAt: Date } | null> => {
+  const cachePath = cachePathForKey(key)
+
+  try {
+    const details = await stat(cachePath)
+    return { cachedAt: details.mtime }
+  } catch {
+    return null
+  }
+}

@@ -6,8 +6,8 @@ import type { KevBaseEntry } from '~/utils/classification'
 import { normaliseVendorProduct } from '~/utils/vendorProduct'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from '../database/client'
-import { setMetadataValue } from './metadata'
-import { getCachedData } from './cache'
+import { getMetadataMap, setMetadataValue } from './metadata'
+import { getCacheEntryInfo, getCachedData } from './cache'
 import { mapWithConcurrency } from './concurrency'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
@@ -40,6 +40,7 @@ const POC_HISTORY_LOOKBACK_DAYS = 365
 const SOURCE_URL = 'https://raw.githubusercontent.com/0xMarcio/cve/main/docs/CVE_list.json'
 const SOURCE_REPO_URL = 'https://github.com/0xMarcio/cve/tree/main'
 const CACHE_KEY = 'github-poc-feed'
+const SKIP_SUMMARY_LABEL = 'GitHub PoC catalog already up to date (cache unchanged)'
 const DISABLE_POC_ENV_KEYS = [
   'NUXT_DISABLE_GITHUB_POC_IMPORT',
   'DISABLE_GITHUB_POC_IMPORT',
@@ -203,6 +204,23 @@ type PocImportSummary = {
   cachedAt: string | null
 }
 
+const parseTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) {
+    return null
+  }
+
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+const isSameTimestamp = (a: number | null, b: number | null, toleranceMs = 2000) => {
+  if (a === null || b === null) {
+    return false
+  }
+
+  return Math.abs(a - b) <= toleranceMs
+}
+
 const resolveDateAdded = (entry: KevBaseEntry, fallback: string): string => {
   const candidates = [
     entry.pocPublishedAt,
@@ -228,6 +246,8 @@ export const importGithubPocCatalog = async (
 ): Promise<PocImportSummary> => {
   const ttlMs = options.ttlMs ?? 86_400_000
   const strategy = options.strategy ?? 'full'
+  const forceRefresh = options.forceRefresh ?? false
+  const allowStale = options.allowStale ?? false
 
   try {
     if (isGithubPocImportDisabled) {
@@ -257,6 +277,54 @@ export const importGithubPocCatalog = async (
       completed: 0,
       total: 0
     })
+
+    const metadata = await getMetadataMap(['poc.cachedAt', 'poc.totalCount'])
+    const cacheInfo = await getCacheEntryInfo(CACHE_KEY)
+    const cacheTimestamp = cacheInfo?.cachedAt.getTime() ?? null
+    const metadataTimestamp = parseTimestamp(metadata['poc.cachedAt'])
+    const cacheIsFresh =
+      cacheTimestamp !== null && (allowStale || Date.now() - cacheTimestamp <= ttlMs)
+    const cacheAlreadyProcessed = isSameTimestamp(cacheTimestamp, metadataTimestamp)
+
+    if (strategy === 'incremental' && !forceRefresh && cacheIsFresh && cacheAlreadyProcessed) {
+      const cachedAtIso = cacheTimestamp ? new Date(cacheTimestamp).toISOString() : null
+      const totalCount = Number.parseInt(metadata['poc.totalCount'] ?? '0', 10) || 0
+
+      setImportPhase('fetchingPoc', {
+        message: SKIP_SUMMARY_LABEL,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('poc', 0, 0, SKIP_SUMMARY_LABEL)
+      markTaskComplete('poc', SKIP_SUMMARY_LABEL)
+
+      const importedAt = new Date().toISOString()
+      const metadataUpdates = [
+        setMetadataValue('poc.lastImportAt', importedAt),
+        setMetadataValue('poc.lastImportStrategy', 'incremental'),
+        setMetadataValue('poc.lastNewCount', '0'),
+        setMetadataValue('poc.lastUpdatedCount', '0'),
+        setMetadataValue('poc.lastSkippedCount', '0'),
+        setMetadataValue('poc.lastRemovedCount', '0')
+      ]
+
+      if (cachedAtIso) {
+        metadataUpdates.push(setMetadataValue('poc.cachedAt', cachedAtIso))
+      }
+
+      await Promise.all(metadataUpdates)
+
+      return {
+        imported: 0,
+        totalCount,
+        newCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        removedCount: 0,
+        strategy: 'incremental',
+        cachedAt: cachedAtIso
+      }
+    }
 
     const dataset = await getCachedData(
       CACHE_KEY,
