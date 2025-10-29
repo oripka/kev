@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import type { KevEntrySummary, Period, Range } from '~/types'
+import { computed } from 'vue'
+import type { KevTimelineBucket, Period, Range } from '~/types'
 
 const props = defineProps<{
   period: Period
   range: Range
-  entries: KevEntrySummary[]
+  buckets: KevTimelineBucket[]
 }>()
 
-const chartRef = useTemplateRef<InstanceType<typeof TimelineChart> | null>('chartRef')
-
-const total = computed(() => chartRef.value?.total.value ?? 0)
-
 const formatNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format
+
+const total = computed(() =>
+  props.buckets.reduce((sum, bucket) => sum + bucket.count, 0)
+)
 </script>
 
 <template>
@@ -28,8 +29,7 @@ const formatNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).f
     </template>
 
     <TimelineChart
-      ref="chartRef"
-      :entries="props.entries"
+      :buckets="props.buckets"
       :period="props.period"
       :range="props.range"
       height="h-96"

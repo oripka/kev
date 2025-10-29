@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { KevEntrySummary } from "~/types";
+import type { KevEntrySummary, KevHeatmapGroups, KevTimeline } from "~/types";
 import type { TrackedProductSummary } from "~/composables/useTrackedProducts";
 import type {
   LatestAdditionSortKey,
@@ -41,6 +41,8 @@ const props = defineProps<{
   sourceBadgeMap: SourceBadgeMap;
   catalogUpdatedAt: string;
   entries: KevEntrySummary[];
+  heatmap: KevHeatmapGroups;
+  timeline: KevTimeline;
   focusContext?: { active: boolean; summary: TrackedProductSummary | null };
 }>();
 
@@ -136,11 +138,11 @@ const handleHeatmapQuickFilter = (payload: QuickFilterUpdate) => {
           @add-to-tracked="handleAddToTracked"
         />
 
-        <FilteredTrendPanel v-model="showTrendLines" :entries="props.entries" />
+        <FilteredTrendPanel v-model="showTrendLines" :timeline="props.timeline" />
 
         <TrendHeatmapPanel
           v-model="showHeatmap"
-          :entries="props.entries"
+          :heatmap="props.heatmap"
           @quick-filter="handleHeatmapQuickFilter"
         />
 

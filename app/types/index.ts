@@ -197,7 +197,6 @@ export type KevEntrySummary = Pick<
   | 'aliases'
   | 'marketSignals'
   | 'pocPublishedAt'
->
 
 export type KevCountDatum = {
   key: string
@@ -205,6 +204,21 @@ export type KevCountDatum = {
   count: number
   vendorKey?: string
   vendorName?: string
+}
+
+export type KevTimelineBucket = {
+  date: string
+  count: number
+}
+
+export type KevTimeline = {
+  range: { start: string; end: string } | null
+  buckets: Record<Period, KevTimelineBucket[]>
+}
+
+export type KevHeatmapGroups = {
+  vendor: KevCountDatum[]
+  product: KevCountDatum[]
 }
 
 export type MarketCategoryDatum = {
@@ -237,10 +251,12 @@ export type KevResponse = {
     vendor: KevCountDatum[]
     product: KevCountDatum[]
   }
+  heatmap: KevHeatmapGroups
   catalogBounds: {
     earliest: string | null
     latest: string | null
   }
+  timeline: KevTimeline
   totalEntries: number
   totalEntriesWithoutYear: number
   entryLimit: number

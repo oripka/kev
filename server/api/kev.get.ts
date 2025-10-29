@@ -11,6 +11,12 @@ import type {
   KevVulnerabilityCategory,
   MarketProgramType
 } from '~/types'
+import {
+  extractQueryString,
+  parseQueryBoolean,
+  parseQueryFloat,
+  parseQueryInteger
+} from '~/utils/queryParams'
 import { tables, useDrizzle } from '../utils/drizzle'
 import {
   catalogRowToSummary,
@@ -18,6 +24,7 @@ import {
   type CatalogSummaryRow
 } from '../utils/catalog'
 import { getMetadataMap } from '../utils/metadata'
+import { buildTimeline } from '~/utils/timeline'
 
 type DrizzleDatabase = ReturnType<typeof useDrizzle>
 
@@ -61,6 +68,18 @@ type CatalogQuery = {
 
 type Condition = SQL<unknown>
 
+const resolveTableName = (table: unknown): string => {
+  const metadata = table as { [key: symbol]: unknown }
+  const name = metadata[Symbol.for('drizzle:Name')]
+  if (typeof name === 'string' && name.length > 0) {
+    return name
+  }
+  throw new Error('Unable to resolve table name for catalogEntriesFts')
+}
+
+const catalogEntriesFtsTable = tables.catalogEntriesFts
+const catalogEntriesFtsTableName = resolveTableName(catalogEntriesFtsTable)
+
 const toTimestamp = (value?: string): number | null => {
   if (!value) {
     return null
@@ -75,62 +94,87 @@ const toTimestamp = (value?: string): number | null => {
 const DEFAULT_ENTRY_LIMIT = 25
 const MAX_ENTRY_LIMIT = 10_000
 
+const createEmptyHeatmap = (): KevResponse['heatmap'] => ({
+  vendor: [],
+  product: []
+})
+
+const createEmptyTimeline = (): KevResponse['timeline'] => ({
+  range: null,
+  buckets: {
+    daily: [],
+    weekly: [],
+    monthly: []
+  }
+})
+
+const buildFtsQuery = (term: string): string | null => {
+  const tokens = term
+    .split(/\s+/)
+    .map(token => token.replace(/["'*]/g, '').trim())
+    .filter(Boolean)
+
+  if (!tokens.length) {
+    return null
+  }
+
+  return tokens.map(token => `${token}*`).join(' ')
+}
+
 const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const getString = (key: string): string | undefined => {
-    const value = raw[key]
-    return typeof value === 'string' && value.trim() ? value.trim() : undefined
+    const value = extractQueryString(raw[key])
+    return value ?? undefined
+  }
+
+  const getBoolean = (key: string): boolean | undefined => {
+    const value = parseQueryBoolean(raw[key])
+    return value === null ? undefined : value
   }
 
   const getInt = (key: string): number | undefined => {
-    const value = raw[key]
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return Math.trunc(value)
-    }
-    if (typeof value === 'string' && value.trim()) {
-      const parsed = Number.parseInt(value.trim(), 10)
-      return Number.isNaN(parsed) ? undefined : parsed
-    }
-    return undefined
+    const value = parseQueryInteger(raw[key])
+    return value === null ? undefined : value
   }
 
   const getFloat = (key: string): number | undefined => {
-    const value = raw[key]
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value
-    }
-    if (typeof value === 'string' && value.trim()) {
-      const parsed = Number.parseFloat(value.trim())
-      return Number.isNaN(parsed) ? undefined : parsed
-    }
-    return undefined
+    const value = parseQueryFloat(raw[key])
+    return value === null ? undefined : value
   }
 
   const getList = (key: string): string[] | undefined => {
     const value = raw[key]
-
-    const toItems = (source: unknown): string[] => {
-      if (typeof source === 'string') {
-        return source
-          .split(',')
-          .map(item => item.trim())
-          .filter(Boolean)
-      }
-
-      if (Array.isArray(source)) {
-        return source
-          .map(item => (typeof item === 'string' ? item.trim() : ''))
-          .filter(Boolean)
-      }
-
-      return []
-    }
-
-    const items = toItems(value)
-    if (!items.length) {
+    if (value === undefined || value === null) {
       return undefined
     }
 
-    return Array.from(new Set(items))
+    const collected: string[] = []
+    const append = (input: unknown) => {
+      const extracted = extractQueryString(input)
+      if (!extracted) {
+        return
+      }
+
+      extracted
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item.length > 0)
+        .forEach(item => {
+          collected.push(item)
+        })
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(append)
+    } else {
+      append(value)
+    }
+
+    if (!collected.length) {
+      return undefined
+    }
+
+    return Array.from(new Set(collected))
   }
 
   const filters: CatalogQuery = {}
@@ -140,9 +184,9 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.search = search
   }
 
-  const ownedOnly = getString('ownedOnly')
+  const ownedOnly = getBoolean('ownedOnly')
   if (ownedOnly) {
-    filters.ownedOnly = ownedOnly.toLowerCase() === 'true'
+    filters.ownedOnly = ownedOnly
   }
 
   const vendor = getString('vendor')
@@ -181,27 +225,23 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
     filters.endYear = endYear
   }
 
-  const wellKnownOnly = raw['wellKnownOnly']
-  if (wellKnownOnly === 'true' || wellKnownOnly === '1' || wellKnownOnly === true) {
+  const wellKnownOnly = getBoolean('wellKnownOnly')
+  if (wellKnownOnly) {
     filters.wellKnownOnly = true
   }
 
-  const ransomwareOnly = raw['ransomwareOnly']
-  if (ransomwareOnly === 'true' || ransomwareOnly === '1' || ransomwareOnly === true) {
+  const ransomwareOnly = getBoolean('ransomwareOnly')
+  if (ransomwareOnly) {
     filters.ransomwareOnly = true
   }
 
-  const publicExploitOnly = raw['publicExploitOnly']
-  if (publicExploitOnly === 'true' || publicExploitOnly === '1' || publicExploitOnly === true) {
+  const publicExploitOnly = getBoolean('publicExploitOnly')
+  if (publicExploitOnly) {
     filters.publicExploitOnly = true
   }
 
-  const internetExposedOnly = raw['internetExposedOnly']
-  if (
-    internetExposedOnly === 'true' ||
-    internetExposedOnly === '1' ||
-    internetExposedOnly === true
-  ) {
+  const internetExposedOnly = getBoolean('internetExposedOnly')
+  if (internetExposedOnly) {
     filters.internetExposedOnly = true
   }
 
@@ -355,17 +395,16 @@ const buildConditions = (filters: CatalogQuery): Condition[] => {
   const conditions: Condition[] = []
 
   if (filters.search) {
-    const pattern = `%${filters.search.toLowerCase()}%`
-    conditions.push(
-      sql`(
-        lower(${ce.cveId}) LIKE ${pattern}
-        OR lower(${ce.vendor}) LIKE ${pattern}
-        OR lower(${ce.product}) LIKE ${pattern}
-        OR lower(${ce.vulnerabilityName}) LIKE ${pattern}
-        OR lower(${ce.description}) LIKE ${pattern}
-        OR lower(${ce.aliases}) LIKE ${pattern}
-      )`
-    )
+    const query = buildFtsQuery(filters.search.toLowerCase())
+    if (query) {
+      conditions.push(
+        sql`${ce.cveId} IN (
+          SELECT ${catalogEntriesFtsTable.cveId}
+          FROM ${catalogEntriesFtsTable}
+          WHERE ${sql.identifier(catalogEntriesFtsTableName)} MATCH ${query}
+        )`
+      )
+    }
   }
 
   const sourceList = filters.sources ?? (filters.source ? [filters.source] : [])
@@ -698,14 +737,17 @@ const queryDimensionCounts = async (
 }
 
 const TOP_COUNT_LIMIT = 15
+const HEATMAP_LIMIT = 60
 
 const queryVendorCounts = async (
   db: DrizzleDatabase,
-  filters: CatalogQuery
+  filters: CatalogQuery,
+  options: { limit?: number } = {}
 ): Promise<KevCountDatum[]> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
+  const limit = Math.max(1, options.limit ?? TOP_COUNT_LIMIT)
 
   let filteredBase = db.select({ vendorKey: ce.vendorKey, vendor: ce.vendor }).from(ce)
   if (whereCondition) {
@@ -727,7 +769,7 @@ const queryVendorCounts = async (
     .groupBy(filtered.vendorKey)
     .having(sql`max(${filtered.vendor}) != 'Other'`)
     .orderBy(sql`count(*) DESC`, sql`max(${filtered.vendor}) ASC`)
-    .limit(TOP_COUNT_LIMIT)
+    .limit(limit)
     .all()
 
   return rows.map(row => ({
@@ -739,11 +781,13 @@ const queryVendorCounts = async (
 
 const queryProductCounts = async (
   db: DrizzleDatabase,
-  filters: CatalogQuery
+  filters: CatalogQuery,
+  options: { limit?: number } = {}
 ): Promise<KevCountDatum[]> => {
   const ce = tables.catalogEntries
   const conditions = buildConditions(filters)
   const whereCondition = combineConditions(conditions)
+  const limit = Math.max(1, options.limit ?? TOP_COUNT_LIMIT)
 
   let filteredBase = db
     .select({
@@ -774,7 +818,7 @@ const queryProductCounts = async (
     .groupBy(filtered.productKey)
     .having(sql`max(${filtered.product}) != 'Other'`)
     .orderBy(sql`count(*) DESC`, sql`max(${filtered.product}) ASC`)
-    .limit(TOP_COUNT_LIMIT)
+    .limit(limit)
     .all()
 
   return rows.map(row => ({
@@ -1026,7 +1070,9 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
         vendor: [],
         product: []
       },
+      heatmap: createEmptyHeatmap(),
       catalogBounds: await getCatalogBounds(db, metadata),
+      timeline: createEmptyTimeline(),
       totalEntries: 0,
       totalEntriesWithoutYear: 0,
       entryLimit,
@@ -1041,13 +1087,22 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     ? await countEntries(db, omitFilters(filters, ['startYear', 'endYear']))
     : totalEntries
 
-  const [domainCounts, exploitCounts, vulnerabilityCounts, vendorCounts, productCounts] = await Promise.all([
+  const maxVendorProductLimit = Math.max(TOP_COUNT_LIMIT, HEATMAP_LIMIT)
+
+  const [domainCounts, exploitCounts, vulnerabilityCounts, vendorCountResults, productCountResults] = await Promise.all([
     queryDimensionCounts(db, omitFilters(filters, ['domain']), 'domain'),
     queryDimensionCounts(db, omitFilters(filters, ['exploit']), 'exploit'),
     queryDimensionCounts(db, omitFilters(filters, ['vulnerability']), 'vulnerability'),
-    queryVendorCounts(db, omitFilters(filters, ['vendor', 'vendorKeys'])),
-    queryProductCounts(db, omitFilters(filters, ['product', 'productKeys']))
+    queryVendorCounts(db, omitFilters(filters, ['vendor', 'vendorKeys']), { limit: maxVendorProductLimit }),
+    queryProductCounts(db, omitFilters(filters, ['product', 'productKeys']), { limit: maxVendorProductLimit })
   ])
+
+  const vendorCounts = vendorCountResults.slice(0, TOP_COUNT_LIMIT)
+  const productCounts = productCountResults.slice(0, TOP_COUNT_LIMIT)
+  const heatmap = {
+    vendor: vendorCountResults.slice(0, HEATMAP_LIMIT),
+    product: productCountResults.slice(0, HEATMAP_LIMIT)
+  }
 
   const catalogBounds = await getCatalogBounds(db, metadata)
   const updatedAt = await computeUpdatedAt(db, metadata)
@@ -1069,7 +1124,9 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
       vendor: vendorCounts,
       product: productCounts
     },
+    heatmap,
     catalogBounds,
+    timeline: buildTimeline(entries),
     totalEntries,
     totalEntriesWithoutYear,
     entryLimit,

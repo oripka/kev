@@ -71,6 +71,15 @@ export const catalogEntries = sqliteTable(
   })
 )
 
+export const catalogEntriesFts = sqliteTable('catalog_entries_fts', {
+  cveId: text('cve_id'),
+  vendor: text('vendor'),
+  product: text('product'),
+  vulnerabilityName: text('vulnerability_name'),
+  description: text('description'),
+  aliases: text('aliases')
+})
+
 export const catalogEntryDimensions = sqliteTable(
   'catalog_entry_dimensions',
   {

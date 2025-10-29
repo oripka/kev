@@ -847,8 +847,18 @@ export const rebuildCatalog = async (
 
   await db.delete(tables.catalogEntryDimensions).run()
   await db.delete(tables.catalogEntries).run()
+  await db.delete(tables.catalogEntriesFts).run()
 
   options.onStart?.(catalogEntries.length)
+
+  const ftsRecords: Array<{
+    cveId: string
+    vendor: string
+    product: string
+    vulnerabilityName: string
+    description: string
+    aliases: string
+  }> = []
 
   for (let index = 0; index < catalogEntries.length; index += 1) {
     const entry = catalogEntries[index]
@@ -935,8 +945,25 @@ export const rebuildCatalog = async (
       await db.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
     }
 
+    ftsRecords.push({
+      cveId: entry.cveId,
+      vendor: entry.vendor,
+      product: entry.product,
+      vulnerabilityName: entry.vulnerabilityName,
+      description: entry.description,
+      aliases: entry.aliases.join(' ')
+    })
+
     if ((index + 1) % 25 === 0 || index + 1 === catalogEntries.length) {
       options.onProgress?.(index + 1, catalogEntries.length)
+    }
+  }
+
+  if (ftsRecords.length) {
+    const chunkSize = 200
+    for (let offset = 0; offset < ftsRecords.length; offset += chunkSize) {
+      const batch = ftsRecords.slice(offset, offset + chunkSize)
+      await db.insert(tables.catalogEntriesFts).values(batch).run()
     }
   }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { KevEntrySummary } from "~/types";
+import type { KevHeatmapGroups } from "~/types";
 import type { QuickFilterUpdate } from "~/types/dashboard";
 
 type HeatmapGroup = "vendor" | "product";
@@ -13,7 +13,7 @@ type HeatmapItem = {
   update: QuickFilterUpdate | null;
 };
 
-const props = defineProps<{ entries: KevEntrySummary[] }>();
+const props = defineProps<{ heatmap: KevHeatmapGroups }>();
 
 const emit = defineEmits<{ (event: "quick-filter", payload: QuickFilterUpdate): void }>();
 
@@ -41,75 +41,61 @@ const groupOptions: Array<{ label: string; value: HeatmapGroup; description: str
 const MAX_VISIBLE_ITEMS = 60;
 
 const groupedItems = computed<HeatmapItem[]>(() => {
-  const collection = new Map<string, HeatmapItem>();
   const mode = groupBy.value;
+  const source = mode === "vendor" ? props.heatmap.vendor : props.heatmap.product;
 
-  for (const entry of props.entries) {
-    if (mode === "vendor") {
-      const vendorKey = entry.vendorKey ?? "__unknown-vendor";
-      const label = entry.vendor?.trim() ? entry.vendor : "Unknown vendor";
-      const id = vendorKey;
+  const items = source
+    .filter((item) => item.count > 0)
+    .map((item) => {
+      if (mode === "vendor") {
+        const key = item.key?.trim();
+        const label = item.name?.trim() ? item.name : "Unknown vendor";
 
-      let item = collection.get(id);
-      if (!item) {
-        item = {
-          id,
+        return {
+          id: key ?? `vendor::${label.toLowerCase()}`,
           label,
-          count: 0,
-          update: entry.vendorKey
+          count: item.count,
+          update: key
             ? {
                 filters: {
-                  vendor: entry.vendorKey,
+                  vendor: key,
                   product: null,
                 },
               }
             : null,
         } satisfies HeatmapItem;
-        collection.set(id, item);
       }
 
-      item.count += 1;
-      continue;
-    }
+      const productKey = item.key?.trim();
+      const productLabel = item.name?.trim() ? item.name : "Unknown product";
+      const vendorKey = item.vendorKey?.trim() ?? null;
+      const vendorName = item.vendorName?.trim();
 
-    const vendorKey = entry.vendorKey ?? "__unknown-vendor";
-    const productLabel = entry.product?.trim() ? entry.product : "Unknown product";
-    const id = entry.productKey ?? `${vendorKey}::${productLabel.toLowerCase()}`;
-    const description = entry.vendor?.trim() ?? undefined;
-
-    let item = collection.get(id);
-    if (!item) {
-      item = {
-        id,
+      return {
+        id: productKey ?? `${vendorKey ?? "unknown"}::${productLabel.toLowerCase()}`,
         label: productLabel,
-        description,
-        count: 0,
-        update: entry.productKey
+        description: vendorName && vendorName.length ? vendorName : undefined,
+        count: item.count,
+        update: productKey
           ? {
               filters: {
-                product: entry.productKey,
-                vendor: entry.vendorKey ?? null,
+                product: productKey,
+                vendor: vendorKey,
               },
             }
           : null,
       } satisfies HeatmapItem;
-      collection.set(id, item);
-    }
+    });
 
-    if (!item.description && description) {
-      item.description = description;
-    }
-
-    item.count += 1;
-  }
-
-  return Array.from(collection.values()).sort((a, b) => {
+  items.sort((a, b) => {
     if (b.count !== a.count) {
       return b.count - a.count;
     }
 
     return a.label.localeCompare(b.label);
   });
+
+  return items;
 });
 
 const visibleItems = computed(() => groupedItems.value.slice(0, MAX_VISIBLE_ITEMS));

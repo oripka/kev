@@ -1,24 +1,14 @@
 <script setup lang="ts">
-import {
-  eachDayOfInterval,
-  eachMonthOfInterval,
-  eachWeekOfInterval,
-  format,
-  isWithinInterval,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-  startOfWeek
-} from 'date-fns'
+import { parseISO } from 'date-fns'
 import { useElementSize } from '@vueuse/core'
-import { computed, ref, watch } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import { VisArea, VisAxis, VisCrosshair, VisLine, VisTooltip, VisXYContainer } from '@unovis/vue'
-import type { KevEntrySummary, Period, Range } from '~/types'
+import type { KevTimelineBucket, Period, Range } from '~/types'
 
 type DataRecord = { date: Date; amount: number }
 
 type Props = {
-  entries: KevEntrySummary[]
+  buckets: KevTimelineBucket[]
   period: Period
   range: Range | null
   height?: string
@@ -30,82 +20,22 @@ const props = defineProps<Props>()
 const containerRef = useTemplateRef<HTMLElement | null>('containerRef')
 const { width } = useElementSize(containerRef)
 
-const data = ref<DataRecord[]>([])
+const data = computed<DataRecord[]>(() => {
+  const records = props.buckets
+    .map((bucket) => {
+      const date = parseISO(bucket.date)
+      if (Number.isNaN(date.getTime())) {
+        return null
+      }
 
-const weekOptions = { weekStartsOn: 1 as const }
-
-const generators: Record<Period, typeof eachDayOfInterval> = {
-  daily: eachDayOfInterval,
-  weekly: eachWeekOfInterval as unknown as typeof eachDayOfInterval,
-  monthly: eachMonthOfInterval as unknown as typeof eachDayOfInterval
-}
-
-const aligners: Record<Period, (date: Date) => Date> = {
-  daily: startOfDay,
-  weekly: date => startOfWeek(date, weekOptions),
-  monthly: startOfMonth
-}
-
-const keyFormats: Record<Period, string> = {
-  daily: 'yyyy-MM-dd',
-  weekly: 'yyyy-MM-dd',
-  monthly: 'yyyy-MM'
-}
-
-watch(
-  () => [props.period, props.range?.start?.getTime() ?? null, props.range?.end?.getTime() ?? null, props.entries],
-  () => {
-    const { range } = props
-    if (!range?.start || !range?.end) {
-      data.value = []
-      return
-    }
-
-    const generator = generators[props.period]
-    const align = aligners[props.period]
-    const keyFormat = keyFormats[props.period]
-
-    const interval = { start: range.start, end: range.end }
-    const dates = props.period === 'weekly'
-      ? (eachWeekOfInterval(interval, weekOptions) as Date[])
-      : generator(interval)
-
-    const buckets = dates.map(date => ({ date, amount: 0 }))
-    const indexByKey = new Map<string, number>()
-
-    buckets.forEach((bucket, index) => {
-      indexByKey.set(format(align(bucket.date), keyFormat), index)
+      return { date, amount: bucket.count }
     })
+    .filter((item): item is DataRecord => item !== null)
 
-    for (const entry of props.entries) {
-      const parsed = parseISO(entry.dateAdded)
-      if (Number.isNaN(parsed.getTime())) {
-        continue
-      }
+  records.sort((a, b) => a.date.getTime() - b.date.getTime())
 
-      if (!isWithinInterval(parsed, interval)) {
-        continue
-      }
-
-      const aligned = align(parsed)
-      const key = format(aligned, keyFormat)
-      const index = indexByKey.get(key)
-      if (index === undefined) {
-        continue
-      }
-
-      const bucket = buckets[index]
-      if (!bucket) {
-        continue
-      }
-
-      bucket.amount += 1
-    }
-
-    data.value = buckets
-  },
-  { immediate: true }
-)
+  return records
+})
 
 const formatNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format
 

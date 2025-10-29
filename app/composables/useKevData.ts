@@ -14,7 +14,9 @@ import type {
   ImportTaskKey,
   KevCountDatum,
   KevEntrySummary,
+  KevHeatmapGroups,
   KevResponse,
+  KevTimeline,
   MarketOverview
 } from '~/types'
 import { lookupCveName } from '~/utils/cveToNameMap'
@@ -88,11 +90,13 @@ type UseKevDataResult = {
     vendor: KevCountDatum[]
     product: KevCountDatum[]
   }>
+  heatmap: ComputedRef<KevHeatmapGroups>
   totalEntries: ComputedRef<number>
   totalEntriesWithoutYear: ComputedRef<number>
   entryLimit: ComputedRef<number>
   updatedAt: ComputedRef<string>
   catalogBounds: ComputedRef<{ earliest: string | null; latest: string | null }>
+  timeline: ComputedRef<KevTimeline>
   market: ComputedRef<MarketOverview>
   pending: Ref<boolean>
   error: Ref<Error | null>
@@ -118,6 +122,24 @@ const createDefaultCounts = (): DefaultCounts => ({
   product: []
 })
 
+type DefaultHeatmap = KevResponse['heatmap']
+
+const createDefaultHeatmap = (): DefaultHeatmap => ({
+  vendor: [],
+  product: []
+})
+
+type DefaultTimeline = KevResponse['timeline']
+
+const createDefaultTimeline = (): DefaultTimeline => ({
+  range: null,
+  buckets: {
+    daily: [],
+    weekly: [],
+    monthly: []
+  }
+})
+
 const createDefaultMarketOverview = (): MarketOverview => ({
   priceBounds: { minRewardUsd: null, maxRewardUsd: null },
   filteredPriceBounds: { minRewardUsd: null, maxRewardUsd: null },
@@ -126,7 +148,7 @@ const createDefaultMarketOverview = (): MarketOverview => ({
   categoryCounts: []
 })
 
-const DEFAULT_ENTRY_LIMIT = 250
+const DEFAULT_ENTRY_LIMIT = 25
 
 const normaliseQuery = (source?: KevQueryParams): NormalisedQuery => {
   if (!source) {
@@ -183,7 +205,9 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
       updatedAt: '',
       entries: [],
       counts: createDefaultCounts(),
+      heatmap: createDefaultHeatmap(),
       catalogBounds: { earliest: null, latest: null },
+      timeline: createDefaultTimeline(),
       totalEntries: 0,
       totalEntriesWithoutYear: 0,
       entryLimit: DEFAULT_ENTRY_LIMIT,
@@ -323,11 +347,13 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
 
   const entries = computed(() => data.value?.entries ?? [])
   const counts = computed(() => data.value?.counts ?? createDefaultCounts())
+  const heatmap = computed(() => data.value?.heatmap ?? createDefaultHeatmap())
   const totalEntries = computed(() => data.value?.totalEntries ?? 0)
   const totalEntriesWithoutYear = computed(() => data.value?.totalEntriesWithoutYear ?? 0)
   const entryLimit = computed(() => data.value?.entryLimit ?? DEFAULT_ENTRY_LIMIT)
   const updatedAt = computed(() => data.value?.updatedAt ?? '')
   const catalogBounds = computed(() => data.value?.catalogBounds ?? { earliest: null, latest: null })
+  const timeline = computed(() => data.value?.timeline ?? createDefaultTimeline())
   const market = computed(() => data.value?.market ?? createDefaultMarketOverview())
 
   const isWellKnownCve = (rawCve: string) => Boolean(lookupCveName(rawCve))
@@ -353,11 +379,13 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
   return {
     entries,
     counts,
+    heatmap,
     totalEntries,
     totalEntriesWithoutYear,
     entryLimit,
     updatedAt,
     catalogBounds,
+    timeline,
     market,
     pending,
     error,

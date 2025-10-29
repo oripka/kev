@@ -45,6 +45,7 @@ const EVENT_LIMIT = 50
 type InternalImportProgressState = ImportProgressState & {
   eventCounter: number
   lastTaskMessages: Partial<Record<ImportTaskKey, string>>
+  lastTaskProgress: Partial<Record<ImportTaskKey, { completed: number; total: number }>>
 }
 
 const createTaskState = (
@@ -90,7 +91,8 @@ const defaultState: ImportProgressState = {
 const createInternalState = (): InternalImportProgressState => ({
   ...defaultState,
   eventCounter: 0,
-  lastTaskMessages: {}
+  lastTaskMessages: {},
+  lastTaskProgress: {}
 })
 
 declare global {
@@ -226,6 +228,23 @@ const resetTaskMessages = () => {
   state.lastTaskMessages = {}
 }
 
+const rememberTaskProgress = (key: ImportTaskKey, completed: number, total: number) => {
+  const state = getState()
+  state.lastTaskProgress[key] = { completed, total }
+}
+
+const forgetTaskProgress = (key: ImportTaskKey) => {
+  const state = getState()
+  if (state.lastTaskProgress[key]) {
+    delete state.lastTaskProgress[key]
+  }
+}
+
+const resetTaskProgress = () => {
+  const state = getState()
+  state.lastTaskProgress = {}
+}
+
 const shouldLogTaskMessage = (key: ImportTaskKey, message?: string, force = false) => {
   const state = getState()
   const trimmed = message?.trim() ?? ''
@@ -239,11 +258,41 @@ const shouldLogTaskMessage = (key: ImportTaskKey, message?: string, force = fals
   return trimmed.length > 0 || force
 }
 
+const shouldEmitTaskProgress = (key: ImportTaskKey, completed: number, total: number) => {
+  if (total <= 0) {
+    forgetTaskProgress(key)
+    return true
+  }
+
+  const state = getState()
+  const previous = state.lastTaskProgress[key]
+  const isFinal = completed >= total
+  const interval = Math.max(1, Math.ceil(total / 50))
+
+  rememberTaskProgress(key, completed, total)
+
+  if (!previous) {
+    return true
+  }
+
+  if (completed === 0) {
+    return true
+  }
+
+  if (isFinal) {
+    return true
+  }
+
+  const progressDelta = completed - previous.completed
+  return progressDelta >= interval
+}
+
 export const startImportProgress = (
   message: string,
   sources: ImportTaskKey[] = TASK_ORDER
 ) => {
   resetTaskMessages()
+  resetTaskProgress()
   const state = getState()
   state.events = []
   state.eventCounter = 0
@@ -282,6 +331,7 @@ export const updateImportProgress = (
 
 export const markTaskPending = (key: ImportTaskKey, message?: string) => {
   updateTask(key, { status: 'pending', message: message ?? '', completed: 0, total: 0 })
+  forgetTaskProgress(key)
   if (message) {
     rememberTaskMessage(key, null)
     pushEvent({ message, status: 'info', taskKey: key, phase: getState().phase })
@@ -296,6 +346,13 @@ export const markTaskRunning = (key: ImportTaskKey, message?: string) => {
     completed: existing?.completed ?? 0,
     total: existing?.total ?? 0
   })
+  const existingCompleted = existing?.completed ?? 0
+  const existingTotal = existing?.total ?? 0
+  if (existingCompleted === 0) {
+    forgetTaskProgress(key)
+  } else {
+    rememberTaskProgress(key, existingCompleted, existingTotal)
+  }
   const logMessage = message ?? existing?.message ?? describeTaskKey(key)
   if (shouldLogTaskMessage(key, logMessage, true)) {
     pushEvent({ message: logMessage, status: 'running', taskKey: key, phase: getState().phase })
@@ -315,6 +372,9 @@ export const markTaskProgress = (
     total,
     message: message ?? existing?.message ?? ''
   })
+  if (!shouldEmitTaskProgress(key, completed, total)) {
+    return
+  }
   if (shouldLogTaskMessage(key, message)) {
     pushEvent({ message: message ?? '', status: 'running', taskKey: key, phase: getState().phase })
   }
@@ -329,6 +389,7 @@ export const markTaskSkipped = (key: ImportTaskKey, message?: string) => {
   })
   const eventMessage = message ?? 'Skipped this run'
   rememberTaskMessage(key, null)
+  forgetTaskProgress(key)
   pushEvent({ message: eventMessage, status: 'skipped', taskKey: key, phase: getState().phase })
 }
 
@@ -342,6 +403,7 @@ export const markTaskComplete = (key: ImportTaskKey, message?: string) => {
   })
   const eventMessage = message ?? existing?.message ?? `Completed ${describeTaskKey(key)}`
   rememberTaskMessage(key, null)
+  forgetTaskProgress(key)
   pushEvent({ message: eventMessage, status: 'complete', taskKey: key, phase: getState().phase })
 }
 
@@ -353,6 +415,7 @@ export const markTaskError = (key: ImportTaskKey, message?: string) => {
   })
   const eventMessage = message ?? existing?.message ?? `Error in ${describeTaskKey(key)}`
   rememberTaskMessage(key, null)
+  forgetTaskProgress(key)
   pushEvent({ message: eventMessage, status: 'error', taskKey: key, phase: getState().phase })
 }
 

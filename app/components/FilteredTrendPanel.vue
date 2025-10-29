@@ -1,41 +1,26 @@
 <script setup lang="ts">
 import { differenceInDays, parseISO } from 'date-fns'
 import { computed } from 'vue'
-import type { KevEntrySummary, Period, Range } from '~/types'
+import type { KevTimeline, Period, Range } from '~/types'
 import TimelineChart from './TimelineChart.vue'
 
-const props = defineProps<{ entries: KevEntrySummary[] }>()
+const props = defineProps<{ timeline: KevTimeline }>()
 
 const show = defineModel<boolean>({ default: false })
 
 const validRange = computed<Range | null>(() => {
-  if (!props.entries.length) {
+  const range = props.timeline.range
+  if (!range) {
     return null
   }
 
-  let start: number | null = null
-  let end: number | null = null
-
-  for (const entry of props.entries) {
-    const parsed = parseISO(entry.dateAdded)
-    const timestamp = parsed.getTime()
-    if (Number.isNaN(timestamp)) {
-      continue
-    }
-
-    if (start === null || timestamp < start) {
-      start = timestamp
-    }
-    if (end === null || timestamp > end) {
-      end = timestamp
-    }
-  }
-
-  if (start === null || end === null) {
+  const start = parseISO(range.start)
+  const end = parseISO(range.end)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     return null
   }
 
-  return { start: new Date(start), end: new Date(end) }
+  return { start, end }
 })
 
 const period = computed<Period>(() => {
@@ -54,14 +39,18 @@ const period = computed<Period>(() => {
   return 'monthly'
 })
 
-const totalEntries = computed(() => props.entries.length)
+const periodBuckets = computed(() => props.timeline.buckets[period.value] ?? [])
+
+const totalEntries = computed(() =>
+  periodBuckets.value.reduce((sum, bucket) => sum + bucket.count, 0)
+)
 
 const periodLabel = computed(() => {
   const value = period.value
   return value === 'daily' ? 'Daily' : value === 'weekly' ? 'Weekly' : 'Monthly'
 })
 
-const hasData = computed(() => Boolean(validRange.value) && totalEntries.value > 0)
+const hasData = computed(() => Boolean(validRange.value) && periodBuckets.value.length > 0)
 
 const totalFormatter = new Intl.NumberFormat('en-US')
 </script>
@@ -97,7 +86,7 @@ const totalFormatter = new Intl.NumberFormat('en-US')
         <p class="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           {{ periodLabel }} cadence · {{ totalFormatter.format(totalEntries) }} CVEs
         </p>
-        <TimelineChart :entries="props.entries" :period="period" :range="validRange" />
+        <TimelineChart :buckets="periodBuckets" :period="period" :range="validRange" />
       </div>
       <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
         Not enough timeline information is available for the current selection.
