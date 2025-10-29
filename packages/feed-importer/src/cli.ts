@@ -11,7 +11,7 @@ import {
 import type { CatalogImportMode, CatalogImportOptions } from './runCatalogImport'
 import type { ImportTaskKey } from '~/types'
 import type { ImportStrategy } from 'server/utils/import-types'
-import { useDrizzle, resetDatabase } from 'server/database/client'
+import { useDrizzle, closeDatabase } from 'server/database/client'
 import { getImportProgress } from 'server/utils/import-progress'
 import { logger } from './logger'
 
@@ -324,7 +324,7 @@ const main = async () => {
     process.exitCode = 1
   } finally {
     reporter.stop()
-    resetDatabase()
+    closeDatabase()
   }
 }
 

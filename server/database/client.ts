@@ -152,7 +152,7 @@ export const useDrizzle = (): DrizzleDatabase => initialiseDrizzle()
 
 export const tables = schema
 
-export const resetDatabase = () => {
+export const closeDatabase = () => {
   if (sqliteInstance) {
     sqliteInstance.close()
     sqliteInstance = null
@@ -160,6 +160,10 @@ export const resetDatabase = () => {
 
   drizzleInstance = null
   migrationsApplied = false
+}
+
+export const resetDatabase = () => {
+  closeDatabase()
 
   const databasePath = join(process.cwd(), 'data', DB_FILENAME)
   if (existsSync(databasePath)) {
