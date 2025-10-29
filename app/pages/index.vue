@@ -3513,16 +3513,6 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
             truncateDescription(row.original.description)
           ),
       },
-      {
-        id: "vendor",
-        header: "Vendor",
-        cell: ({ row }) => row.original.vendor,
-      },
-      {
-        id: "product",
-        header: "Product",
-        cell: ({ row }) => row.original.product,
-      },
     ];
   }
 
@@ -3583,125 +3573,127 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         const isTracked =
           trackedProductsReady.value &&
           trackedProductSet.value.has(entry.productKey);
-        const hasServerSideRce = entry.exploitLayers.some((layer) =>
-          layer.startsWith("RCE · Server-side")
-        );
-        const hasTrivialServerSide = entry.exploitLayers.includes(
-          "RCE · Server-side Non-memory"
-        );
+        // const hasServerSideRce = entry.exploitLayers.some((layer) =>
+        //   layer.startsWith("RCE · Server-side")
+        // );
+        // const hasTrivialServerSide = entry.exploitLayers.includes(
+        //   "RCE · Server-side Non-memory"
+        // );
 
-        for (const source of entry.sources) {
-          const meta = sourceBadgeMap[source];
-          const label = meta?.label ?? source.toUpperCase();
-          const color = meta?.color ?? "neutral";
-          badgeRowChildren.push(
-            createBadgeButton(
-              label,
-              color,
-              () => applyQuickFilters({ source }),
-              {
-                ariaLabel: `Filter catalog by ${label} source`,
-                isActive: isSourceSelected(source),
-              }
-            )
-          );
-        }
 
-        if (entry.vendorKey && entry.vendor) {
-          badgeRowChildren.push(
-            createBadgeButton(
-              entry.vendor,
-              "primary",
-              () =>
-                applyQuickFilters({
-                  filters: { vendor: entry.vendorKey },
-                }),
-              {
-                ariaLabel: `Filter by vendor ${entry.vendor}`,
-                isActive: filters.vendor === entry.vendorKey,
-              }
-            )
-          );
-        }
+        // for (const source of entry.sources) {
+        //   const meta = sourceBadgeMap[source];
+        //   const label = meta?.label ?? source.toUpperCase();
+        //   const color = meta?.color ?? "neutral";
+        //   badgeRowChildren.push(
+        //     createBadgeButton(
+        //       label,
+        //       color,
+        //       () => applyQuickFilters({ source }),
+        //       {
+        //         ariaLabel: `Filter catalog by ${label} source`,
+        //         isActive: isSourceSelected(source),
+        //       }
+        //     )
+        //   );
+        // }
 
-        if (entry.productKey && entry.product) {
-          badgeRowChildren.push(
-            createBadgeButton(
-              entry.product,
-              "secondary",
-              () =>
-                applyQuickFilters({
-                  filters: { product: entry.productKey },
-                }),
-              {
-                ariaLabel: `Filter by product ${entry.product}`,
-                isActive: filters.product === entry.productKey,
-              }
-            )
-          );
-        }
+        // if (entry.vendorKey && entry.vendor) {
+        //   badgeRowChildren.push(
+        //     createBadgeButton(
+        //       entry.vendor,
+        //       "primary",
+        //       () =>
+        //         applyQuickFilters({
+        //           filters: { vendor: entry.vendorKey },
+        //         }),
+        //       {
+        //         ariaLabel: `Filter by vendor ${entry.vendor}`,
+        //         isActive: filters.vendor === entry.vendorKey,
+        //       }
+        //     )
+        //   );
+        // }
 
-        if (wellKnownLabel) {
-          badgeRowChildren.push(
-            h(
-              UBadge,
-              {
-                color: "primary",
-                variant: "soft",
-                class: "shrink-0 text-xs font-semibold",
-              },
-              () => wellKnownLabel
-            )
-          );
-        }
+        // if (entry.productKey && entry.product) {
+        //   badgeRowChildren.push(
+        //     createBadgeButton(
+        //       entry.product,
+        //       "secondary",
+        //       () =>
+        //         applyQuickFilters({
+        //           filters: { product: entry.productKey },
+        //         }),
+        //       {
+        //         ariaLabel: `Filter by product ${entry.product}`,
+        //         isActive: filters.product === entry.productKey,
+        //       }
+        //     )
+        //   );
+        // }
 
-        if (isTracked) {
-          badgeRowChildren.push(
-            h(
-              UBadge,
-              {
-                color: "warning",
-                variant: "soft",
-                class: "shrink-0 text-xs font-semibold",
-              },
-              () => "My software"
-            )
-          );
-        }
 
-        if (hasServerSideRce) {
-          badgeRowChildren.push(
-            h(
-              UBadge,
-              {
-                color: "error",
-                variant: "soft",
-                class: "shrink-0 text-xs font-semibold",
-              },
-              () =>
-                hasTrivialServerSide
-                  ? "Server-side RCE · Non-memory"
-                  : "Server-side RCE"
-            )
-          );
-        }
+        // if (wellKnownLabel) {
+        //   badgeRowChildren.push(
+        //     h(
+        //       UBadge,
+        //       {
+        //         color: "primary",
+        //         variant: "soft",
+        //         class: "shrink-0 text-xs font-semibold",
+        //       },
+        //       () => wellKnownLabel
+        //     )
+        //   );
+        // }
+
+        // if (isTracked) {
+        //   badgeRowChildren.push(
+        //     h(
+        //       UBadge,
+        //       {
+        //         color: "warning",
+        //         variant: "soft",
+        //         class: "shrink-0 text-xs font-semibold",
+        //       },
+        //       () => "My software"
+        //     )
+        //   );
+        // }
+
+        // if (hasServerSideRce) {
+        //   badgeRowChildren.push(
+        //     h(
+        //       UBadge,
+        //       {
+        //         color: "error",
+        //         variant: "soft",
+        //         class: "shrink-0 text-xs font-semibold",
+        //       },
+        //       () =>
+        //         hasTrivialServerSide
+        //           ? "Server-side RCE · Non-memory"
+        //           : "Server-side RCE"
+        //     )
+        //   );
+        // }
 
         const children: Array<ReturnType<typeof h>> = [];
 
-        if (recencyMeta) {
-          children.push(
-            h(
-              UBadge,
-              {
-                color: recencyMeta.color,
-                variant: "soft",
-                class:
-                  "w-fit text-[11px] font-semibold uppercase tracking-wide",
-              },
-              () => recencyMeta.label
-            )
-          );
-        }
+        // if (recencyMeta) {
+        //   children.push(
+        //     h(
+        //       UBadge,
+        //       {
+        //         color: recencyMeta.color,
+        //         variant: "soft",
+        //         class:
+        //           "w-fit text-[11px] font-semibold uppercase tracking-wide",
+        //       },
+        //       () => recencyMeta.label
+        //     )
+        //   );
+        // }
 
         children.push(
           h(
@@ -3715,31 +3707,31 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           )
         );
 
-        if (badgeRowChildren.length) {
-          children.push(
-            h(
-              "div",
-              {
-                class:
-                  "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400",
-              },
-              badgeRowChildren
-            )
-          );
-        }
+        // if (badgeRowChildren.length) {
+        //   children.push(
+        //     h(
+        //       "div",
+        //       {
+        //         class:
+        //           "flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400",
+        //       },
+        //       badgeRowChildren
+        //     )
+        //   );
+        // }
 
-        children.push(
-          h(
-            "p",
-            {
-              class:
-                "text-sm text-neutral-500 dark:text-neutral-400 max-w-3xl whitespace-normal break-words text-pretty leading-relaxed",
-              title:
-                fullDescription !== description ? fullDescription : undefined,
-            },
-            description
-          )
-        );
+        // children.push(
+        //   h(
+        //     "p",
+        //     {
+        //       class:
+        //         "text-sm text-neutral-500 dark:text-neutral-400 max-w-3xl whitespace-normal break-words text-pretty leading-relaxed",
+        //       title:
+        //         fullDescription !== description ? fullDescription : undefined,
+        //     },
+        //     description
+        //   )
+        // );
 
         return h("div", { class: "space-y-2" }, children);
       },
@@ -3844,7 +3836,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               "—"
             );
 
-        return h("div", { class: "flex flex-col gap-1" }, [cvssNode, epssNode]);
+        return h("div", { class: "flex  gap-2" }, [cvssNode, epssNode]);
       },
     },
     {
@@ -3880,7 +3872,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
         const sectionNodes = sections
           .filter((section) => section.values.length)
           .map((section) =>
-            h("div", { class: "flex flex-col gap-1" }, [
+            h("div", { class: "flex flex-wrap gap-1" }, [
               h(
                 "div",
                 { class: "flex flex-wrap gap-2" },
@@ -3912,7 +3904,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           );
         }
 
-        return h("div", { class: "flex flex-col gap-3" }, sectionNodes);
+        return h("div", { class: "flex flex-wrap gap-3" }, sectionNodes);
       },
     },
   ];
