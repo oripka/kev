@@ -1053,7 +1053,12 @@ export const getMarketSignalsForProducts = async (
     )
   )
 
-  const productKeyChunks = chunkArray(keys, SQLITE_MAX_VARIABLE_NUMBER - 1)
+  const extraVariableCount = programTypeFilter.length
+  const productKeyChunkSize = Math.max(
+    1,
+    SQLITE_MAX_VARIABLE_NUMBER - Math.max(extraVariableCount, 1)
+  )
+  const productKeyChunks = chunkArray(keys, productKeyChunkSize)
   const programCondition =
     programTypeFilter.length > 0 ? inArray(program.programType, programTypeFilter) : null
 
