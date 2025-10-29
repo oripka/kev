@@ -47,6 +47,29 @@ const DISABLE_POC_ENV_KEYS = [
   'NUXT_PUBLIC_DISABLE_GITHUB_POC_IMPORT'
 ] as const
 
+const HEAD_REQUEST_TIMEOUT_MS = 7000
+
+const fetchHeadSignature = async (url: string, timeoutMs = HEAD_REQUEST_TIMEOUT_MS): Promise<string | null> => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal })
+    if (!response.ok) {
+      return null
+    }
+    const etag = response.headers.get('etag')
+    const lastModified = response.headers.get('last-modified')
+    if (!etag && !lastModified) {
+      return null
+    }
+    return `${etag ?? ''}|${lastModified ?? ''}`
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 const isTruthyEnv = (value: string | undefined) =>
   typeof value === 'string' && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
 
@@ -278,13 +301,85 @@ export const importGithubPocCatalog = async (
       total: 0
     })
 
-    const metadata = await getMetadataMap(['poc.cachedAt', 'poc.totalCount'])
+    const metadata = await getMetadataMap(['poc.cachedAt', 'poc.totalCount', 'poc.sourceSignature'])
     const cacheInfo = await getCacheEntryInfo(CACHE_KEY)
     const cacheTimestamp = cacheInfo?.cachedAt.getTime() ?? null
     const metadataTimestamp = parseTimestamp(metadata['poc.cachedAt'])
     const cacheIsFresh =
       cacheTimestamp !== null && (allowStale || Date.now() - cacheTimestamp <= ttlMs)
     const cacheAlreadyProcessed = isSameTimestamp(cacheTimestamp, metadataTimestamp)
+    const previousSignature = metadata['poc.sourceSignature']
+    let pocSourceSignature: string | null = null
+
+    if (strategy === 'incremental' && !forceRefresh) {
+      const quickMessage = 'Performing quick GitHub PoC update check'
+      setImportPhase('fetchingPoc', {
+        message: quickMessage,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('poc', 0, 0, quickMessage)
+
+      pocSourceSignature = await fetchHeadSignature(SOURCE_URL)
+
+      if (pocSourceSignature && previousSignature && pocSourceSignature === previousSignature) {
+        const cachedAtIso =
+          typeof metadata['poc.cachedAt'] === 'string' && metadata['poc.cachedAt']
+            ? metadata['poc.cachedAt']
+            : cacheTimestamp
+              ? new Date(cacheTimestamp).toISOString()
+              : null
+        const totalCount = Number.parseInt(metadata['poc.totalCount'] ?? '0', 10) || 0
+        const importedAt = new Date().toISOString()
+        const skipMessage = 'GitHub PoC catalog already up to date (quick check)'
+
+        setImportPhase('fetchingPoc', {
+          message: skipMessage,
+          completed: 0,
+          total: 0
+        })
+        markTaskProgress('poc', 0, 0, skipMessage)
+        markTaskComplete('poc', skipMessage)
+
+        const metadataUpdates = [
+          setMetadataValue('poc.lastImportAt', importedAt),
+          setMetadataValue('poc.lastImportStrategy', 'incremental'),
+          setMetadataValue('poc.lastNewCount', '0'),
+          setMetadataValue('poc.lastUpdatedCount', '0'),
+          setMetadataValue('poc.lastSkippedCount', totalCount.toString()),
+          setMetadataValue('poc.lastRemovedCount', '0'),
+          setMetadataValue('poc.totalCount', totalCount.toString()),
+          setMetadataValue('poc.sourceSignature', pocSourceSignature)
+        ]
+
+        if (cachedAtIso) {
+          metadataUpdates.push(setMetadataValue('poc.cachedAt', cachedAtIso))
+        }
+
+        await Promise.all(metadataUpdates)
+
+        return {
+          imported: 0,
+          totalCount,
+          newCount: 0,
+          updatedCount: 0,
+          skippedCount: totalCount,
+          removedCount: 0,
+          strategy: 'incremental',
+          cachedAt: cachedAtIso
+        }
+      }
+      if (!pocSourceSignature) {
+        markTaskProgress('poc', 0, 0, 'Quick GitHub PoC check unavailable; continuing with cache evaluation')
+      }
+    }
+
+    setImportPhase('fetchingPoc', {
+      message: 'Checking GitHub PoC feed cache',
+      completed: 0,
+      total: 0
+    })
+    markTaskProgress('poc', 0, 0, 'Checking GitHub PoC feed cache')
 
     if (strategy === 'incremental' && !forceRefresh && cacheIsFresh && cacheAlreadyProcessed) {
       const cachedAtIso = cacheTimestamp ? new Date(cacheTimestamp).toISOString() : null
@@ -305,7 +400,8 @@ export const importGithubPocCatalog = async (
         setMetadataValue('poc.lastNewCount', '0'),
         setMetadataValue('poc.lastUpdatedCount', '0'),
         setMetadataValue('poc.lastSkippedCount', '0'),
-        setMetadataValue('poc.lastRemovedCount', '0')
+        setMetadataValue('poc.lastRemovedCount', '0'),
+        setMetadataValue('poc.sourceSignature', previousSignature ?? '')
       ]
 
       if (cachedAtIso) {
@@ -372,6 +468,15 @@ export const importGithubPocCatalog = async (
     const baseEntries = parsed.data
       .map(entry => toBaseEntry(entry, datasetTimestamp))
       .filter((entry): entry is KevBaseEntry => entry !== null)
+
+    if (!pocSourceSignature) {
+      pocSourceSignature = await fetchHeadSignature(SOURCE_URL)
+    }
+    if (!pocSourceSignature) {
+      pocSourceSignature = datasetTimestamp
+        ? `${datasetTimestamp}|${baseEntries.length}`
+        : `${baseEntries.length}`
+    }
 
     markTaskProgress(
       'poc',
@@ -528,7 +633,8 @@ export const importGithubPocCatalog = async (
         setMetadataValue('poc.lastUpdatedCount', '0'),
         setMetadataValue('poc.lastSkippedCount', '0'),
         setMetadataValue('poc.lastRemovedCount', '0'),
-        setMetadataValue('poc.lastImportStrategy', 'full')
+        setMetadataValue('poc.lastImportStrategy', 'full'),
+        setMetadataValue('poc.sourceSignature', pocSourceSignature ?? '')
       ])
       if (datasetTimestamp) {
         await setMetadataValue('poc.cachedAt', datasetTimestamp)
@@ -631,7 +737,8 @@ export const importGithubPocCatalog = async (
       setMetadataValue('poc.lastUpdatedCount', String(updatedRecords.length)),
       setMetadataValue('poc.lastSkippedCount', String(unchangedRecords.length)),
       setMetadataValue('poc.lastRemovedCount', String(removedIds.length)),
-      setMetadataValue('poc.lastImportStrategy', 'incremental')
+      setMetadataValue('poc.lastImportStrategy', 'incremental'),
+      setMetadataValue('poc.sourceSignature', pocSourceSignature ?? '')
     ])
     if (datasetTimestamp) {
       await setMetadataValue('poc.cachedAt', datasetTimestamp)

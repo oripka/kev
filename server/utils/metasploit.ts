@@ -41,6 +41,22 @@ const REPO_DIR = join(CACHE_DIR, 'metasploit-framework')
 const MODULES_DIR = join(REPO_DIR, 'modules', 'exploits')
 const MODULE_DATE_CACHE_PATH = join(CACHE_DIR, 'module-published-dates.json')
 
+const fetchRemoteMetasploitCommit = async (): Promise<string | null> => {
+  try {
+    const { stdout } = await runGit(['ls-remote', METASPLOIT_REPO_URL, METASPLOIT_BRANCH], {
+      cwd: process.cwd()
+    })
+    const line = stdout.split('\n').find(entry => entry.trim().length > 0)
+    if (!line) {
+      return null
+    }
+    const [commit] = line.split('\t')
+    return commit?.trim() || null
+  } catch {
+    return null
+  }
+}
+
 const RE_CVE_GENERIC = /CVE[-\s_]*(\d{4})[-\s_]?([0-9]{4,7})/gi
 const RE_VENDOR_ADVISORY = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{4}-\d{2,}$/i
 
@@ -1200,25 +1216,24 @@ export const importMetasploitCatalog = async (
   markTaskRunning('metasploit', 'Synchronising Metasploit catalog')
 
   try {
-    setImportPhase('fetchingMetasploit', {
-      message: 'Synchronising Metasploit catalog',
-      completed: 0,
-      total: 0
-    })
-
-    const { commit } = await syncRepository({ useCachedRepository: options.useCachedRepository })
-
     const reprocessCachedEntries = options.reprocessCachedEntries === true
     const previousCommit =
       strategy === 'incremental' ? await fetchMetadataValue(db, 'metasploit.lastCommit') : null
-
-    if (
-      strategy === 'incremental' &&
-      !reprocessCachedEntries &&
-      commit &&
-      previousCommit &&
-      commit === previousCommit
-    ) {
+    const resolveSkipSummary = async (
+      commit: string | null,
+      progressMessage: string,
+      summaryMessage?: string
+    ): Promise<{
+      imported: 0
+      totalCount: number
+      newCount: 0
+      updatedCount: 0
+      skippedCount: number
+      removedCount: 0
+      strategy: ImportStrategy
+      commit: string | null
+      modules: number
+    }> => {
       const metadataMap = await fetchMetadataValues(db, [
         'metasploit.totalCount',
         'metasploit.moduleCount'
@@ -1231,17 +1246,19 @@ export const importMetasploitCatalog = async (
 
       const totalCount = parseCount(metadataMap['metasploit.totalCount'])
       const moduleCount = parseCount(metadataMap['metasploit.moduleCount'])
-
-      const repositoryMessage = 'Metasploit repository already at latest commit'
-      setImportPhase('fetchingMetasploit', { message: repositoryMessage, completed: 0, total: 0 })
-      markTaskProgress('metasploit', 0, 0, repositoryMessage)
-
-      const moduleSuffix = moduleCount > 0 ? ` across ${moduleCount.toLocaleString()} modules` : ''
-      const completeMessage = `Metasploit catalog already up to date${moduleSuffix}`
-
       const importedAt = new Date().toISOString()
       const totalCountString = totalCount.toString()
       const moduleCountString = moduleCount.toString()
+
+      setImportPhase('fetchingMetasploit', {
+        message: progressMessage,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('metasploit', 0, 0, progressMessage)
+
+      const moduleSuffix = moduleCount > 0 ? ` across ${moduleCount.toLocaleString()} modules` : ''
+      const resolvedSummary = summaryMessage ?? `Metasploit catalog already up to date${moduleSuffix}`
 
       const metadataUpdates = [
         setMetadataValue('metasploit.lastImportAt', importedAt),
@@ -1259,7 +1276,7 @@ export const importMetasploitCatalog = async (
       }
 
       await Promise.all(metadataUpdates)
-      markTaskComplete('metasploit', completeMessage)
+      markTaskComplete('metasploit', resolvedSummary)
 
       return {
         imported: 0,
@@ -1272,6 +1289,37 @@ export const importMetasploitCatalog = async (
         commit,
         modules: moduleCount
       }
+    }
+
+    if (strategy === 'incremental' && !reprocessCachedEntries && previousCommit) {
+      const remoteCommit = await fetchRemoteMetasploitCommit()
+      if (remoteCommit && remoteCommit === previousCommit) {
+        return resolveSkipSummary(
+          remoteCommit,
+          'Metasploit quick check: repository already at latest commit'
+        )
+      }
+      if (!remoteCommit) {
+        markTaskProgress('metasploit', 0, 0, 'Quick Metasploit check unavailable; syncing repository')
+      }
+    }
+
+    setImportPhase('fetchingMetasploit', {
+      message: 'Synchronising Metasploit catalog',
+      completed: 0,
+      total: 0
+    })
+
+    const { commit } = await syncRepository({ useCachedRepository: options.useCachedRepository })
+
+    if (
+      strategy === 'incremental' &&
+      !reprocessCachedEntries &&
+      commit &&
+      previousCommit &&
+      commit === previousCommit
+    ) {
+      return resolveSkipSummary(commit, 'Metasploit repository already at latest commit')
     }
 
     const modulesDirExists = await pathExists(MODULES_DIR)

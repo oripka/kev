@@ -49,7 +49,11 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     <NuxtRouteAnnouncer />
     <NuxtLoadingIndicator />
     <UToaster />
-    <UHeader title="In the Wild" to="/" >
+    <UHeader
+      title="In the Wild"
+      to="/"
+      :ui="{ container: 'max-w-none w-full mx-0 px-4 sm:px-6' }"
+    >
       <template #title>
         <span class="inline-flex items-center gap-2">
           <img

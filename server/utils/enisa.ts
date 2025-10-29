@@ -287,6 +287,65 @@ export const importEnisaCatalog = async (
           : await getMetadataValue('enisa.lastUpdatedAt')
         : null
 
+    if (strategy === 'incremental' && !forceRefresh && lastKnownUpdatedAt) {
+      const quickMessage = 'Performing quick ENISA update check'
+      setImportPhase('fetchingEnisa', {
+        message: quickMessage,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('enisa', 0, 0, quickMessage)
+
+      try {
+        const quickResponse = await fetchPage(0, 1)
+        const latestItem = quickResponse.items[0]
+        const latestTimestamp = latestItem ? resolveItemActivityTimestamp(latestItem) : null
+
+        if (latestTimestamp && latestTimestamp <= lastKnownUpdatedAt) {
+          const totalCount = Number.parseInt((await getMetadataValue('enisa.totalCount')) ?? '0', 10) || 0
+          const importedAt = new Date().toISOString()
+          const skipMessage = 'ENISA catalog already up to date (quick check)'
+
+          setImportPhase('fetchingEnisa', {
+            message: skipMessage,
+            completed: 0,
+            total: 0
+          })
+          markTaskProgress('enisa', 0, 0, skipMessage)
+          markTaskComplete('enisa', skipMessage)
+
+          const metadataUpdates = [
+            setMetadataValue('enisa.lastImportAt', importedAt),
+            setMetadataValue('enisa.totalCount', totalCount.toString()),
+            setMetadataValue('enisa.lastNewCount', '0'),
+            setMetadataValue('enisa.lastUpdatedCount', '0'),
+            setMetadataValue('enisa.lastSkippedCount', totalCount.toString()),
+            setMetadataValue('enisa.lastRemovedCount', '0'),
+            setMetadataValue('enisa.lastImportStrategy', 'incremental')
+          ]
+
+          if (lastKnownUpdatedAt) {
+            metadataUpdates.push(setMetadataValue('enisa.lastUpdatedAt', lastKnownUpdatedAt))
+          }
+
+          await Promise.all(metadataUpdates)
+
+          return {
+            imported: 0,
+            totalCount,
+            newCount: 0,
+            updatedCount: 0,
+            skippedCount: totalCount,
+            removedCount: 0,
+            strategy: 'incremental',
+            lastUpdated: lastKnownUpdatedAt
+          }
+        }
+      } catch {
+        markTaskProgress('enisa', 0, 0, 'Quick ENISA update check failed; running full comparison')
+      }
+    }
+
     const fetchFullDataset = async (): Promise<EnisaCacheBundle> => {
       setImportPhase('fetchingEnisa', {
         message: 'Fetching exploited ENISA vulnerabilities',

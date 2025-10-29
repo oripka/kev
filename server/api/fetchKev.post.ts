@@ -71,6 +71,36 @@ const normaliseStoredSeverity = (value: unknown): KevEntry['cvssSeverity'] | nul
 const SOURCE_URL =
   'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json'
 
+const HEAD_REQUEST_TIMEOUT_MS = 7000
+
+const buildKevDatasetSignature = (payload: { catalogVersion: string; dateReleased: string; count: number }) => {
+  const version = payload.catalogVersion ?? ''
+  const release = payload.dateReleased ?? ''
+  const count = Number.isFinite(payload.count) ? payload.count : 0
+  return `${version}|${release}|${count}`
+}
+
+const fetchHeadSignature = async (url: string, timeoutMs = HEAD_REQUEST_TIMEOUT_MS): Promise<string | null> => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal })
+    if (!response.ok) {
+      return null
+    }
+    const etag = response.headers.get('etag')
+    const lastModified = response.headers.get('last-modified')
+    if (!etag && !lastModified) {
+      return null
+    }
+    return `${etag ?? ''}|${lastModified ?? ''}`
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 type CvssMetric = {
   score: number | null
   vector: string | null
@@ -145,6 +175,8 @@ export default defineEventHandler(async event => {
   const metadata = await getMetadataMap([
     'catalogVersion',
     'dateReleased',
+    'entryCount',
+    'kev.sourceSignature',
     'enisa.lastUpdatedAt',
     'metasploit.lastCommit',
     'metasploit.moduleCount'
@@ -211,32 +243,89 @@ export default defineEventHandler(async event => {
     } else {
       markTaskRunning('kev', 'Checking KEV cache')
 
-      try {
-        const syncResult = await syncCvelistRepo({ useCachedRepository: allowStale })
-        const message = syncResult.updated
-          ? 'Synced CVEList repository'
-          : 'Using cached CVEList repository'
-        markTaskProgress('kev', 0, 0, message)
-      } catch (error) {
-        const reason = (error as Error).message || 'Unknown error'
-        markTaskError('kev', `Failed to sync CVEList repository: ${reason}`)
+      const previousKevSignature = metadata['kev.sourceSignature']
+      const previousKevEntryCount = Number.parseInt(metadata.entryCount ?? '0', 10) || 0
+      let kevFeedSignature: string | null = null
+      let skipKevProcessing = false
+
+      if (strategy === 'incremental' && !forceRefresh) {
+        const quickMessage = 'Performing quick KEV update check'
+        setImportPhase('preparing', { message: quickMessage, completed: 0, total: 0 })
+        markTaskProgress('kev', 0, 0, quickMessage)
+
+        kevFeedSignature = await fetchHeadSignature(SOURCE_URL)
+
+        if (kevFeedSignature && previousKevSignature && kevFeedSignature === previousKevSignature) {
+          const importedAt = new Date().toISOString()
+          const skipMessage = 'KEV catalog already up to date (quick check)'
+
+          setImportPhase('preparing', { message: skipMessage, completed: 0, total: 0 })
+          markTaskProgress('kev', 0, 0, skipMessage)
+
+          const metadataRows = [
+            { key: 'entryCount', value: previousKevEntryCount.toString() },
+            { key: 'lastImportAt', value: importedAt },
+            { key: 'kev.lastNewCount', value: '0' },
+            { key: 'kev.lastUpdatedCount', value: '0' },
+            { key: 'kev.lastSkippedCount', value: previousKevEntryCount.toString() },
+            { key: 'kev.lastRemovedCount', value: '0' },
+            { key: 'kev.lastImportStrategy', value: 'incremental' },
+            { key: 'kev.sourceSignature', value: kevFeedSignature }
+          ]
+
+          for (const record of metadataRows) {
+            await db
+              .insert(tables.kevMetadata)
+              .values(record)
+              .onConflictDoUpdate({
+                target: tables.kevMetadata.key,
+                set: { value: sql`excluded.value` }
+              })
+              .run()
+          }
+
+          markTaskComplete('kev', skipMessage)
+
+          kevImported = 0
+          kevNewCount = 0
+          kevUpdatedCount = 0
+          kevSkippedCount = previousKevEntryCount
+          kevRemovedCount = 0
+          kevImportStrategy = 'incremental'
+          importTimestamp = importedAt
+          skipKevProcessing = true
+        } else if (!kevFeedSignature) {
+          markTaskProgress('kev', 0, 0, 'Quick KEV check unavailable; continuing with full import')
+        }
       }
 
-      try {
-        setImportPhase('preparing', { message: 'Checking KEV cache', completed: 0, total: 0 })
-        const kevDataset = await getCachedData(
-          'kev-feed',
-          async () => {
-            setImportPhase('preparing', {
-              message: 'Downloading latest KEV catalog',
-              completed: 0,
-              total: 0
-            })
-            markTaskProgress('kev', 0, 0, 'Downloading latest KEV catalog')
-            return ofetch(SOURCE_URL)
-          },
-          { ttlMs: ONE_DAY_MS, forceRefresh, allowStale }
-        )
+      if (!skipKevProcessing) {
+        try {
+          const syncResult = await syncCvelistRepo({ useCachedRepository: allowStale })
+          const message = syncResult.updated
+            ? 'Synced CVEList repository'
+            : 'Using cached CVEList repository'
+          markTaskProgress('kev', 0, 0, message)
+        } catch (error) {
+          const reason = (error as Error).message || 'Unknown error'
+          markTaskError('kev', `Failed to sync CVEList repository: ${reason}`)
+        }
+
+        try {
+          setImportPhase('preparing', { message: 'Checking KEV cache', completed: 0, total: 0 })
+          const kevDataset = await getCachedData(
+            'kev-feed',
+            async () => {
+              setImportPhase('preparing', {
+                message: 'Downloading latest KEV catalog',
+                completed: 0,
+                total: 0
+              })
+              markTaskProgress('kev', 0, 0, 'Downloading latest KEV catalog')
+              return ofetch(SOURCE_URL)
+            },
+            { ttlMs: ONE_DAY_MS, forceRefresh, allowStale }
+          )
 
         markTaskProgress(
           'kev',
@@ -255,6 +344,11 @@ export default defineEventHandler(async event => {
             statusMessage: 'Unable to parse KEV feed',
             data: parsed.error.flatten()
           })
+        }
+
+        const datasetSignature = buildKevDatasetSignature(parsed.data)
+        if (!kevFeedSignature) {
+          kevFeedSignature = datasetSignature
         }
 
         const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => {
@@ -727,7 +821,8 @@ export default defineEventHandler(async event => {
           { key: 'kev.lastUpdatedCount', value: '0' },
           { key: 'kev.lastSkippedCount', value: '0' },
           { key: 'kev.lastRemovedCount', value: '0' },
-          { key: 'kev.lastImportStrategy', value: 'full' }
+          { key: 'kev.lastImportStrategy', value: 'full' },
+          { key: 'kev.sourceSignature', value: kevFeedSignature ?? datasetSignature }
         ]
 
         for (const record of metadataRows) {
@@ -1053,7 +1148,8 @@ export default defineEventHandler(async event => {
           { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
           { key: 'kev.lastSkippedCount', value: String(unchangedRecords.length) },
           { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
-          { key: 'kev.lastImportStrategy', value: 'incremental' }
+          { key: 'kev.lastImportStrategy', value: 'incremental' },
+          { key: 'kev.sourceSignature', value: kevFeedSignature ?? datasetSignature }
         ]
 
         for (const record of metadataRows) {
@@ -1109,6 +1205,8 @@ export default defineEventHandler(async event => {
       markTaskError('kev', message)
       throw error
     }
+    }
+
     }
 
     let historicSummary = {
