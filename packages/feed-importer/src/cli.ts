@@ -13,6 +13,7 @@ import type { ImportTaskKey } from '~/types'
 import type { ImportStrategy } from 'server/utils/import-types'
 import { useDrizzle, resetDatabase } from 'server/database/client'
 import { getImportProgress } from 'server/utils/import-progress'
+import { logger } from './logger'
 
 const USAGE = `Usage: pnpm run import-feeds [--mode <auto|force|cache>] [--source <name|all>] [--strategy <full|incremental>]
 
@@ -101,7 +102,7 @@ const parseCliArgs = () => {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === '--help' || arg === '-h') {
-      console.log(USAGE)
+      logger.log(USAGE)
       process.exit(0)
     }
 
@@ -207,9 +208,12 @@ const createProgressReporter = () => {
       const summary = `${phaseLabel}${ansis.dim(' · ')}${totals}` +
         (progress.message ? `${ansis.dim(' · ')}${progress.message}` : '')
       if (summary !== lastSummary) {
-        console.log(summary)
+        logger.progress(summary, { mode: 'update' })
         lastSummary = summary
       }
+    } else if (lastSummary) {
+      logger.endProgress()
+      lastSummary = ''
     }
 
     for (const event of progress.events) {
@@ -223,7 +227,7 @@ const createProgressReporter = () => {
       const formatter = STATUS_STYLES[status] ?? STATUS_STYLES.info
       const formattedStatus = formatter(`[${statusLabel}]`)
       const taskLabel = event.taskLabel ? `${ansis.bold(`${event.taskLabel}:`)} ` : ''
-      console.log(`  ${formattedStatus} ${taskLabel}${event.message}`)
+      logger.progress(`  ${formattedStatus} ${taskLabel}${event.message}`, { mode: 'append' })
     }
   }
 
@@ -241,6 +245,7 @@ const createProgressReporter = () => {
         interval = null
       }
       logSnapshot()
+      logger.endProgress()
     }
   }
 }
@@ -252,16 +257,16 @@ const main = async () => {
     const { mode, sources, strategy, syncD1 } = parseCliArgs()
     const db = useDrizzle()
 
-    console.log(ansis.bold(ansis.cyan('🚀 Starting vulnerability catalog import')))
-    console.log(`${ansis.dim(' Mode')}: ${ansis.white(mode)}`)
-    console.log(
+    logger.info(ansis.bold(ansis.cyan('🚀 Starting vulnerability catalog import')))
+    logger.info(`${ansis.dim(' Mode')}: ${ansis.white(mode)}`)
+    logger.info(
       `${ansis.dim(' Strategy')}: ${
         strategy === 'incremental' ? ansis.yellow(strategy) : ansis.white(strategy)
       }`
     )
-    console.log(`${ansis.dim(' Sources')}: ${ansis.white(sources.join(', '))}`)
-    console.log(`${ansis.dim(' Sync D1')}: ${syncD1 ? ansis.green('enabled') : ansis.dim('disabled')}`)
-    console.log(ansis.dim('----------------------------------------'))
+    logger.info(`${ansis.dim(' Sources')}: ${ansis.white(sources.join(', '))}`)
+    logger.info(`${ansis.dim(' Sync D1')}: ${syncD1 ? ansis.green('enabled') : ansis.dim('disabled')}`)
+    logger.log(ansis.dim('----------------------------------------'))
 
     const importOptions: CatalogImportOptions = {
       db,
@@ -276,11 +281,12 @@ const main = async () => {
     reporter.stop()
 
     if (syncD1) {
-      console.log(ansis.bold('\n🔄 Syncing remote D1 database from local SQLite export …'))
-      console.log(ansis.dim('   Running pnpm run db:deploy'))
+      logger.newline()
+      logger.info(ansis.bold('🔄 Syncing remote D1 database from local SQLite export …'))
+      logger.info(ansis.dim('   Running pnpm run db:deploy'))
       await runCommand('pnpm', ['run', 'db:deploy'])
-      console.log(ansis.green('   Remote D1 database synced successfully.'))
-      console.log('')
+      logger.success(ansis.green('   Remote D1 database synced successfully.'))
+      logger.newline()
     }
 
     const summaryParts = [
@@ -295,23 +301,25 @@ const main = async () => {
 
     const summaryLabel = summaryParts.join(ansis.dim(' · '))
 
-    console.log(ansis.bold(ansis.green('\n✅ Import completed successfully')))
-    console.log(`${ansis.dim('  Sources')}: ${ansis.cyan(result.sources.join(', '))}`)
-    console.log(`${ansis.dim('  Catalog version')}: ${ansis.white(result.catalogVersion || 'unknown')}`)
-    console.log(`${ansis.dim('  Date released')}: ${ansis.white(result.dateReleased || 'unknown')}`)
-    console.log(`${ansis.dim('  Imported at')}: ${ansis.white(result.importedAt)}`)
-    console.log(`${ansis.dim('  Summary')}: ${summaryLabel}`)
+    logger.newline()
+    logger.success(ansis.bold(ansis.green('✅ Import completed successfully')))
+    logger.info(`${ansis.dim('  Sources')}: ${ansis.cyan(result.sources.join(', '))}`)
+    logger.info(`${ansis.dim('  Catalog version')}: ${ansis.white(result.catalogVersion || 'unknown')}`)
+    logger.info(`${ansis.dim('  Date released')}: ${ansis.white(result.dateReleased || 'unknown')}`)
+    logger.info(`${ansis.dim('  Imported at')}: ${ansis.white(result.importedAt)}`)
+    logger.info(`${ansis.dim('  Summary')}: ${summaryLabel}`)
   } catch (error) {
-    console.error(ansis.bold(ansis.red('\n❌ Import failed')))
+    logger.newline()
+    logger.error(ansis.bold(ansis.red('❌ Import failed')))
     if (error instanceof CatalogImportError) {
-      console.error(`  ${ansis.red(error.message)}`)
+      logger.error(`  ${ansis.red(error.message)}`)
       if (error.details) {
-        console.error(`  ${ansis.red(`Details: ${JSON.stringify(error.details)}`)}`)
+        logger.error(`  ${ansis.red(`Details: ${JSON.stringify(error.details)}`)}`)
       }
     } else if (error instanceof Error) {
-      console.error(`  ${ansis.red(error.message)}`)
+      logger.error(`  ${ansis.red(error.message)}`)
     } else {
-      console.error(`  ${ansis.red('An unknown error occurred')}`)
+      logger.error(`  ${ansis.red('An unknown error occurred')}`)
     }
     process.exitCode = 1
   } finally {
