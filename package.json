@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "import-feeds": "tsx --tsconfig packages/feed-importer/tsconfig.json packages/feed-importer/src/cli.ts",
+    "import:incremental-deploy": "pnpm run import-feeds --incremental && pnpm run db:deploy",
     "postinstall": "nuxt prepare",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
