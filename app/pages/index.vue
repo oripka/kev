@@ -117,6 +117,11 @@ const showAllResults = ref(false);
 const showMySoftwareSlideover = ref(false);
 const showClassificationReviewSlideover = ref(false);
 
+const hideFilterPanel = () => {
+  showFilterPanel.value = false;
+  filterCollapsibleOpen.value = true;
+};
+
 const breakpoints = useBreakpoints({
   desktop: 1280,
 });
@@ -3902,26 +3907,36 @@ const tableMeta = computed(() => ({
   <div class="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-10 2xl:gap-12">
     <aside
       v-if="showFilterPanel"
-      class="col-span-full px-4 sm:px-6 xl:col-span-3 xl:px-0 xl:pt-24"
+      class="col-span-full px-4 sm:px-6 xl:col-span-3 xl:pl-6 xl:pr-0 xl:pt-43 2xl:pl-8"
     >
-      <UCard class="h-full xl:sticky xl:top-28">
+      <UCard class=" xl:sticky xl:top-28">
         <template #header>
           <div class="flex items-center justify-between gap-3">
             <span class="text-xl font-bold text-neutral-900 dark:text-neutral-50">
               Filters
             </span>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              class="text-xs font-semibold uppercase tracking-wide"
-              :icon="filterCollapsibleOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-              :aria-pressed="filterCollapsibleOpen"
-              aria-label="Toggle filter options"
-              @click="filterCollapsibleOpen = !filterCollapsibleOpen"
-            >
-              {{ filterCollapsibleOpen ? "Hide" : "Show" }}
-            </UButton>
+            <div class="flex items-center gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :icon="filterCollapsibleOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                :aria-pressed="filterCollapsibleOpen"
+                aria-label="Toggle filter sections"
+                @click="filterCollapsibleOpen = !filterCollapsibleOpen"
+              />
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                class="text-xs font-semibold uppercase tracking-wide"
+                icon="i-lucide-sidebar-close"
+                aria-label="Hide filter panel"
+                @click="hideFilterPanel"
+              >
+                Hide panel
+              </UButton>
+            </div>
           </div>
         </template>
 
