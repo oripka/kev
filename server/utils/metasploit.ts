@@ -204,7 +204,10 @@ const collectModulePublishedDates = async (
   await attemptResolve(Array.from(pending))
 
   if (!pending.size) {
-    return results
+    return {
+      dates: results,
+      stats: { reusedFromExisting, reusedFromCache, resolved }
+    }
   }
 
   if (allowNetworkFetch) {
