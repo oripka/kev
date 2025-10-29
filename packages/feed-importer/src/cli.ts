@@ -178,6 +178,24 @@ const STATUS_STYLES: Record<EventStatusKey, (value: string) => string> = {
   error: ansis.red
 }
 
+const MAX_NEW_CVE_LOG_ENTRIES = 50
+
+const formatKevIdList = (ids: string[]): string => {
+  if (ids.length === 0) {
+    return ansis.dim('none detected')
+  }
+
+  const shown = ids.slice(0, MAX_NEW_CVE_LOG_ENTRIES).map(id => ansis.white(id))
+  const remaining = ids.length - shown.length
+  const base = shown.join(ansis.dim(', '))
+
+  if (remaining <= 0) {
+    return base
+  }
+
+  return `${base}${ansis.dim(` … +${remaining.toLocaleString()} more`)}`
+}
+
 const parseBoolean = (value: string | undefined): boolean => {
   if (value === undefined) {
     return false
@@ -308,6 +326,7 @@ const main = async () => {
     logger.info(`${ansis.dim('  Date released')}: ${ansis.white(result.dateReleased || 'unknown')}`)
     logger.info(`${ansis.dim('  Imported at')}: ${ansis.white(result.importedAt)}`)
     logger.info(`${ansis.dim('  Summary')}: ${summaryLabel}`)
+    logger.info(`${ansis.dim('  New KEV CVEs')}: ${formatKevIdList(result.kevNewCveIds ?? [])}`)
   } catch (error) {
     logger.newline()
     logger.error(ansis.bold(ansis.red('❌ Import failed')))

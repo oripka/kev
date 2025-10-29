@@ -41,7 +41,15 @@ import {
   type VulnerabilityImpactRecord
 } from 'server/utils/cvelist'
 import { mapWithConcurrency } from 'server/utils/concurrency'
-import { insertCategoryRecords, insertImpactRecords } from 'server/utils/entry-diff'
+import {
+  buildEntryDiffRecords,
+  diffEntryRecords,
+  insertCategoryRecords,
+  insertImpactRecords,
+  loadExistingEntryRecords,
+  persistEntryRecord,
+  type EntryDiffRecord
+} from 'server/utils/entry-diff'
 
 const ONE_DAY_MS = 86_400_000
 
@@ -75,6 +83,7 @@ export type CatalogImportResult = {
   kevSkippedCount: number
   kevRemovedCount: number
   kevImportStrategy: ImportStrategy
+  kevNewCveIds: string[]
   historicImported: number
   historicNewCount: number
   historicUpdatedCount: number
@@ -146,8 +155,6 @@ const toNotes = (raw: unknown): string[] => {
     .map(entry => entry.trim())
     .filter(Boolean)
 }
-
-const toJson = (value: unknown): string => JSON.stringify(value ?? [])
 
 const normaliseStoredSeverity = (value: unknown): KevEntry['cvssSeverity'] | null => {
   if (typeof value !== 'string') {
@@ -232,6 +239,7 @@ export const runCatalogImport = async (
   let kevSkippedCount = 0
   let kevRemovedCount = 0
   let kevImportStrategy: ImportStrategy = 'full'
+  let kevNewCveIds: string[] = []
   let historicImported = 0
   let historicNewCount = 0
   let historicUpdatedCount = 0
@@ -537,192 +545,7 @@ export const runCatalogImport = async (
 
       const importedAt = new Date().toISOString()
 
-      type EntryRowValues = {
-        id: string
-        cveId: string
-        source: 'kev'
-        vendor: string
-        product: string
-        vendorKey: string
-        productKey: string
-        vulnerabilityName: string
-        description: string
-        requiredAction: string | null
-        dateAdded: string
-        dueDate: string | null
-        ransomwareUse: string | null
-        notes: string
-        cwes: string
-        cvssScore: number | null
-        cvssVector: string | null
-        cvssVersion: string | null
-        cvssSeverity: KevEntry['cvssSeverity']
-        epssScore: number | null
-        assigner: string | null
-        datePublished: string | null
-        dateUpdated: string | null
-        exploitedSince: string | null
-        sourceUrl: string | null
-        pocUrl: string | null
-        pocPublishedAt: string | null
-        referenceLinks: string
-        aliases: string
-        affectedProducts: string
-        problemTypes: string
-        metasploitModulePath: string | null
-        metasploitModulePublishedAt: string | null
-        internetExposed: number
-      }
-
-      type CategoryRecord = {
-        entryId: string
-        categoryType: 'domain' | 'exploit' | 'vulnerability'
-        value: string
-        name: string
-      }
-
-      type ImpactRecord = {
-        entryId: string
-        vendor: string
-        vendorKey: string
-        product: string
-        productKey: string
-        status: string
-        versionRange: string
-        source: string
-      }
-
-      const createEntryValues = (entry: KevEntry): EntryRowValues => ({
-        id: entry.id,
-        cveId: entry.cveId,
-        source: 'kev',
-        vendor: entry.vendor,
-        product: entry.product,
-        vendorKey: entry.vendorKey,
-        productKey: entry.productKey,
-        vulnerabilityName: entry.vulnerabilityName,
-        description: entry.description,
-        requiredAction: entry.requiredAction,
-        dateAdded: entry.dateAdded,
-        dueDate: entry.dueDate,
-        ransomwareUse: entry.ransomwareUse,
-        notes: toJson(entry.notes),
-        cwes: toJson(entry.cwes),
-        cvssScore: entry.cvssScore,
-        cvssVector: entry.cvssVector,
-        cvssVersion: entry.cvssVersion,
-        cvssSeverity: entry.cvssSeverity,
-        epssScore: null,
-        assigner: null,
-        datePublished: entry.datePublished,
-        dateUpdated: entry.dateUpdated,
-        exploitedSince: entry.exploitedSince,
-        sourceUrl: entry.sourceUrl ?? null,
-        pocUrl: entry.pocUrl ?? null,
-        pocPublishedAt: entry.pocPublishedAt ?? null,
-        referenceLinks: toJson(entry.references),
-        aliases: toJson(entry.aliases),
-        affectedProducts: toJson(entry.affectedProducts),
-        problemTypes: toJson(entry.problemTypes),
-        metasploitModulePath: entry.metasploitModulePath,
-        metasploitModulePublishedAt: entry.metasploitModulePublishedAt,
-        internetExposed: entry.internetExposed ? 1 : 0
-      })
-
-      const buildCategoryRecords = (entry: KevEntry): CategoryRecord[] => {
-        const records: CategoryRecord[] = []
-        const pushCategories = (values: string[], type: CategoryRecord['categoryType']) => {
-          for (const value of values) {
-            records.push({ entryId: entry.id, categoryType: type, value, name: value })
-          }
-        }
-        pushCategories(entry.domainCategories, 'domain')
-        pushCategories(entry.exploitLayers, 'exploit')
-        pushCategories(entry.vulnerabilityCategories, 'vulnerability')
-        return records
-      }
-
-      const normaliseImpacts = (impacts: VulnerabilityImpactRecord[]): ImpactRecord[] => {
-        const deduped = new Map<string, ImpactRecord>()
-
-        for (const impact of impacts) {
-          const record: ImpactRecord = {
-            entryId: impact.entryId,
-            vendor: impact.vendor,
-            vendorKey: impact.vendorKey,
-            product: impact.product,
-            productKey: impact.productKey,
-            status: impact.status ?? '',
-            versionRange: impact.versionRange ?? '',
-            source: impact.source
-          }
-
-          const key = [
-            record.vendorKey,
-            record.productKey,
-            record.status,
-            record.versionRange,
-            record.source
-          ].join('|')
-
-          if (!deduped.has(key)) {
-            deduped.set(key, record)
-          }
-        }
-
-        return [...deduped.values()]
-      }
-
-      const sortImpacts = (records: ImpactRecord[]) => {
-        return records
-          .map(record => ({ ...record }))
-          .sort((first, second) => {
-            const firstKey = [first.vendorKey, first.productKey, first.status, first.versionRange, first.source].join('|')
-            const secondKey = [second.vendorKey, second.productKey, second.status, second.versionRange, second.source].join('|')
-            return firstKey.localeCompare(secondKey)
-          })
-      }
-
-      const sortCategories = (records: CategoryRecord[]) => {
-        return records
-          .map(record => ({ ...record }))
-          .sort((first, second) => {
-            const firstKey = `${first.categoryType}|${first.value}`
-            const secondKey = `${second.categoryType}|${second.value}`
-            return firstKey.localeCompare(secondKey)
-          })
-      }
-
-      const createRecordSignature = (
-        values: EntryRowValues,
-        impacts: ImpactRecord[],
-        categories: CategoryRecord[]
-      ) => {
-        return JSON.stringify({
-          values: { ...values },
-          impacts: sortImpacts(impacts),
-          categories: sortCategories(categories)
-        })
-      }
-
-      type EntryDiffRecord = {
-        values: EntryRowValues
-        impacts: ImpactRecord[]
-        categories: CategoryRecord[]
-        signature: string
-      }
-
-      const entryRecords: EntryDiffRecord[] = entries.map(entry => {
-        const values = createEntryValues(entry)
-        const categories = buildCategoryRecords(entry)
-        const impacts = normaliseImpacts(impactRecordMap.get(entry.id) ?? [])
-        return {
-          values,
-          impacts,
-          categories,
-          signature: createRecordSignature(values, impacts, categories)
-        }
-      })
+      const entryRecords = buildEntryDiffRecords(entries, 'kev', impactRecordMap)
 
       const useIncrementalKev = strategy === 'incremental'
       const totalEntries = entryRecords.length
@@ -804,6 +627,7 @@ export const runCatalogImport = async (
         kevSkippedCount = 0
         kevRemovedCount = 0
         kevImportStrategy = 'full'
+        kevNewCveIds = entryRecords.map(record => record.values.cveId)
         catalogVersion = parsed.data.catalogVersion
         dateReleased = parsed.data.dateReleased
         importTimestamp = importedAt
@@ -811,219 +635,12 @@ export const runCatalogImport = async (
         publishTaskEvent('kev', `${summaryMessage} (catalog size: ${totalEntries.toLocaleString()})`)
         markTaskComplete('kev', summaryMessage)
       } else {
-        type ExistingEntryRow = {
-          id: string
-          cveId: string | null
-          vendor: string | null
-          product: string | null
-          vendorKey: string | null
-          productKey: string | null
-          vulnerabilityName: string | null
-          description: string | null
-          requiredAction: string | null
-          dateAdded: string | null
-          dueDate: string | null
-          ransomwareUse: string | null
-          notes: string | null
-          cwes: string | null
-          cvssScore: number | null
-          cvssVector: string | null
-          cvssVersion: string | null
-          cvssSeverity: string | null
-          epssScore: number | null
-          assigner: string | null
-          datePublished: string | null
-          dateUpdated: string | null
-          exploitedSince: string | null
-          sourceUrl: string | null
-          pocUrl: string | null
-          pocPublishedAt: string | null
-          referenceLinks: string | null
-          aliases: string | null
-          affectedProducts: string | null
-          problemTypes: string | null
-          metasploitModulePath: string | null
-          metasploitModulePublishedAt: string | null
-          internetExposed: number | null
-        }
-
-        type ExistingImpactRow = ImpactRecord
-
-        type ExistingCategoryRow = CategoryRecord
-
-        const createEntryValuesFromRow = (row: ExistingEntryRow): EntryRowValues => ({
-          id: row.id,
-          cveId: row.cveId ?? '',
-          source: 'kev',
-          vendor: row.vendor ?? '',
-          product: row.product ?? '',
-          vendorKey: row.vendorKey ?? '',
-          productKey: row.productKey ?? '',
-          vulnerabilityName: row.vulnerabilityName ?? '',
-          description: row.description ?? '',
-          requiredAction: row.requiredAction ?? null,
-          dateAdded: row.dateAdded ?? '',
-          dueDate: row.dueDate ?? null,
-          ransomwareUse: row.ransomwareUse ?? null,
-          notes: row.notes ?? '[]',
-          cwes: row.cwes ?? '[]',
-          cvssScore: typeof row.cvssScore === 'number' ? row.cvssScore : null,
-          cvssVector: row.cvssVector ?? null,
-          cvssVersion: row.cvssVersion ?? null,
-          cvssSeverity: normaliseStoredSeverity(row.cvssSeverity),
-          epssScore: typeof row.epssScore === 'number' ? row.epssScore : null,
-          assigner: row.assigner ?? null,
-          datePublished: row.datePublished ?? null,
-          dateUpdated: row.dateUpdated ?? null,
-          exploitedSince: row.exploitedSince ?? null,
-          sourceUrl: row.sourceUrl ?? null,
-          pocUrl: row.pocUrl ?? null,
-          pocPublishedAt: row.pocPublishedAt ?? null,
-          referenceLinks: row.referenceLinks ?? '[]',
-          aliases: row.aliases ?? '[]',
-          affectedProducts: row.affectedProducts ?? '[]',
-          problemTypes: row.problemTypes ?? '[]',
-          metasploitModulePath: row.metasploitModulePath ?? null,
-          metasploitModulePublishedAt: row.metasploitModulePublishedAt ?? null,
-          internetExposed: typeof row.internetExposed === 'number' ? row.internetExposed : 0
-        })
-
-        const existingRows: ExistingEntryRow[] = await db
-          .select({
-            id: tables.vulnerabilityEntries.id,
-            cveId: tables.vulnerabilityEntries.cveId,
-            vendor: tables.vulnerabilityEntries.vendor,
-            product: tables.vulnerabilityEntries.product,
-            vendorKey: tables.vulnerabilityEntries.vendorKey,
-            productKey: tables.vulnerabilityEntries.productKey,
-            vulnerabilityName: tables.vulnerabilityEntries.vulnerabilityName,
-            description: tables.vulnerabilityEntries.description,
-            requiredAction: tables.vulnerabilityEntries.requiredAction,
-            dateAdded: tables.vulnerabilityEntries.dateAdded,
-            dueDate: tables.vulnerabilityEntries.dueDate,
-            ransomwareUse: tables.vulnerabilityEntries.ransomwareUse,
-            notes: tables.vulnerabilityEntries.notes,
-            cwes: tables.vulnerabilityEntries.cwes,
-            cvssScore: tables.vulnerabilityEntries.cvssScore,
-            cvssVector: tables.vulnerabilityEntries.cvssVector,
-            cvssVersion: tables.vulnerabilityEntries.cvssVersion,
-            cvssSeverity: tables.vulnerabilityEntries.cvssSeverity,
-            epssScore: tables.vulnerabilityEntries.epssScore,
-            assigner: tables.vulnerabilityEntries.assigner,
-            datePublished: tables.vulnerabilityEntries.datePublished,
-            dateUpdated: tables.vulnerabilityEntries.dateUpdated,
-            exploitedSince: tables.vulnerabilityEntries.exploitedSince,
-            sourceUrl: tables.vulnerabilityEntries.sourceUrl,
-            pocUrl: tables.vulnerabilityEntries.pocUrl,
-            pocPublishedAt: tables.vulnerabilityEntries.pocPublishedAt,
-            referenceLinks: tables.vulnerabilityEntries.referenceLinks,
-            aliases: tables.vulnerabilityEntries.aliases,
-            affectedProducts: tables.vulnerabilityEntries.affectedProducts,
-            problemTypes: tables.vulnerabilityEntries.problemTypes,
-            metasploitModulePath: tables.vulnerabilityEntries.metasploitModulePath,
-            metasploitModulePublishedAt: tables.vulnerabilityEntries.metasploitModulePublishedAt,
-            internetExposed: tables.vulnerabilityEntries.internetExposed
-          })
-          .from(tables.vulnerabilityEntries)
-          .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-          .all()
-
-        const existingMap = new Map<string, { values: EntryRowValues; impacts: ImpactRecord[]; categories: CategoryRecord[]; signature: string }>()
-
-        for (const row of existingRows) {
-          existingMap.set(row.id, {
-            values: createEntryValuesFromRow(row),
-            impacts: [],
-            categories: [],
-            signature: ''
-          })
-        }
-
-        const existingIds = Array.from(existingMap.keys())
-
-        if (existingIds.length > 0) {
-          const impactRows: ExistingImpactRow[] = await db
-            .select({
-              entryId: tables.vulnerabilityEntryImpacts.entryId,
-              vendor: tables.vulnerabilityEntryImpacts.vendor,
-              vendorKey: tables.vulnerabilityEntryImpacts.vendorKey,
-              product: tables.vulnerabilityEntryImpacts.product,
-              productKey: tables.vulnerabilityEntryImpacts.productKey,
-              status: tables.vulnerabilityEntryImpacts.status,
-              versionRange: tables.vulnerabilityEntryImpacts.versionRange,
-              source: tables.vulnerabilityEntryImpacts.source
-            })
-            .from(tables.vulnerabilityEntryImpacts)
-            .where(inArray(tables.vulnerabilityEntryImpacts.entryId, existingIds))
-            .all()
-
-          for (const impact of impactRows) {
-            const bucket = existingMap.get(impact.entryId)
-            if (bucket) {
-              bucket.impacts.push({
-                entryId: impact.entryId,
-                vendor: impact.vendor,
-                vendorKey: impact.vendorKey,
-                product: impact.product,
-                productKey: impact.productKey,
-                status: impact.status ?? '',
-                versionRange: impact.versionRange ?? '',
-                source: impact.source
-              })
-            }
-          }
-
-          const categoryRows: ExistingCategoryRow[] = await db
-            .select({
-              entryId: tables.vulnerabilityEntryCategories.entryId,
-              categoryType: tables.vulnerabilityEntryCategories.categoryType,
-              value: tables.vulnerabilityEntryCategories.value,
-              name: tables.vulnerabilityEntryCategories.name
-            })
-            .from(tables.vulnerabilityEntryCategories)
-            .where(inArray(tables.vulnerabilityEntryCategories.entryId, existingIds))
-            .all()
-
-          for (const category of categoryRows) {
-            const bucket = existingMap.get(category.entryId)
-            if (bucket) {
-              bucket.categories.push({
-                entryId: category.entryId,
-                categoryType: category.categoryType,
-                value: category.value,
-                name: category.name
-              })
-            }
-          }
-
-          for (const bucket of existingMap.values()) {
-            bucket.signature = createRecordSignature(bucket.values, bucket.impacts, bucket.categories)
-          }
-        }
-
-        const seenExisting = new Set<string>()
-        const newRecords: EntryDiffRecord[] = []
-        const updatedRecords: EntryDiffRecord[] = []
-        const unchangedRecords: EntryDiffRecord[] = []
-
-        for (const record of entryRecords) {
-          const existing = existingMap.get(record.values.id)
-          if (!existing) {
-            newRecords.push(record)
-            continue
-          }
-
-          seenExisting.add(record.values.id)
-
-          if (existing.signature !== record.signature) {
-            updatedRecords.push(record)
-          } else {
-            unchangedRecords.push(record)
-          }
-        }
-
-        const removedIds = existingIds.filter(id => !seenExisting.has(id))
+        const existingMap = await loadExistingEntryRecords(db, 'kev')
+        const { newRecords, updatedRecords, unchangedRecords, removedIds } =
+          diffEntryRecords(entryRecords, existingMap)
         const totalChanges = newRecords.length + updatedRecords.length
+        const unchangedCount = unchangedRecords.length
+        const newKevIds = newRecords.map(record => record.values.cveId)
 
         if (totalChanges > 0) {
           const message = 'Saving KEV changes to the local cache'
@@ -1039,96 +656,76 @@ export const runCatalogImport = async (
           markTaskProgress('kev', 0, 0, message)
         }
 
-        const persistRecord = async (
-          record: EntryDiffRecord,
-          action: 'insert' | 'update',
-          index: number
-        ) => {
-          const { values, impacts, categories } = record
+        let processed = 0
+        db.transaction(tx => {
+          const persistWithProgress = (
+            record: EntryDiffRecord,
+            action: 'insert' | 'update'
+          ) => {
+            persistEntryRecord(tx, record, action)
 
-          if (action === 'insert') {
-            await db.insert(tables.vulnerabilityEntries).values(values).run()
-          } else {
-            const { id, ...updateValues } = values
-            await db
-              .update(tables.vulnerabilityEntries)
-              .set(updateValues)
-              .where(eq(tables.vulnerabilityEntries.id, id))
+            if (totalChanges > 0) {
+              processed += 1
+              const progressMessage = `Saving KEV changes to the local cache (${processed} of ${totalChanges})`
+              setImportPhase('saving', {
+                completed: processed,
+                total: totalChanges,
+                message: progressMessage
+              })
+              markTaskProgress('kev', processed, totalChanges, progressMessage)
+            }
+          }
+
+          for (const record of newRecords) {
+            persistWithProgress(record, 'insert')
+          }
+
+          for (const record of updatedRecords) {
+            persistWithProgress(record, 'update')
+          }
+
+          if (removedIds.length > 0) {
+            const chunkSize = 25
+            for (let index = 0; index < removedIds.length; index += chunkSize) {
+              const idChunk = removedIds.slice(index, index + chunkSize)
+              tx
+                .delete(tables.vulnerabilityEntries)
+                .where(inArray(tables.vulnerabilityEntries.id, idChunk))
+                .run()
+            }
+          }
+
+          const metadataRows = [
+            { key: 'dateReleased', value: parsed.data.dateReleased },
+            { key: 'catalogVersion', value: parsed.data.catalogVersion },
+            { key: 'entryCount', value: String(totalEntries) },
+            { key: 'lastImportAt', value: importedAt },
+            { key: 'kev.lastNewCount', value: String(newRecords.length) },
+            { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
+            { key: 'kev.lastSkippedCount', value: String(unchangedCount) },
+            { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
+            { key: 'kev.lastImportStrategy', value: 'incremental' }
+          ]
+
+          for (const record of metadataRows) {
+            tx
+              .insert(tables.kevMetadata)
+              .values(record)
+              .onConflictDoUpdate({
+                target: tables.kevMetadata.key,
+                set: { value: sql`excluded.value` }
+              })
               .run()
           }
-
-          await db
-            .delete(tables.vulnerabilityEntryImpacts)
-            .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
-            .run()
-
-          if (impacts.length) {
-            await insertImpactRecords(db, impacts)
-          }
-
-          await db
-            .delete(tables.vulnerabilityEntryCategories)
-            .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
-            .run()
-
-          if (categories.length) {
-            await insertCategoryRecords(db, categories)
-          }
-
-          if (totalChanges > 0) {
-            const completed = index + 1
-            const progressMessage = `Saving KEV changes to the local cache (${completed} of ${totalChanges})`
-            setImportPhase('saving', { completed, total: totalChanges, message: progressMessage })
-            markTaskProgress('kev', completed, totalChanges, progressMessage)
-          }
-        }
-
-        let processed = 0
-        for (const record of newRecords) {
-          await persistRecord(record, 'insert', processed)
-          processed += 1
-        }
-        for (const record of updatedRecords) {
-          await persistRecord(record, 'update', processed)
-          processed += 1
-        }
-
-        if (removedIds.length > 0) {
-          await db
-            .delete(tables.vulnerabilityEntries)
-            .where(inArray(tables.vulnerabilityEntries.id, removedIds))
-            .run()
-        }
-
-        const metadataRows = [
-          { key: 'dateReleased', value: parsed.data.dateReleased },
-          { key: 'catalogVersion', value: parsed.data.catalogVersion },
-          { key: 'entryCount', value: String(totalEntries) },
-          { key: 'lastImportAt', value: importedAt },
-          { key: 'kev.lastNewCount', value: String(newRecords.length) },
-          { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
-          { key: 'kev.lastSkippedCount', value: String(unchangedRecords.length) },
-          { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
-          { key: 'kev.lastImportStrategy', value: 'incremental' }
-        ]
-
-        for (const record of metadataRows) {
-          await db
-            .insert(tables.kevMetadata)
-            .values(record)
-            .onConflictDoUpdate({
-              target: tables.kevMetadata.key,
-              set: { value: sql`excluded.value` }
-            })
-            .run()
-        }
+        })
 
         kevImported = newRecords.length + updatedRecords.length
         kevNewCount = newRecords.length
         kevUpdatedCount = updatedRecords.length
-        kevSkippedCount = unchangedRecords.length
+        kevSkippedCount = unchangedCount
         kevRemovedCount = removedIds.length
         kevImportStrategy = 'incremental'
+        kevNewCveIds = newKevIds
         catalogVersion = parsed.data.catalogVersion
         dateReleased = parsed.data.dateReleased
         importTimestamp = importedAt
@@ -1140,8 +737,8 @@ export const runCatalogImport = async (
         if (updatedRecords.length > 0) {
           detailSegments.push(`${updatedRecords.length.toLocaleString()} updated`)
         }
-        if (unchangedRecords.length > 0) {
-          detailSegments.push(`${unchangedRecords.length.toLocaleString()} unchanged`)
+        if (unchangedCount > 0) {
+          detailSegments.push(`${unchangedCount.toLocaleString()} unchanged`)
         }
         if (removedIds.length > 0) {
           detailSegments.push(`${removedIds.length.toLocaleString()} removed`)
@@ -1454,6 +1051,7 @@ export const runCatalogImport = async (
       kevSkippedCount,
       kevRemovedCount,
       kevImportStrategy,
+      kevNewCveIds,
       historicImported: historicSummary.imported,
       historicNewCount,
       historicUpdatedCount,

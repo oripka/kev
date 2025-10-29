@@ -9,6 +9,7 @@ import {
   resolveComponent,
   watch,
 } from "vue";
+import { useBreakpoints } from "@vueuse/core";
 import { getPaginationRowModel } from "@tanstack/vue-table";
 import { parseISO } from "date-fns";
 import type { AccordionItem, SelectMenuItem, TableColumn, TableRow } from "@nuxt/ui";
@@ -109,11 +110,40 @@ const showTrendLines = ref(false);
 const showHeatmap = ref(false);
 const showCompactTable = ref(false);
 const showFilterPanel = ref(true);
+const filterCollapsibleOpen = ref(true);
 const showTrendSlideover = ref(false);
 const showRiskDetails = ref(false);
 const showAllResults = ref(false);
 const showMySoftwareSlideover = ref(false);
 const showClassificationReviewSlideover = ref(false);
+
+const breakpoints = useBreakpoints({
+  desktop: 1280,
+});
+const isDesktopLayout = breakpoints.greaterOrEqual("desktop");
+let hasInitialisedFilterCollapsible = false;
+
+watch(
+  isDesktopLayout,
+  (isDesktop) => {
+    if (!hasInitialisedFilterCollapsible) {
+      filterCollapsibleOpen.value = isDesktop;
+      hasInitialisedFilterCollapsible = true;
+      return;
+    }
+
+    if (isDesktop && !filterCollapsibleOpen.value) {
+      filterCollapsibleOpen.value = true;
+    }
+  },
+  { immediate: true },
+);
+
+watch(showFilterPanel, (visible) => {
+  if (visible && isDesktopLayout.value && !filterCollapsibleOpen.value) {
+    filterCollapsibleOpen.value = true;
+  }
+});
 
 type CatalogTableApi = {
   getState(): { pagination: { pageIndex: number; pageSize: number } };
@@ -3354,21 +3384,81 @@ const truncateTitle = (entry: KevEntrySummary, limit = 96) => {
   return `${title.slice(0, limit)}…`;
 };
 
+type EntryRecency = "day" | "week" | null;
+
+const entryHighlightDurations = {
+  day: 24 * 60 * 60 * 1000,
+  week: 7 * 24 * 60 * 60 * 1000,
+} as const;
+
+const resolveEntryRecency = (entry: KevEntrySummary): EntryRecency => {
+  const parsed = parseISO(entry.dateAdded);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const ageMs = Date.now() - parsed.getTime();
+
+  if (ageMs <= entryHighlightDurations.day) {
+    return "day";
+  }
+
+  if (ageMs <= entryHighlightDurations.week) {
+    return "week";
+  }
+
+  return null;
+};
+
+const recencyBadgeMeta: Record<Exclude<EntryRecency, null>, { label: string; color: string }> = {
+  day: { label: "Added today", color: "success" },
+  week: { label: "Added this week", color: "info" },
+};
+
 const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
   if (showCompactTable.value) {
     return [
       {
         id: "title",
         header: "Title",
-        cell: ({ row }) =>
-          h(
-            "p",
-            {
-              class:
-                "max-w-xs break-words text-wrap text-sm font-semibold text-neutral-900 dark:text-neutral-50",
-            },
-            truncateTitle(row.original),
-          ),
+        cell: ({ row }) => {
+          const entry = row.original;
+          const entryRecency = resolveEntryRecency(entry);
+          const recencyMeta = entryRecency
+            ? recencyBadgeMeta[entryRecency]
+            : null;
+
+          const children: Array<ReturnType<typeof h>> = [];
+
+          if (recencyMeta) {
+            children.push(
+              h(
+                UBadge,
+                {
+                  color: recencyMeta.color,
+                  variant: "soft",
+                  class:
+                    "w-fit text-[11px] font-semibold uppercase tracking-wide",
+                },
+                () => recencyMeta.label,
+              ),
+            );
+          }
+
+          children.push(
+            h(
+              "p",
+              {
+                class:
+                  "max-w-xs break-words text-wrap text-sm font-semibold text-neutral-900 dark:text-neutral-50",
+              },
+              truncateTitle(entry),
+            ),
+          );
+
+          return h("div", { class: "space-y-1" }, children);
+        },
       },
       {
         id: "description",
@@ -3439,6 +3529,10 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
       header: "Description",
       cell: ({ row }) => {
         const entry = row.original;
+        const entryRecency = resolveEntryRecency(entry);
+        const recencyMeta = entryRecency
+          ? recencyBadgeMeta[entryRecency]
+          : null;
         const fullDescription =
           entry.description?.trim() || "No description provided.";
         const description = truncateDescription(entry.description);
@@ -3547,7 +3641,24 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           );
         }
 
-        const children: Array<ReturnType<typeof h>> = [
+        const children: Array<ReturnType<typeof h>> = [];
+
+        if (recencyMeta) {
+          children.push(
+            h(
+              UBadge,
+              {
+                color: recencyMeta.color,
+                variant: "soft",
+                class:
+                  "w-fit text-[11px] font-semibold uppercase tracking-wide",
+              },
+              () => recencyMeta.label
+            )
+          );
+        }
+
+        children.push(
           h(
             "p",
             {
@@ -3556,8 +3667,8 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
               title: fullTitle !== titleLabel ? fullTitle : undefined,
             },
             titleLabel
-          ),
-        ];
+          )
+        );
 
         if (badgeRowChildren.length) {
           children.push(
@@ -3585,7 +3696,7 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
           )
         );
 
-        return h("div", { class: "space-y-1" }, children);
+        return h("div", { class: "space-y-2" }, children);
       },
     },
     {
@@ -3762,24 +3873,64 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => {
   ];
 });
 
-const tableMeta = {
-  class: {
-    tr: "cursor-pointer transition-colors hover:bg-neutral-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:bg-neutral-800/60 dark:focus-visible:ring-offset-neutral-900",
-  },
+const tableRowBaseClass =
+  "cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 dark:focus-visible:ring-offset-neutral-900";
+
+const tableRowRecencyClass: Record<Exclude<EntryRecency, null>, string> = {
+  day: "bg-emerald-50/80 hover:bg-emerald-100/80 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20",
+  week: "bg-sky-50/70 hover:bg-sky-100/70 dark:bg-sky-500/10 dark:hover:bg-sky-500/20",
 };
+
+const tableMeta = computed(() => ({
+  class: {
+    tr: (row: { original: KevEntrySummary }) => {
+      const recency = resolveEntryRecency(row.original);
+
+      return [
+        tableRowBaseClass,
+        recency ? tableRowRecencyClass[recency] : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    },
+  },
+}));
 </script>
 
 <template>
-  <div class="grid grid-cols-12">
-    <div v-if="showFilterPanel" class="col-span-3 ml-8 mt-36">
-      <UCard>
+  <div class="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-10 2xl:gap-12">
+    <aside
+      v-if="showFilterPanel"
+      class="col-span-full px-4 sm:px-6 xl:col-span-3 xl:px-0 xl:pt-24"
+    >
+      <UCard class="h-full xl:sticky xl:top-28">
         <template #header>
-          <span class="text-xl font-bold text-neutral-900 dark:text-neutral-50">
-            Filters
-          </span>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xl font-bold text-neutral-900 dark:text-neutral-50">
+              Filters
+            </span>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              class="text-xs font-semibold uppercase tracking-wide"
+              :icon="filterCollapsibleOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              :aria-pressed="filterCollapsibleOpen"
+              aria-label="Toggle filter options"
+              @click="filterCollapsibleOpen = !filterCollapsibleOpen"
+            >
+              {{ filterCollapsibleOpen ? "Hide" : "Show" }}
+            </UButton>
+          </div>
         </template>
 
-        <div class="space-y-6">
+        <UCollapsible
+          v-model:open="filterCollapsibleOpen"
+          :unmount-on-hide="false"
+          class="w-full"
+        >
+          <template #content>
+            <div class="space-y-6 pt-1">
           <div
             v-if="canShowAllResults"
             class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300"
@@ -4713,18 +4864,21 @@ const tableMeta = {
           </div>
         </template>
       </UAccordion>
-        </div>
+            </div>
+          </template>
+        </UCollapsible>
       </UCard>
-    </div>
+    </aside>
 
-    <div
+    <section
       :class="[
-        showFilterPanel ? 'col-span-9' : 'col-span-12',
-        'mx-auto w-full px-12',
+        'col-span-full w-full',
+        showFilterPanel ? 'xl:col-span-9' : 'xl:col-span-12',
+        'mx-auto px-4 sm:px-6 xl:px-10 2xl:px-12',
       ]"
     >
       <div
-        class="sticky top-24 z-50 flex w-full"
+        class="mb-6 flex w-full lg:sticky lg:top-24 lg:z-50"
         :class="showFilterPanel ? 'justify-center' : 'justify-start'"
       >
         <QuickFilterSummary
@@ -4749,7 +4903,7 @@ const tableMeta = {
         />
       </div>
 
-      <UCard class="mt-24">
+      <UCard class="mt-10 lg:mt-16 xl:mt-24">
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="space-y-1">
@@ -4834,18 +4988,23 @@ const tableMeta = {
               :heatmap="heatmapGroups"
               @quick-filter="handleCatalogHeatmapQuickFilter"
             />
-            <UTable
+            <div
               v-else
-              ref="table"
-              v-model:pagination="tablePagination"
-              :data="results"
-              :columns="columns"
-              :meta="tableMeta"
-              :pagination-options="{
-                getPaginationRowModel: getPaginationRowModel()
-              }"
-              @select="handleTableSelect"
-            />
+              class="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white/70 shadow-sm dark:border-neutral-800/60 dark:bg-neutral-950/20"
+            >
+              <UTable
+                ref="table"
+                v-model:pagination="tablePagination"
+                :data="results"
+                :columns="columns"
+                :meta="tableMeta"
+                :pagination-options="{
+                  getPaginationRowModel: getPaginationRowModel()
+                }"
+                class="min-w-[720px] lg:min-w-full"
+                @select="handleTableSelect"
+              />
+            </div>
 
             <div
               v-if="results.length"
@@ -4941,6 +5100,6 @@ const tableMeta = {
         :has-active-filters="hasActiveFilters"
         :is-busy="isBusy"
       />
-    </div>
+    </section>
   </div>
 </template>

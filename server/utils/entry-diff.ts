@@ -339,7 +339,7 @@ const chunk = <T>(items: T[], size: number): T[][] => {
   return chunks
 }
 
-export const insertImpactRecords = async (
+export const insertImpactRecords = (
   db: DrizzleDatabase,
   records: ImpactRecord[]
 ) => {
@@ -347,11 +347,11 @@ export const insertImpactRecords = async (
     return
   }
   for (const batch of chunk(records, IMPACT_BATCH_SIZE)) {
-    await db.insert(tables.vulnerabilityEntryImpacts).values(batch).run()
+    db.insert(tables.vulnerabilityEntryImpacts).values(batch).run()
   }
 }
 
-export const insertCategoryRecords = async (
+export const insertCategoryRecords = (
   db: DrizzleDatabase,
   records: CategoryRecord[]
 ) => {
@@ -359,7 +359,7 @@ export const insertCategoryRecords = async (
     return
   }
   for (const batch of chunk(records, CATEGORY_BATCH_SIZE)) {
-    await db.insert(tables.vulnerabilityEntryCategories).values(batch).run()
+    db.insert(tables.vulnerabilityEntryCategories).values(batch).run()
   }
 }
 
@@ -529,7 +529,7 @@ export const diffEntryRecords = (
   return { newRecords, updatedRecords, unchangedRecords, removedIds }
 }
 
-export const persistEntryRecord = async (
+export const persistEntryRecord = (
   db: DrizzleDatabase,
   record: EntryDiffRecord,
   action: 'insert' | 'update'
@@ -537,27 +537,27 @@ export const persistEntryRecord = async (
   const { values, impacts, categories } = record
 
   if (action === 'insert') {
-    await db.insert(tables.vulnerabilityEntries).values(values).run()
+    db.insert(tables.vulnerabilityEntries).values(values).run()
   } else {
     const { id, ...updateValues } = values
-    await db
+    db
       .update(tables.vulnerabilityEntries)
       .set(updateValues)
       .where(eq(tables.vulnerabilityEntries.id, id))
       .run()
   }
 
-  await db
+  db
     .delete(tables.vulnerabilityEntryImpacts)
     .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
     .run()
 
-  await insertImpactRecords(db, impacts)
+  insertImpactRecords(db, impacts)
 
-  await db
+  db
     .delete(tables.vulnerabilityEntryCategories)
     .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
     .run()
 
-  await insertCategoryRecords(db, categories)
+  insertCategoryRecords(db, categories)
 }
