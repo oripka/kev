@@ -14,6 +14,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 
+import { createCliLogger } from './utils/logger.mjs'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const projectRoot = resolve(__dirname, '..')
@@ -28,6 +30,8 @@ const resetPath = join(dataDir, 'reset-d1.sql')
 const chunkDir = join(dataDir, 'dump-chunks')
 const hubD1Dir = join(projectRoot, '.data', 'hub', 'd1')
 const legacyLocalDbPath = join(dataDir, 'db.sqlite')
+
+const logger = createCliLogger({ tag: 'export-to-d1' })
 
 const usePreview = process.argv.includes('--preview')
 const wranglerTargetFlag = usePreview ? '--preview' : '--remote'
@@ -185,11 +189,12 @@ const writeResetSql = () => {
 }
 
 const resetRemoteDatabase = () => {
-  console.info(`Resetting remote D1 database "${REMOTE_DB}"…`)
+  logger.start(`Resetting remote D1 database "${REMOTE_DB}"…`)
   execSync(
     `npx wrangler d1 execute ${REMOTE_DB} ${wranglerTargetFlag} --yes --file "${resetPath}"`,
     { stdio: 'inherit', cwd: projectRoot }
   )
+  logger.success(`Remote D1 database "${REMOTE_DB}" reset.`)
 }
 
 const findSqliteFile = directory => {
@@ -247,19 +252,21 @@ const exportLocalDatabase = localDbPath => {
       `Local database not found at ${localDbPath}. Run the app locally to generate it or adjust the path.`
     )
   }
-  console.info('Exporting selected tables from local SQLite database via sqlite3 …')
+  logger.start('Exporting selected tables from local SQLite database via sqlite3 …')
   const dumpArgs = INCLUDED_TABLES.join(' ')
   execSync(
     `sqlite3 "${localDbPath}" ".dump ${dumpArgs}" > "${dumpPath}"`,
     { stdio: 'inherit', shell: '/bin/bash', cwd: projectRoot }
   )
+  logger.success(`Exported selected tables to ${dumpPath}.`)
 }
 
 const prepareDumpFile = () => {
-  console.info('Cleaning dump file for D1 compatibility …')
+  logger.start('Cleaning dump file for D1 compatibility …')
   const raw = readFileSync(dumpPath, 'utf8')
   const cleaned = cleanDump(raw)
   writeFileSync(dumpPath, `${cleaned}\n`, 'utf8')
+  logger.success('Dump file cleaned for D1 compatibility.')
 }
 
 const sqlLiteral = (value) => {
@@ -392,7 +399,7 @@ const buildVulnerabilityEntryStatements = (localDbPath) => {
 }
 
 const rewriteVulnerabilityEntriesDump = (localDbPath) => {
-  console.info('Rewriting vulnerability_entries export for D1 statement limits …')
+  logger.start('Rewriting vulnerability_entries export for D1 statement limits …')
 
   const raw = readFileSync(dumpPath, 'utf8')
   const parsedStatements = splitSqlStatements(raw)
@@ -411,18 +418,18 @@ const rewriteVulnerabilityEntriesDump = (localDbPath) => {
 
   const entryStatements = buildVulnerabilityEntryStatements(localDbPath)
   if (!entryStatements.length) {
-    console.warn('No vulnerability_entries rows found to export.')
+    logger.warn('No vulnerability_entries rows found to export.')
     return
   }
 
   const header = '\n-- Exported vulnerability_entries with chunked large columns\n'
   appendFileSync(dumpPath, header + entryStatements.join('\n') + '\n', 'utf8')
   const rowInsertCount = entryStatements.filter((line) => line.startsWith('INSERT INTO vulnerability_entries')).length
-  console.info(`Exported ${rowInsertCount.toLocaleString()} vulnerability_entries rows.`)
+  logger.success(`Exported ${rowInsertCount.toLocaleString()} vulnerability_entries rows.`)
 }
 
 const uploadDump = () => {
-  console.info('Chunking dump for upload …')
+  logger.start('Chunking dump for upload …')
   const sql = readFileSync(dumpPath, 'utf8')
   if (existsSync(chunkDir)) {
     rmSync(chunkDir, { recursive: true, force: true })
@@ -522,19 +529,32 @@ const uploadDump = () => {
   flushStatementBuffer()
   flushChunk()
 
-  console.info(`Uploading ${chunks.length} chunk(s) to Cloudflare D1 …`)
+  logger.success(`Chunked dump into ${chunks.length} file(s).`)
 
-  for (const chunkPath of chunks) {
-    console.info(`→ ${chunkPath}`)
+  const uploadProgress = logger.progress(
+    `Uploading ${chunks.length} chunk(s) to Cloudflare D1 …`,
+    { append: false }
+  )
+
+  for (const [index, chunkPath] of chunks.entries()) {
+    uploadProgress.update(
+      `Uploading chunk ${index + 1}/${chunks.length}`,
+      { append: false }
+    )
+    uploadProgress.update(`→ ${chunkPath}`, { append: true })
     execSync(
       `npx wrangler d1 execute ${REMOTE_DB} ${wranglerTargetFlag} --yes --file "${chunkPath}"`,
       { stdio: 'inherit', cwd: projectRoot }
     )
-    if (chunks.length > 1 && chunkPath !== chunks[chunks.length - 1]) {
-      console.info('   waiting 3s before next chunk to avoid rate limits…')
+    if (chunks.length > 1 && index < chunks.length - 1) {
+      uploadProgress.update('   waiting 3s before next chunk to avoid rate limits…', {
+        append: true
+      })
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000)
     }
   }
+
+  uploadProgress.succeed('Cloudflare D1 upload complete.')
 }
 
 const main = () => {
@@ -543,16 +563,18 @@ const main = () => {
     writeResetSql()
     resetRemoteDatabase()
     const localDbPath = resolveLocalDatabasePath()
-    console.info(`Using local NuxtHub D1 database at ${localDbPath}`)
+    logger.info(`Using local NuxtHub D1 database at ${localDbPath}`)
     exportLocalDatabase(localDbPath)
     prepareDumpFile()
     rewriteVulnerabilityEntriesDump(localDbPath)
     uploadDump()
-    console.info('✅ Remote D1 database refreshed successfully.')
+    logger.success('Remote D1 database refreshed successfully.')
   } catch (error) {
-    console.error('❌ Failed to export local database to D1.')
+    logger.fail('Failed to export local database to D1.')
     if (error instanceof Error) {
-      console.error(error.message)
+      logger.error(error)
+    } else {
+      logger.error(String(error))
     }
     process.exitCode = 1
   }

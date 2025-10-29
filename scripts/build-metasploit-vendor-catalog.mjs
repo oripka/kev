@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { createCliLogger } from './utils/logger.mjs';
+
 const METASPLOIT_METADATA_URL =
   'https://raw.githubusercontent.com/rapid7/metasploit-framework/master/db/modules_metadata_base.json';
 
@@ -20,9 +22,7 @@ const historicPath = join(repoRoot, 'historic.json');
 
 const args = new Set(process.argv.slice(2));
 
-const log = (...messages) => {
-  console.log('[metasploit-catalog]', ...messages);
-};
+const logger = createCliLogger({ tag: 'metasploit-catalog' });
 
 const toArray = value => (Array.isArray(value) ? value : value ? [value] : []);
 
@@ -58,14 +58,19 @@ const collectCves = references => {
 const execFileAsync = promisify(execFile);
 
 const fetchMetasploitMetadata = async () => {
-  log('Downloading Metasploit metadata from Rapid7');
+  logger.start('Downloading Metasploit metadata from Rapid7…');
   try {
     const { stdout } = await execFileAsync('curl', ['-fsSL', METASPLOIT_METADATA_URL], {
       maxBuffer: 32 * 1024 * 1024
     });
-    return JSON.parse(stdout);
+    const metadata = JSON.parse(stdout);
+    logger.success(
+      `Downloaded ${Object.keys(metadata).length.toLocaleString()} Metasploit module definitions.`
+    );
+    return metadata;
   } catch (error) {
     const message = error?.stderr?.toString()?.trim() || error?.message || 'Unknown error';
+    logger.fail('Failed to download Metasploit metadata.');
     throw new Error(`Failed to download Metasploit metadata: ${message}`);
   }
 };
@@ -148,8 +153,12 @@ const collectVendorProductMap = async () => {
 
 const buildVendorProductCatalog = (metasploitEntries, cveMap) => {
   const catalog = new Map();
+  const total = metasploitEntries.length;
+  const progress = logger.progress('Linking Metasploit entries to vendor/product records…', {
+    append: false
+  });
 
-  for (const entry of metasploitEntries) {
+  metasploitEntries.forEach((entry, index) => {
     const cves = Array.isArray(entry?.cves) ? entry.cves : [];
     for (const cve of cves) {
       const info = cveMap.get(cve);
@@ -170,7 +179,12 @@ const buildVendorProductCatalog = (metasploitEntries, cveMap) => {
       record.cves.add(cve);
       record.sources.add(info.source);
     }
-  }
+    if (index % 500 === 0 || index === total - 1) {
+      progress.update(`Processed ${Math.min(index + 1, total).toLocaleString()} of ${total.toLocaleString()} entries`, {
+        append: false
+      });
+    }
+  });
 
   const records = [];
   for (const { vendor, product, cves, sources } of catalog.values()) {
@@ -190,6 +204,10 @@ const buildVendorProductCatalog = (metasploitEntries, cveMap) => {
     return a.product.localeCompare(b.product);
   });
 
+  progress.succeed(
+    `Linked ${records.length.toLocaleString()} vendor/product pairs across ${catalog.size.toLocaleString()} unique combinations.`
+  );
+
   return records;
 };
 
@@ -201,28 +219,34 @@ const main = async () => {
     const metadata = await fetchMetasploitMetadata();
     metasploitEntries = buildMetasploitTitles(metadata);
     await writeFile(metasploitTitlesPath, `${JSON.stringify(metasploitEntries, null, 2)}\n`, 'utf8');
-    log(`Wrote ${metasploitEntries.length.toLocaleString()} entries to ${metasploitTitlesPath}`);
+    logger.success(
+      `Cached ${metasploitEntries.length.toLocaleString()} exploit entries to ${metasploitTitlesPath}.`
+    );
   } else {
     metasploitEntries = await loadJsonFile(metasploitTitlesPath);
-    log(`Loaded ${metasploitEntries.length.toLocaleString()} entries from cache`);
+    logger.info(`Loaded ${metasploitEntries.length.toLocaleString()} entries from cache.`);
   }
 
   const cveMap = await collectVendorProductMap();
   const vendorCatalog = buildVendorProductCatalog(metasploitEntries, cveMap);
   await writeFile(metasploitVendorsPath, `${JSON.stringify(vendorCatalog, null, 2)}\n`, 'utf8');
-  log(`Wrote ${vendorCatalog.length.toLocaleString()} vendor/product pairs to ${metasploitVendorsPath}`);
+  logger.success(
+    `Wrote ${vendorCatalog.length.toLocaleString()} vendor/product pairs to ${metasploitVendorsPath}.`
+  );
 
   const unmatched = metasploitEntries
     .map(entry => ({ entry, matched: entry.cves.some(cve => cveMap.has(cve)) }))
     .filter(item => !item.matched).length;
   if (unmatched > 0) {
-    log(`${unmatched.toLocaleString()} exploit entries had no vendor/product match and were skipped`);
+    logger.warn(
+      `${unmatched.toLocaleString()} exploit entries had no vendor/product match and were skipped.`
+    );
   }
 };
 
 try {
   await main();
 } catch (error) {
-  console.error(error);
+  logger.error(error);
   process.exitCode = 1;
 }
