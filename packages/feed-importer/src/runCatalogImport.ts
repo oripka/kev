@@ -564,7 +564,14 @@ export const runCatalogImport = async (
 
       const entryRecords = buildEntryDiffRecords(entries, 'kev', impactRecordMap)
 
-      const useIncrementalKev = strategy === 'incremental'
+      const existingKevRow = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(tables.vulnerabilityEntries)
+        .where(eq(tables.vulnerabilityEntries.source, 'kev'))
+        .limit(1)
+        .get()
+      const hasExistingKevEntries = existingKevRow ? Number(existingKevRow.count) > 0 : false
+      const useIncrementalKev = strategy === 'incremental' && hasExistingKevEntries
       const totalEntries = entryRecords.length
 
       if (!useIncrementalKev) {

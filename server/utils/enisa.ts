@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { ofetch } from 'ofetch'
 import { enrichEntry } from '~/utils/classification'
 import type { KevBaseEntry } from '~/utils/classification'
@@ -596,7 +596,14 @@ export const importEnisaCatalog = async (
     const entries = cvelistResults.map(result => enrichEntry(result.entry))
     const entryRecords = buildEntryDiffRecords(entries, 'enisa', impactRecordMap)
     const totalEntries = entryRecords.length
-    const useIncremental = strategy === 'incremental'
+    const existingEnisaRow = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(tables.vulnerabilityEntries)
+      .where(eq(tables.vulnerabilityEntries.source, 'enisa'))
+      .limit(1)
+      .get()
+    const hasExistingEnisaEntries = existingEnisaRow ? Number(existingEnisaRow.count) > 0 : false
+    const useIncremental = strategy === 'incremental' && hasExistingEnisaEntries
 
     const latestUpdatedAt = entries
       .map(entry => entry.dateUpdated ?? entry.exploitedSince ?? entry.datePublished)
