@@ -18,6 +18,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY .npmrc ./
 RUN mkdir -p packages/feed-importer
 COPY packages/feed-importer/package.json packages/feed-importer/package.json
 
@@ -32,10 +33,10 @@ RUN apt-get update \
 
 COPY --from=deps /root/.local/share/pnpm /root/.local/share/pnpm
 COPY --from=deps /app/node_modules /app/node_modules
-COPY --from=deps /app/.pnpm /app/.pnpm
 COPY --from=deps /app/package.json /app/package.json
 COPY --from=deps /app/pnpm-lock.yaml /app/pnpm-lock.yaml
 COPY --from=deps /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
+COPY --from=deps /app/.npmrc /app/.npmrc
 
 COPY . .
 
