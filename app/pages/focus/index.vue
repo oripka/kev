@@ -8,12 +8,13 @@ const sortedTopics = computed(() =>
   [...focusTopics].sort((a, b) => a.title.localeCompare(b.title)),
 );
 
-const criticalTopics = computed(() =>
-  sortedTopics.value.filter((topic) => topic.category === "critical"),
-);
-
-const thematicTopics = computed(() =>
-  sortedTopics.value.filter((topic) => topic.category === "theme"),
+const topicCards = computed(() =>
+  sortedTopics.value.map((topic) => ({
+    topic,
+    badgeColor: topic.category === "critical" ? "rose" : "sky",
+    badgeLabel: topic.category === "critical" ? "Critical" : "Focus",
+    icon: topic.icon ?? (topic.category === "critical" ? "i-lucide-flame" : "i-lucide-compass"),
+  })),
 );
 
 useHead({
@@ -48,52 +49,25 @@ useHead({
       <div class="flex items-center justify-between gap-4">
         <div>
           <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-            Critical focus pages
+            Curated focus pages
           </h2>
           <p class="text-sm text-neutral-500 dark:text-neutral-400">
-            High-risk exploit themes that demand immediate cross-team coordination.
+            Explore in-the-wild hotspots across web servers, browsers, edge gateways, and client software without juggling overlapping narratives.
           </p>
         </div>
       </div>
       <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         <ULink
-          v-for="topic in criticalTopics"
-          :key="topic.slug"
-          :to="{ path: `/focus/${topic.slug}` }"
+          v-for="card in topicCards"
+          :key="card.topic.slug"
+          :to="{ path: `/focus/${card.topic.slug}` }"
           class="block"
         >
           <FocusTopicCard
-            :topic="topic"
-            badge-color="rose"
-            badge-label="Critical"
-            class="h-full"
-          />
-        </ULink>
-      </div>
-    </section>
-
-    <section class="space-y-6">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-            Operational focus pages
-          </h2>
-          <p class="text-sm text-neutral-500 dark:text-neutral-400">
-            Theme-specific narratives that turn the KEV catalog into shareable playbooks for remediation owners.
-          </p>
-        </div>
-      </div>
-      <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <ULink
-          v-for="topic in thematicTopics"
-          :key="topic.slug"
-          :to="{ path: `/focus/${topic.slug}` }"
-          class="block"
-        >
-          <FocusTopicCard
-            :topic="topic"
-            badge-color="sky"
-            badge-label="Focus"
+            :topic="card.topic"
+            :badge-color="card.badgeColor"
+            :badge-label="card.badgeLabel"
+            :icon="card.icon"
             class="h-full"
           />
         </ULink>

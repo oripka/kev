@@ -43,6 +43,7 @@ export type FocusTopic = {
   title: string;
   headline: string;
   summary: string;
+  icon?: string;
   hero: {
     kicker?: string;
     description: string;
@@ -70,6 +71,7 @@ export const focusTopics: FocusTopic[] = [
     headline: "Why web application 0-days dominate incident response",
     summary:
       "Frequent zero-day-to-exploit conversions across customer portals, CI/CD pipelines, and SaaS integrations make web applications the most volatile surface in the KEV backlog.",
+    icon: "i-lucide-globe-lock",
     hero: {
       kicker: "Critical focus",
       description:
@@ -193,6 +195,7 @@ export const focusTopics: FocusTopic[] = [
     headline: "When perimeter services stay exposed, compromise is immediate",
     summary:
       "Remote access gateways, VPN appliances, and legacy RDP/SMB endpoints continue to surface in KEV with startling regularity, and nearly all are reachable from the internet when exploited.",
+    icon: "i-lucide-router",
     hero: {
       kicker: "Critical focus",
       description:
@@ -316,6 +319,7 @@ export const focusTopics: FocusTopic[] = [
     headline: "Mail outages escalate quickly when exploitation predates patch windows",
     summary:
       "Mail gateways and collaboration suites carry comparatively few KEV entries, yet each one produces outsized operational disruption and follow-on compromise.",
+    icon: "i-lucide-mail-warning",
     hero: {
       kicker: "Critical focus",
       description:
@@ -437,6 +441,7 @@ export const focusTopics: FocusTopic[] = [
     headline: "Privilege escalation closes the loop on every intrusion chain",
     summary:
       "Once initial access is achieved, operating system escalation flaws give adversaries the keys to deploy ransomware or exfiltrate data within minutes.",
+    icon: "i-lucide-cpu",
     hero: {
       kicker: "Critical focus",
       description:
@@ -553,337 +558,372 @@ export const focusTopics: FocusTopic[] = [
     recommendedOwners: ["Endpoint engineering", "Threat detection"],
   },
   {
-    slug: "edge-device-exposure",
-    category: "theme",
-    title: "Edge Device Exposure",
-    headline: "Perimeter services demand continuous patch orchestration",
+    slug: "web-server-hardening",
+    category: "critical",
+    title: "Web Server Entry Points",
+    headline: "Keep front-of-house servers hardened to stop hands-on-keyboard breaches",
     summary:
-      "Summarise why externally exposed protocols such as RDP, SMB, SSH, and VPN endpoints show up year after year in KEV and how quickly defenders must act.",
+      "Recurring Apache, Nginx, and IIS flaws show how quickly exposed web infrastructure converts into ransomware footholds.",
+    icon: "i-lucide-server-cog",
     hero: {
-      kicker: "Focus page",
+      kicker: "Critical focus",
       description:
-        "Security, networking, and infrastructure teams can reuse these metrics to brief leadership on the urgency behind edge hardening.",
+        "Platform, infrastructure, and incident teams can point to these metrics when requesting maintenance windows for reverse proxies and load balancers.",
     },
     filters: {
-      domain: "Internet Edge",
-      internetExposedOnly: true,
+      domain: "Web Servers",
+      sources: defaultSources,
+    },
+    metrics: [
+      {
+        key: "fiveYearMatchCount",
+        label: "Five-year exploit count",
+        description:
+          "Total KEV entries tied to web server software across the five-year window.",
+      },
+      {
+        key: "publicExploitShare",
+        label: "Commodity exploit share",
+        description:
+          "Percentage of listings with public PoCs or Metasploit modules, signalling rapid weaponisation.",
+      },
+      {
+        key: "medianExploitWindowDays",
+        label: "Median time to weaponisation",
+        description:
+          "Median number of days between disclosure and KEV listing for web server CVEs.",
+      },
+      {
+        key: "dueDateCoverageShare",
+        label: "Remediation guidance coverage",
+        description:
+          "Portion of entries where vendors supplied mitigation or patch guidance defenders can execute.",
+      },
+    ],
+    narratives: [
+      {
+        title: "Incident driver",
+        body:
+          "Compromised web servers routinely hand over credentials and VPN sessions. Use this focus page to demonstrate why reverse proxies and app servers demand the same rigor as VPN gateways.",
+      },
+      {
+        title: "Change control friction",
+        body:
+          "Present the exploit cadence to change advisory boards so they reserve recurring downtime for front-end infrastructure.",
+      },
+    ],
+    actions: [
+      {
+        title: "Baseline patch windows",
+        description:
+          "Schedule standing maintenance windows for web servers and reverse proxies, even during peak seasons.",
+        owner: "Platform engineering",
+      },
+      {
+        title: "Tighten surface telemetry",
+        description:
+          "Ensure request logging, WAF telemetry, and canary endpoints exist for the products highlighted in the list.",
+        owner: "Security operations",
+      },
+      {
+        title: "Codify emergency rollback",
+        description:
+          "Document and rehearse the exact steps to fail traffic over or disable a vulnerable tier when KEV adds a new entry.",
+        owner: "Infrastructure operations",
+      },
+    ],
+    shortcuts: [
+      {
+        label: "Reverse proxy RCEs",
+        description: "Highlight Apache HTTP Server, Nginx, and F5 BIG-IP issues.",
+        query: {
+          domain: "Web Servers",
+          search: "Apache",
+        },
+      },
+      {
+        label: "Windows IIS stack",
+        description: "Focus on Microsoft IIS and Exchange web services exposure.",
+        query: {
+          domain: "Web Servers",
+          search: "IIS",
+        },
+      },
+      {
+        label: "PoC available",
+        description: "Restrict to web server CVEs with public exploit tooling.",
+        query: {
+          domain: "Web Servers",
+          publicExploitOnly: true,
+        },
+      },
+    ],
+    incidents: [
+      {
+        title: "ProxyShell & ProxyLogon",
+        summary:
+          "Sequential Exchange web tier flaws underpinned multiple ransomware campaigns and credential theft operations.",
+      },
+      {
+        title: "Apache Struts CVE-2017-5638",
+        summary:
+          "The breach that compromised Equifax remains a touchstone example of why web servers require urgent patching.",
+      },
+    ],
+    highlightNotes: [
+      "Web servers remain one of the fastest paths from external exposure to internal credential theft.",
+      "Commodity exploit support means attackers can reuse payloads faster than operations teams can request downtime.",
+    ],
+    keySignalNotes: [
+      "Track the median time to weaponisation to defend patch window requests with data.",
+    ],
+    timelinePeriod: "monthly",
+    recommendedOwners: ["Platform engineering", "Infrastructure operations"],
+  },
+  {
+    slug: "browser-attack-surface",
+    category: "critical",
+    title: "Browser Exploit Frontlines",
+    headline: "Modern browsers are a primary zero-day delivery channel",
+    summary:
+      "Chromium, WebKit, and Gecko vulnerabilities continue to deliver implants via drive-by downloads and social engineering.",
+    icon: "i-lucide-globe-2",
+    hero: {
+      kicker: "Critical focus",
+      description:
+        "Endpoint engineering and threat hunters can use this page to justify aggressive auto-update cadence and isolation investments.",
+    },
+    filters: {
+      domain: "Browsers",
       sources: defaultSources,
     },
     metrics: [
       {
         key: "rolling12MonthCount",
-        label: "12-month exploit frequency",
+        label: "12-month exploit cadence",
         description:
-          "Rolling total of edge-service CVEs observed in KEV over the last year.",
+          "Rolling total of KEV browser listings captured over the past year.",
       },
       {
-        key: "medianExploitWindowDays",
-        label: "Time-to-exploit funnel",
+        key: "pocWithin30DaysShare",
+        label: "0-day conversion rate",
         description:
-          "Median difference between public disclosure and KEV listing for edge services.",
+          "Share of listings where exploit material surfaced within 30 days of disclosure.",
+      },
+      {
+        key: "publicExploitShare",
+        label: "Exploit kit presence",
+        description:
+          "Percentage of entries with public PoCs or integration into exploit frameworks.",
       },
       {
         key: "medianPatchWindowDays",
-        label: "Patchability window",
+        label: "Patch adoption window",
         description:
-          "Median span between KEV listing and remediation due dates for edge devices.",
-      },
-      {
-        key: "internetExposedShare",
-        label: "Externally reachable proportion",
-        description:
-          "Percentage of entries explicitly marked as internet exposed.",
+          "Median time between KEV listing and vendor due dates, indicating how fast desktops must update.",
       },
     ],
     narratives: [
       {
-        title: "Why it matters",
+        title: "Targeting executives and developers",
         body:
-          "Each public-facing protocol gives adversaries a reusable foothold. Show this page to justify aggressive decommissioning and migration plans.",
+          "Drive-by campaigns routinely aim at people with elevated access, making browser hygiene a board-level concern.",
+      },
+      {
+        title: "Autoupdate coverage gaps",
+        body:
+          "Use the cadence numbers to prove why disabling or delaying browser auto-updates leaves enterprises exposed.",
       },
     ],
     actions: [
       {
-        title: "Create segmentation guardrails",
+        title: "Enforce rapid auto-update",
         description:
-          "Inventory exposed services, move them behind VPN or ZTNA brokers, and enforce conditional access.",
-        owner: "Network engineering",
+          "Audit fleet coverage for Chrome, Edge, Firefox, and Safari to ensure updates land within hours not weeks.",
+        owner: "Endpoint engineering",
       },
       {
-        title: "Schedule rolling firmware maintenance",
+        title: "Expand browser isolation",
         description:
-          "Bake quarterly firmware windows into change calendars so gateways stay inside patch SLOs.",
-        owner: "Infrastructure operations",
+          "Deploy isolation or remote browsing for high-risk personas when KEV adds a new browser zero-day.",
+        owner: "Security architecture",
       },
       {
-        title: "Document emergency takedown steps",
+        title: "Hunt for exploit leftovers",
         description:
-          "Record the exact commands and contacts needed to disable exposed services during an incident.",
+          "Instrument telemetry to detect crash loops, sandbox escapes, and suspicious renderer processes post-patch.",
+        owner: "Threat detection",
+      },
+    ],
+    shortcuts: [
+      {
+        label: "Chromium family",
+        description: "Entries affecting Chrome, Edge, and other Chromium derivatives.",
+        query: {
+          domain: "Browsers",
+          search: "Chrome",
+        },
+      },
+      {
+        label: "Safari & WebKit",
+        description: "Highlight Apple-centric browser vulnerabilities.",
+        query: {
+          domain: "Browsers",
+          search: "Safari",
+        },
+      },
+      {
+        label: "Exploit kit ready",
+        description: "Browser CVEs with public exploit material or Metasploit modules.",
+        query: {
+          domain: "Browsers",
+          publicExploitOnly: true,
+        },
+      },
+    ],
+    incidents: [
+      {
+        title: "Chrome zero-day clusters",
+        summary:
+          "Repeated Chrome in-the-wild zero-days during 2023–2024 showed how quickly exploit brokers weaponise renderer bugs.",
+      },
+      {
+        title: "WebKit spyware deployment",
+        summary:
+          "Mobile spyware crews leveraged WebKit flaws to deliver implants through a single malicious link.",
+      },
+    ],
+    highlightNotes: [
+      "Browser zero-days are increasingly brokered and reused across multiple threat groups.",
+      "Fast autoupdate is the most reliable mitigation when KEV lists a new browser CVE.",
+    ],
+    keySignalNotes: [
+      "Monitor the 0-day conversion rate to assess whether defensive isolation is keeping pace with attacker agility.",
+    ],
+    timelinePeriod: "monthly",
+    recommendedOwners: ["Endpoint engineering", "Security architecture"],
+  },
+  {
+    slug: "client-application-exposure",
+    category: "critical",
+    title: "Client Application Footholds",
+    headline: "Remote support and business apps create quiet persistence spots",
+    summary:
+      "Non-web client software such as remote access, backup, and IT tooling continues to deliver initial access for ransomware crews.",
+    icon: "i-lucide-laptop-2",
+    hero: {
+      kicker: "Critical focus",
+      description:
+        "Desktop engineering and IT operations can point to these insights when tightening application allowlists and vendor patch obligations.",
+    },
+    filters: {
+      domain: "Non-Web Applications",
+      sources: defaultSources,
+    },
+    metrics: [
+      {
+        key: "fiveYearMatchCount",
+        label: "Five-year exposure count",
+        description:
+          "Total KEV entries attributed to client-side business software across five years.",
+      },
+      {
+        key: "highSeverityShare",
+        label: "High/critical severity share",
+        description:
+          "Portion of listings rated High or Critical by CVSS, indicating immediate risk.",
+      },
+      {
+        key: "pocWithin30DaysShare",
+        label: "Exploit availability speed",
+        description:
+          "Share of entries where public PoCs emerged within 30 days, highlighting weaponisation speed.",
+      },
+      {
+        key: "ransomwareShare",
+        label: "Ransomware linkage",
+        description:
+          "Percentage of entries explicitly tied to ransomware operations in KEV commentary.",
+      },
+    ],
+    narratives: [
+      {
+        title: "Remote management blind spots",
+        body:
+          "Tools installed by help desks or MSPs often escape standard hardening. Bring this data to procurement and onboarding reviews.",
+      },
+      {
+        title: "Vendor accountability",
+        body:
+          "Use the ransomware linkage metric to insist partners keep remote support agents patched or segmented.",
+      },
+    ],
+    actions: [
+      {
+        title: "Harden remote access tools",
+        description:
+          "Require MFA, restrict network reach, and enforce rapid patching for highlighted remote management software.",
+        owner: "IT operations",
+      },
+      {
+        title: "Expand application allowlisting",
+        description:
+          "Limit where remote support and backup agents can run, disabling unused modules by default.",
+        owner: "Endpoint engineering",
+      },
+      {
+        title: "Practice compromise drills",
+        description:
+          "Rehearse incident response scenarios where adversaries abuse remote support agents to deploy ransomware.",
         owner: "Incident response",
       },
     ],
     shortcuts: [
       {
-        label: "RDP-only view",
-        description: "Filter KEV for remote desktop exploits.",
+        label: "Remote support tooling",
+        description: "Entries covering ScreenConnect, TeamViewer, and similar agents.",
         query: {
-          domain: "Internet Edge",
-          exploit: "Auth Bypass · Edge",
+          domain: "Non-Web Applications",
+          search: "ConnectWise",
         },
       },
       {
-        label: "SSH brute force",
-        description: "Show SSH service CVEs to support hardening efforts.",
+        label: "File transfer clients",
+        description: "Focus on backup and file transfer software leveraged in intrusions.",
         query: {
-          domain: "Internet Edge",
-          vulnerability: "Authentication Bypass",
+          domain: "Non-Web Applications",
+          search: "GoAnywhere",
         },
       },
       {
-        label: "Public PoCs",
-        description: "Entries with readily available exploit tooling.",
+        label: "Known ransomware",
+        description: "Client software CVEs linked to ransomware activity.",
         query: {
-          domain: "Internet Edge",
-          publicExploitOnly: true,
-        },
-      },
-    ],
-    incidents: [
-      {
-        title: "BlueKeep and friends",
-        summary:
-          "RDP vulnerabilities such as CVE-2019-0708 and its successors continue to drive worms and ransomware breakout.",
-      },
-      {
-        title: "Cisco ASA / Firepower",
-        summary:
-          "Repeated Cisco ASA flaws demonstrate how remote services lead directly to credential theft and VPN hijacking.",
-      },
-    ],
-    additionalInsights: [
-      "Pair the rolling count with change calendars to prove the need for evergreen maintenance windows.",
-    ],
-    timelinePeriod: "monthly",
-    recommendedOwners: ["Network engineering", "Infrastructure operations"],
-  },
-  {
-    slug: "web-injection-supply-chain",
-    category: "theme",
-    title: "Web Injection & Supply Chain",
-    headline: "Web stack flaws cascade into downstream compromise",
-    summary:
-      "Expose why web application injection bugs should not be deprioritised just because they are \"only web\" issues.",
-    hero: {
-      kicker: "Focus page",
-      description:
-        "Use these insights when explaining to product owners how web exploitation translates to production outages, data loss, and supply-chain impact.",
-    },
-    filters: {
-      domain: "Web Applications",
-      vulnerability: "Remote Code Execution",
-      sources: defaultSources,
-    },
-    metrics: [
-      {
-        key: "totalMatches",
-        label: "Attack surface overview",
-        description: "Total KEV records attributed to web stacks within this slice of the catalog.",
-      },
-      {
-        key: "publicExploitShare",
-        label: "Known exploit availability",
-        description: "Percentage of entries with public PoCs or Metasploit modules.",
-      },
-      {
-        key: "pocWithin30DaysShare",
-        label: "Exploit chain speed",
-        description:
-          "Share of CVEs where exploit material emerged within 30 days of disclosure, highlighting supply-chain risk.",
-      },
-      {
-        key: "highSeverityShare",
-        label: "High-severity concentration",
-        description: "Portion of entries rated High or Critical by CVSS.",
-      },
-    ],
-    narratives: [
-      {
-        title: "Supply-chain blast radius",
-        body:
-          "Many listings affect build servers, CI/CD orchestration, or third-party managed services. Use the incident summaries to illustrate cascading business impact.",
-      },
-    ],
-    actions: [
-      {
-        title: "Apply WAF / API gateway mitigations",
-        description:
-          "Ship targeted rules that neutralise the exploit primitives described in each CVE while long-term patches roll out.",
-        owner: "Application security",
-      },
-      {
-        title: "Pin and verify dependencies",
-        description:
-          "Lock package versions, enable integrity checking, and add build-time verification for components referenced in these CVEs.",
-        owner: "DevSecOps",
-      },
-      {
-        title: "Update supply-chain documentation",
-        description:
-          "Record which third parties rely on the affected components so vendor management teams can confirm remediation timelines.",
-        owner: "Vendor management",
-      },
-    ],
-    shortcuts: [
-      {
-        label: "CMS exploits",
-        description: "Highlight content management systems with active exploitation.",
-        query: {
-          domain: "Web Applications",
-          search: "WordPress",
-        },
-      },
-      {
-        label: "Build server flaws",
-        description: "Filter on CI/CD platforms and automation portals.",
-        query: {
-          domain: "Web Applications",
-          search: "Jenkins",
-        },
-      },
-      {
-        label: "PoC required",
-        description: "Constrain to entries with public PoC or Metasploit coverage.",
-        query: {
-          domain: "Web Applications",
-          publicExploitOnly: true,
+          domain: "Non-Web Applications",
+          ransomwareOnly: true,
         },
       },
     ],
     incidents: [
       {
-        title: "SolarWinds build compromise",
+        title: "ScreenConnect exploitation",
         summary:
-          "Demonstrated how build pipeline intrusions propagate malicious updates downstream.",
+          "The 2024 ScreenConnect vulnerability led to widespread ransomware deployment via remote support agents.",
       },
       {
-        title: "Log4Shell fallout",
+        title: "GoAnywhere MFT abuse",
         summary:
-          "CVE-2021-44228 showed how a single injection flaw across web stacks crippled operations worldwide.",
+          "Managed file transfer clients were a common launchpad for extortion crews, underscoring vendor hardening gaps.",
       },
     ],
-    additionalInsights: [
-      "Use the high-severity concentration metric to argue for mandatory change windows despite perceived \"low business impact\".",
+    highlightNotes: [
+      "Client tools installed for convenience often become unmonitored persistence mechanisms.",
+      "Ransomware groups rapidly incorporate remote support CVEs into playbooks once public PoCs appear.",
+    ],
+    keySignalNotes: [
+      "Watch the ransomware-linked share to prioritise which agents should be removed or segmented first.",
     ],
     timelinePeriod: "monthly",
-    recommendedOwners: ["Application security", "Vendor management"],
-  },
-  {
-    slug: "email-collaboration-corridors",
-    category: "theme",
-    title: "Email & Collaboration Corridors",
-    headline: "Collaboration stacks remain prime targets for initial access",
-    summary:
-      "Position mail and collaboration vulnerabilities as mission-critical risks by combining cadence metrics with actionable response ladders.",
-    hero: {
-      kicker: "Focus page",
-      description:
-        "SOC and IT responders can share this page with leadership to explain why collaboration suites demand the same urgency as edge devices.",
-    },
-    filters: {
-      domain: "Mail Servers",
-      sources: defaultSources,
-    },
-    metrics: [
-      {
-        key: "rolling12MonthCount",
-        label: "Rolling exploit cadence",
-        description: "12-month trend for mail and collaboration KEV listings.",
-      },
-      {
-        key: "internetExposedShare",
-        label: "External exposure risk",
-        description: "Percentage of entries involving internet-facing services.",
-      },
-      {
-        key: "medianPatchWindowDays",
-        label: "Patch adoption lag",
-        description: "Median days between KEV listing and due date, highlighting change-control friction.",
-      },
-      {
-        key: "dueDateCoverageShare",
-        label: "Guidance availability",
-        description: "Share of entries that include remediation scripts or hardening steps.",
-      },
-    ],
-    narratives: [
-      {
-        title: "Incident readiness",
-        body:
-          "Use these numbers to justify readiness drills that combine IT, SOC, and communications teams when collaboration outages hit.",
-      },
-    ],
-    actions: [
-      {
-        title: "Recommended response ladder",
-        description:
-          "Disable vulnerable endpoints, apply vendor patches, and run compromise assessments in a phased, rehearsed order.",
-        owner: "Security operations",
-      },
-      {
-        title: "Telemetry uplift",
-        description:
-          "Augment logging around Exchange, SharePoint, and collaboration APIs so defenders can detect abuse before full compromise.",
-        owner: "Observability",
-      },
-      {
-        title: "Stakeholder communication plan",
-        description:
-          "Keep customer success and communications partners looped in with templated updates for collaboration incidents.",
-        owner: "Communications",
-      },
-    ],
-    shortcuts: [
-      {
-        label: "Exchange vs others",
-        description: "Compare Microsoft entries to other vendors.",
-        query: {
-          domain: "Mail Servers",
-          search: "Microsoft",
-        },
-      },
-      {
-        label: "Public exploits",
-        description: "Mail CVEs with public exploit tooling.",
-        query: {
-          domain: "Mail Servers",
-          publicExploitOnly: true,
-        },
-      },
-      {
-        label: "Identity crossover",
-        description: "Mail entries that also touch identity providers or collaboration APIs.",
-        query: {
-          domain: "Mail Servers",
-          vulnerability: "Authentication Bypass",
-        },
-      },
-    ],
-    incidents: [
-      {
-        title: "ProxyNotShell",
-        summary:
-          "2022 Exchange flaws forced repeated emergency mitigations and highlighted the need for response ladders.",
-      },
-      {
-        title: "Teams token theft",
-        summary:
-          "Abuse of collaboration tokens illustrated how attackers pivot from mail into chat ecosystems.",
-      },
-    ],
-    additionalInsights: [
-      "Pair cadence metrics with patch lag numbers when negotiating change freezes during peak business seasons.",
-    ],
-    timelinePeriod: "monthly",
-    recommendedOwners: ["Security operations", "Communications"],
+    recommendedOwners: ["IT operations", "Endpoint engineering"],
   },
 ];

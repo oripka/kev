@@ -70,6 +70,40 @@ const buildCvssLabel = (
 
 const columns = computed<TableColumn<KevEntrySummary>[]>(() => [
   {
+    id: 'vulnerabilityName',
+    header: 'Vulnerability',
+    cell: ({ row }) => {
+      const title = row.original.vulnerabilityName || row.original.description || '—'
+      const truncatedTitle = title.length > 150 ? `${title.slice(0, 147)}…` : title
+      const description = row.original.description || ''
+      const truncatedDescription = description.length > 150 ? `${description.slice(0, 147)}…` : description
+      const vendor = row.original.vendor || ''
+      const product = row.original.product || ''
+
+      return h('div', { class: 'space-y-1' }, [
+        h(
+          'span',
+          { class: 'font-medium text-neutral-800 dark:text-neutral-100' },
+          truncatedTitle
+        ),
+        truncatedDescription
+          ? h(
+              'span',
+              { class: 'block text-xs text-neutral-500 dark:text-neutral-400' },
+              truncatedDescription
+            )
+          : null,
+        vendor || product
+          ? h(
+              'span',
+              { class: 'block text-xs text-neutral-500 dark:text-neutral-400' },
+              [vendor, product].filter(Boolean).join(' · ')
+            )
+          : null
+      ])
+    }
+  },
+  {
     accessorKey: 'cveId',
     header: 'CVE ID',
     cell: ({ row }) =>
@@ -101,14 +135,6 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => [
             )
           : null
       ])
-  },
-  {
-    accessorKey: 'vendor',
-    header: 'Vendor'
-  },
-  {
-    accessorKey: 'product',
-    header: 'Product'
   },
   {
     id: 'cvss',
@@ -211,19 +237,27 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => [
           v-if="headlineEntries.length"
           class="flex flex-wrap gap-2 text-xs text-neutral-500 dark:text-neutral-400"
         >
-          <UBadge
-            v-for="entry in headlineEntries"
-            :key="entry.id"
-            color="primary"
-            variant="soft"
-            class="font-medium"
-          >
-            {{ entry.cveId }}
-            <span v-if="entry.product" class="text-[10px] text-neutral-400 dark:text-neutral-500">
-              &nbsp;· {{ entry.product }}
+        <UBadge
+          v-for="entry in headlineEntries"
+          :key="entry.id"
+          color="primary"
+          variant="soft"
+          class="font-medium"
+        >
+          <div class="flex flex-col gap-0.5 text-left">
+            <span>{{ entry.cveId }}</span>
+            <span class="text-[10px] text-neutral-500 dark:text-neutral-400">
+              {{ entry.vulnerabilityName || entry.description || "Untitled" }}
             </span>
-          </UBadge>
-        </div>
+            <span
+              v-if="entry.vendor || entry.product"
+              class="text-[10px] text-neutral-400 dark:text-neutral-500"
+            >
+              {{ [entry.vendor, entry.product].filter(Boolean).join(" · ") }}
+            </span>
+          </div>
+        </UBadge>
+      </div>
       </div>
     </template>
     <template #body>

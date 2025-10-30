@@ -7,6 +7,7 @@ const props = defineProps<{
   topic: FocusTopic;
   badgeColor: string;
   badgeLabel: string;
+  icon?: string;
 }>();
 
 const defaultSources = "kev,enisa,historic,metasploit,poc";
@@ -46,15 +47,19 @@ const sampleLabel = (index: number) => `sample-cve-${props.topic.slug}-${index}`
     v-bind="$attrs"
     class="group relative flex h-full flex-col overflow-hidden border border-neutral-200/70 bg-white/95 shadow-sm transition hover:-translate-y-0.5 hover:border-primary-300/80 hover:shadow-lg dark:border-neutral-800/70 dark:bg-neutral-900/90 dark:hover:border-primary-400/70 dark:hover:shadow-[0_16px_30px_rgba(80,135,255,0.18)]"
   >
-    <div
-      class="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary-100/20 via-transparent to-transparent opacity-0 transition group-hover:opacity-100 dark:from-primary-500/12"
-      aria-hidden="true"
-    />
     <div class="relative z-10 flex h-full flex-col gap-5">
       <div class="flex items-center justify-between gap-3">
-        <UBadge :color="badgeColor" variant="soft" class="font-semibold shadow-sm">
-          {{ badgeLabel }}
-        </UBadge>
+        <div class="flex items-center gap-2">
+          <span
+            v-if="icon"
+            class="flex size-9 items-center justify-center rounded-full bg-primary-100 text-primary-600 shadow-sm dark:bg-primary-500/15 dark:text-primary-200"
+          >
+            <UIcon :name="icon" class="size-5" />
+          </span>
+          <UBadge :color="badgeColor" variant="soft" class="font-semibold shadow-sm">
+            {{ badgeLabel }}
+          </UBadge>
+        </div>
         <span
           class="rounded-full bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-600 shadow-sm transition group-hover:bg-primary-500/15 dark:bg-primary-500/15 dark:text-primary-200 dark:group-hover:bg-primary-500/25"
         >
@@ -72,7 +77,7 @@ const sampleLabel = (index: number) => `sample-cve-${props.topic.slug}-${index}`
       </div>
 
       <div
-        class="min-h-[200px] rounded-xl bg-gradient-to-br from-primary-100/70 via-primary-50/60 to-primary-50/20 p-4 shadow-inner transition group-hover:from-primary-100/80 group-hover:via-primary-50 dark:from-primary-500/20 dark:via-primary-500/12 dark:to-primary-500/8 dark:group-hover:from-primary-500/22"
+        class="min-h-[200px] rounded-xl border border-primary-100/60 bg-primary-50/80 p-4 shadow-inner transition dark:border-primary-500/25 dark:bg-primary-500/12"
       >
         <p class="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-200">
           Documented exploits · last five years
