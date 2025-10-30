@@ -36,6 +36,73 @@ const logger = createCliLogger({ tag: 'export-to-d1' })
 const usePreview = process.argv.includes('--preview')
 const wranglerTargetFlag = usePreview ? '--preview' : '--remote'
 
+const wait = (milliseconds) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+}
+
+const DEFAULT_WRANGLER_RETRY_ATTEMPTS = 4
+const DEFAULT_WRANGLER_RETRY_DELAY_MS = 5_000
+
+const normalizeOutput = (value) => {
+  if (!value) {
+    return ''
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString()
+  }
+  return String(value)
+}
+
+const runWranglerCommand = (
+  command,
+  {
+    label = 'wrangler command',
+    maxAttempts = DEFAULT_WRANGLER_RETRY_ATTEMPTS,
+    retryDelayMs = DEFAULT_WRANGLER_RETRY_DELAY_MS
+  } = {}
+) => {
+  const resolvedAttempts = Math.max(1, Number(maxAttempts) || 1)
+  const resolvedDelay = Math.max(0, Number(retryDelayMs) || 0)
+
+  for (let attempt = 1; attempt <= resolvedAttempts; attempt += 1) {
+    try {
+      const result = execSync(command, { stdio: 'pipe', cwd: projectRoot })
+      const output = normalizeOutput(result)
+      if (output) {
+        process.stdout.write(output)
+      }
+      return
+    } catch (error) {
+      const stdout = normalizeOutput(error?.stdout)
+      const stderr = normalizeOutput(error?.stderr)
+      if (stdout) {
+        process.stdout.write(stdout)
+      }
+      if (stderr) {
+        process.stderr.write(stderr)
+      }
+
+      const combined = `${stdout}\n${stderr}\n${normalizeOutput(error?.message)}`
+      if (combined.includes('D1_RESET_DO')) {
+        if (attempt >= resolvedAttempts) {
+          throw error
+        }
+        logger.warn(
+          `Wrangler reported a D1_RESET_DO response while ${label}. Waiting ${(resolvedDelay / 1000).toFixed(
+            1
+          )}s before retry ${attempt + 1}/${resolvedAttempts}…`
+        )
+        if (resolvedDelay > 0) {
+          wait(resolvedDelay)
+        }
+        continue
+      }
+
+      throw error
+    }
+  }
+}
+
 const INCLUDED_TABLES = [
   '__drizzle_migrations',
   'catalog_entries',
@@ -190,9 +257,9 @@ const writeResetSql = () => {
 
 const resetRemoteDatabase = () => {
   logger.start(`Resetting remote D1 database "${REMOTE_DB}"…`)
-  execSync(
+  runWranglerCommand(
     `npx wrangler d1 execute ${REMOTE_DB} ${wranglerTargetFlag} --yes --file "${resetPath}"`,
-    { stdio: 'inherit', cwd: projectRoot }
+    { label: 'resetting the remote database' }
   )
   logger.success(`Remote D1 database "${REMOTE_DB}" reset.`)
 }
@@ -550,15 +617,15 @@ const uploadChunks = (chunks) => {
       { append: false }
     )
     uploadProgress.update(`→ ${chunkPath}`, { append: true })
-    execSync(
+    runWranglerCommand(
       `npx wrangler d1 execute ${REMOTE_DB} ${wranglerTargetFlag} --yes --file "${chunkPath}"`,
-      { stdio: 'inherit', cwd: projectRoot }
+      { label: `uploading ${chunkPath}` }
     )
     if (chunks.length > 1 && index < chunks.length - 1) {
       uploadProgress.update('   waiting 3s before next chunk to avoid rate limits…', {
         append: true
       })
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000)
+      wait(3000)
     }
   }
 
