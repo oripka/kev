@@ -12,6 +12,12 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
     active: route.path === "/",
   },
   {
+    label: "Focus",
+    to: "/focus",
+    icon: "i-lucide-target",
+    active: route.path === "/focus" || route.path.startsWith("/focus/"),
+  },
+  {
     label: "Last 14 days",
     to: "/vulns-last-two-weeks",
     icon: "i-lucide-hourglass",
@@ -66,10 +72,8 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
       </template>
       <UNavigationMenu :items="navigationItems" />
       <template #right>
-     <UColorModeButton />
+        <UColorModeButton />
       </template>
-   
-
     </UHeader>
 
     <UMain>

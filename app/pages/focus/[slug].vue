@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { createError, useHead, useRoute } from "#imports";
+import { createError, useHead, useRoute, useRouter } from "#imports";
 import { focusTopics, type FocusTopic } from "~/constants/focusTopics";
 import { computeFocusMetric } from "~/utils/focusMetrics";
 import { useKevData } from "~/composables/useKevData";
 import { useDateDisplay } from "~/composables/useDateDisplay";
 
 const route = useRoute();
+const router = useRouter();
 const slug = computed(() => String(route.params.slug ?? ""));
 
 const resolvedTopic = computed<FocusTopic | null>(() =>
@@ -116,6 +117,15 @@ const buildShareUrl = () => {
     return `/focus/${topic.slug}`;
   }
   return window.location.href;
+};
+
+const openCatalogWithBaseFilters = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const query = { ...baseCatalogQuery.value };
+  router.push({ path: "/", query });
 };
 
 const downloadFocusCsv = () => {
@@ -233,6 +243,15 @@ const copyShareLink = async () => {
         <span>Last updated {{ lastUpdatedLabel }}</span>
         <UButton size="xs" color="primary" variant="soft" @click="refresh">Refresh data</UButton>
         <UButton size="xs" color="neutral" variant="soft" @click="copyShareLink">Copy share link</UButton>
+        <UButton
+          size="xs"
+          color="primary"
+          variant="solid"
+          icon="i-lucide-list-plus"
+          @click="openCatalogWithBaseFilters"
+        >
+          Add to patch queue
+        </UButton>
         <UButton size="xs" color="primary" variant="outline" @click="downloadFocusCsv">
           Export list
         </UButton>
@@ -298,15 +317,18 @@ const copyShareLink = async () => {
     <section class="space-y-4">
       <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Catalog shortcuts</h2>
       <div class="flex flex-wrap gap-2">
-        <ULink
+        <UTooltip
           v-for="shortcut in shortcutLinks"
           :key="shortcut.label"
-          :to="{ path: '/', query: shortcut.query }"
+          :text="shortcut.description || undefined"
+          :open-delay="150"
         >
-          <UButton color="primary" variant="soft">
-            {{ shortcut.label }}
-          </UButton>
-        </ULink>
+          <ULink :to="{ path: '/', query: shortcut.query }">
+            <UButton color="primary" variant="soft">
+              {{ shortcut.label }}
+            </UButton>
+          </ULink>
+        </UTooltip>
       </div>
       <p class="text-xs text-neutral-500 dark:text-neutral-400">
         Each shortcut opens the main catalog with these filters applied so teams can build patch queues or exports.
