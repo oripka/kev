@@ -1,0 +1,15 @@
+.git
+.github
+.vscode
+.nuxt
+node_modules
+.pnpm-store
+.DS_Store
+.data
+data/*
+datasets
+dist
+tests
+coverage
+.env
+*.log
