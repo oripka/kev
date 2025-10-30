@@ -30,14 +30,36 @@ useHead({
   ],
 });
 
-const baseQuery = computed(() => ({
-  ...topic.filters,
-  sources: topic.filters.sources ?? "kev,enisa,historic,metasploit,poc",
-  limit: 10_000,
-  sort: "publicationDate",
-  sortDirection: "desc",
-  includeMarketSignals: false,
-}));
+const fiveYearCutoff = computed(() => {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setFullYear(now.getFullYear() - 5);
+  return cutoff.toISOString().split("T")[0];
+});
+
+const baseQuery = computed(() => {
+  const query: Record<string, string | number | boolean> = {
+    ...topic.filters,
+  };
+
+  if (query.fromDate === undefined || typeof query.fromDate !== "string") {
+    query.fromDate = fiveYearCutoff.value;
+  }
+
+  const sourcesValue =
+    typeof query.sources === "string"
+      ? query.sources
+      : "kev,enisa,historic,metasploit,poc";
+
+  return {
+    ...query,
+    sources: sourcesValue,
+    limit: 10_000,
+    sort: "publicationDate",
+    sortDirection: "desc",
+    includeMarketSignals: false,
+  };
+});
 
 const {
   entries,
@@ -79,6 +101,9 @@ const baseCatalogQuery = computed<Record<string, string>>(() => {
       continue;
     }
     query[key] = normaliseQueryValue(raw);
+  }
+  if (!("fromDate" in query)) {
+    query.fromDate = fiveYearCutoff.value;
   }
   query.limit = "10000";
   query.sort = "publicationDate";
