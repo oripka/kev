@@ -229,6 +229,9 @@ export const runCatalogImport = async (
   const metadata = await getMetadataMap([
     'catalogVersion',
     'dateReleased',
+    'catalog.entryCount',
+    'catalog.earliestDate',
+    'catalog.latestDate',
     'enisa.lastUpdatedAt',
     'metasploit.lastCommit',
     'metasploit.moduleCount'
@@ -236,6 +239,10 @@ export const runCatalogImport = async (
 
   const fallbackCatalogVersion = metadata.catalogVersion ?? ''
   const fallbackDateReleased = metadata.dateReleased ?? ''
+  const fallbackCatalogCount =
+    Number.parseInt(metadata['catalog.entryCount'] ?? '0', 10) || 0
+  const fallbackCatalogEarliest = metadata['catalog.earliestDate'] ?? null
+  const fallbackCatalogLatest = metadata['catalog.latestDate'] ?? null
   const fallbackEnisaUpdated = metadata['enisa.lastUpdatedAt']
   const fallbackMetasploitCommit = metadata['metasploit.lastCommit']
   const fallbackMetasploitModules =
@@ -915,8 +922,59 @@ export const runCatalogImport = async (
       markTaskSkipped('market', 'Skipped this run')
     }
 
-    const catalogSummary = await rebuildCatalog(db)
-    await rebuildProductCatalog(db)
+    const kevChanged =
+      shouldImport('kev') &&
+      (kevImportStrategy === 'full' ||
+        kevNewCount > 0 ||
+        kevUpdatedCount > 0 ||
+        kevRemovedCount > 0)
+    const historicChanged =
+      shouldImport('historic') &&
+      (historicSummary.strategy === 'full' ||
+        historicSummary.newCount > 0 ||
+        historicSummary.updatedCount > 0 ||
+        historicSummary.removedCount > 0)
+    const enisaChanged =
+      shouldImport('enisa') &&
+      (enisaImportStrategy === 'full' ||
+        enisaNewCount > 0 ||
+        enisaUpdatedCount > 0 ||
+        enisaRemovedCount > 0)
+    const metasploitChanged =
+      shouldImport('metasploit') &&
+      (metasploitImportStrategy === 'full' ||
+        metasploitNewCount > 0 ||
+        metasploitUpdatedCount > 0 ||
+        metasploitRemovedCount > 0)
+    const pocChanged =
+      shouldImport('poc') &&
+      (pocImportStrategy === 'full' ||
+        pocNewCount > 0 ||
+        pocUpdatedCount > 0 ||
+        pocRemovedCount > 0)
+    const marketChanged = shouldImport('market') && marketImported > 0
+
+    const hasCatalogChanges =
+      kevChanged ||
+      historicChanged ||
+      enisaChanged ||
+      metasploitChanged ||
+      pocChanged ||
+      marketChanged
+
+    const catalogSummary = hasCatalogChanges
+      ? await rebuildCatalog(db)
+      : {
+          count: fallbackCatalogCount,
+          earliest: fallbackCatalogEarliest,
+          latest: fallbackCatalogLatest
+        }
+
+    if (hasCatalogChanges) {
+      await rebuildProductCatalog(db)
+    } else {
+      logger.info('No catalog changes detected; skipping catalog and product rebuilds')
+    }
 
     const totalImported =
       kevImported +
