@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { createError, useHead, useRoute, useRouter } from "#imports";
+import { createError, useHead, useRoute } from "#imports";
 import { focusTopics, type FocusTopic } from "~/constants/focusTopics";
 import { computeFocusMetric } from "~/utils/focusMetrics";
 import { useKevData } from "~/composables/useKevData";
 import { useDateDisplay } from "~/composables/useDateDisplay";
 
 const route = useRoute();
-const router = useRouter();
 const slug = computed(() => String(route.params.slug ?? ""));
 
 const resolvedTopic = computed<FocusTopic | null>(() =>
@@ -46,7 +45,6 @@ const {
   timeline,
   pending,
   error,
-  refresh,
   updatedAt,
 } = useKevData(baseQuery);
 
@@ -121,15 +119,6 @@ const buildShareUrl = () => {
   return window.location.href;
 };
 
-const openCatalogWithBaseFilters = () => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const query = { ...baseCatalogQuery.value };
-  router.push({ path: "/", query });
-};
-
 const downloadFocusCsv = () => {
   if (typeof window === "undefined" || !entries.value.length) {
     return;
@@ -183,26 +172,6 @@ const downloadFocusCsv = () => {
   URL.revokeObjectURL(url);
 };
 
-const sendToTicketing = () => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const url = buildShareUrl();
-  const topCves = entries.value
-    .slice(0, 5)
-    .map((entry) => {
-      const context = entry.vulnerabilityName || entry.description || "";
-      return `- ${entry.cveId}: ${context}`.trim();
-    })
-    .join("\n");
-
-  const body = `Focus page: ${url}\n\nTop CVEs to review:\n${topCves}`;
-  const subject = `[KEV] ${topic.title} focus follow-up`;
-  const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.open(mailto, "_blank");
-};
-
 const copyShareLink = async () => {
   if (typeof window === "undefined" || !navigator.clipboard) {
     return;
@@ -243,22 +212,9 @@ const copyShareLink = async () => {
       </div>
       <div class="flex flex-wrap items-center gap-3 text-xs text-neutral-500 dark:text-neutral-400">
         <span>Last updated {{ lastUpdatedLabel }}</span>
-        <UButton size="xs" color="primary" variant="soft" @click="refresh">Refresh data</UButton>
         <UButton size="xs" color="neutral" variant="soft" @click="copyShareLink">Copy share link</UButton>
-        <UButton
-          size="xs"
-          color="primary"
-          variant="solid"
-          icon="i-lucide-list-plus"
-          @click="openCatalogWithBaseFilters"
-        >
-          Add to patch queue
-        </UButton>
         <UButton size="xs" color="primary" variant="outline" @click="downloadFocusCsv">
           Export list
-        </UButton>
-        <UButton size="xs" color="primary" variant="ghost" @click="sendToTicketing">
-          Send to ticketing
         </UButton>
       </div>
     </section>
@@ -440,7 +396,12 @@ const copyShareLink = async () => {
 
     <section class="space-y-4">
       <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Curated vulnerability list</h2>
-      <CatalogTable :entries="entries" :loading="pending" :total="totalEntries" />
+      <CatalogTable
+        :entries="entries"
+        :loading="pending"
+        :total="totalEntries"
+        :context-label="topic.title"
+      />
     </section>
   </UContainer>
 </template>

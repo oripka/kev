@@ -8,10 +8,29 @@ const props = defineProps<{
   entries: KevEntrySummary[]
   loading: boolean
   total: number
+  contextLabel?: string
 }>()
 
 const UBadge = resolveComponent('UBadge')
 const ULink = resolveComponent('ULink')
+
+const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+
+const formattedVisibleCount = computed(() =>
+  numberFormatter.format(props.entries.length || 0)
+)
+
+const formattedTotalCount = computed(() => numberFormatter.format(props.total || 0))
+
+const headerTitle = computed(() => {
+  const base = `${formattedVisibleCount.value} of ${formattedTotalCount.value} vulnerabilities`
+  if (props.contextLabel) {
+    return `${base} associated with ${props.contextLabel}`
+  }
+  return base
+})
+
+const headlineEntries = computed(() => props.entries.slice(0, 3))
 
 const severityColors: Record<Exclude<KevEntrySummary['cvssSeverity'], null>, string> = {
   None: 'success',
@@ -184,7 +203,28 @@ const columns = computed<TableColumn<KevEntrySummary>[]>(() => [
 <template>
   <UCard>
     <template #header>
-      <strong>{{ props.entries.length }} of {{ props.total }} vulnerabilities</strong>
+      <div class="space-y-2">
+        <strong class="block text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+          {{ headerTitle }}
+        </strong>
+        <div
+          v-if="headlineEntries.length"
+          class="flex flex-wrap gap-2 text-xs text-neutral-500 dark:text-neutral-400"
+        >
+          <UBadge
+            v-for="entry in headlineEntries"
+            :key="entry.id"
+            color="primary"
+            variant="soft"
+            class="font-medium"
+          >
+            {{ entry.cveId }}
+            <span v-if="entry.product" class="text-[10px] text-neutral-400 dark:text-neutral-500">
+              &nbsp;· {{ entry.product }}
+            </span>
+          </UBadge>
+        </div>
+      </div>
     </template>
     <template #body>
       <div v-if="props.loading">

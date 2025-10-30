@@ -1121,13 +1121,16 @@ export default defineCachedEventHandler(async (event): Promise<KevResponse> => {
 
   const catalogBounds = await getCatalogBounds(db, metadata)
   const updatedAt = await computeUpdatedAt(db, metadata)
-  const market = await computeMarketOverview(
-    db,
-    entries
-      .map(entry => entry.productKey)
-      .filter((key): key is string => typeof key === 'string' && key.length > 0),
-    filters.marketProgramType ? { programType: filters.marketProgramType } : undefined
-  )
+  const market =
+    filters.includeMarketSignals === false
+      ? createEmptyMarketOverview()
+      : await computeMarketOverview(
+          db,
+          entries
+            .map(entry => entry.productKey)
+            .filter((key): key is string => typeof key === 'string' && key.length > 0),
+          filters.marketProgramType ? { programType: filters.marketProgramType } : undefined
+        )
 
   return {
     updatedAt,

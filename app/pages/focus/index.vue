@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useHead } from "#imports";
 import { focusTopics } from "~/constants/focusTopics";
+import FocusTopicCard from "~/components/FocusTopicCard.vue";
 
 const sortedTopics = computed(() =>
   [...focusTopics].sort((a, b) => a.title.localeCompare(b.title)),
@@ -59,26 +60,14 @@ useHead({
           v-for="topic in criticalTopics"
           :key="topic.slug"
           :to="{ path: `/focus/${topic.slug}` }"
+          class="block"
         >
-          <UCard class="h-full transition hover:border-primary-400">
-            <div class="space-y-3">
-              <UBadge color="rose" variant="soft" class="font-semibold">Critical</UBadge>
-              <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ topic.title }}
-              </h3>
-              <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                {{ topic.summary }}
-              </p>
-              <ul
-                v-if="topic.highlightNotes?.length"
-                class="list-disc space-y-1 pl-5 text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                <li v-for="note in topic.highlightNotes" :key="note">
-                  {{ note }}
-                </li>
-              </ul>
-            </div>
-          </UCard>
+          <FocusTopicCard
+            :topic="topic"
+            badge-color="rose"
+            badge-label="Critical"
+            class="h-full"
+          />
         </ULink>
       </div>
     </section>
@@ -99,26 +88,14 @@ useHead({
           v-for="topic in thematicTopics"
           :key="topic.slug"
           :to="{ path: `/focus/${topic.slug}` }"
+          class="block"
         >
-          <UCard class="h-full transition hover:border-primary-400">
-            <div class="space-y-3">
-              <UBadge color="sky" variant="soft" class="font-semibold">Focus</UBadge>
-              <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">
-                {{ topic.title }}
-              </h3>
-              <p class="text-sm text-neutral-600 dark:text-neutral-300">
-                {{ topic.summary }}
-              </p>
-              <ul
-                v-if="topic.additionalInsights?.length"
-                class="list-disc space-y-1 pl-5 text-xs text-neutral-500 dark:text-neutral-400"
-              >
-                <li v-for="note in topic.additionalInsights" :key="note">
-                  {{ note }}
-                </li>
-              </ul>
-            </div>
-          </UCard>
+          <FocusTopicCard
+            :topic="topic"
+            badge-color="sky"
+            badge-label="Focus"
+            class="h-full"
+          />
         </ULink>
       </div>
     </section>
