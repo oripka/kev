@@ -13,7 +13,7 @@ WORKDIR /app
 RUN corepack enable
 
 RUN apt-get update \
-  && apt-get install --no-install-recommends -y python3 make g++ \
+  && apt-get install --no-install-recommends -y python3 make g++ sqlite3 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
