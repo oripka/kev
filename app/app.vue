@@ -65,6 +65,11 @@ const navigationItems = computed<NavigationMenuItem[]>(() => [
         </span>
       </template>
       <UNavigationMenu :items="navigationItems" />
+      <template #right>
+     <UColorModeButton />
+      </template>
+   
+
     </UHeader>
 
     <UMain>

@@ -305,7 +305,7 @@ const buildTimelineEvents = (entry: KevEntry, rows: TimelineRow[]): KevEntryTime
   return events
 }
 
-export default defineEventHandler(async event => {
+export default defineCachedEventHandler(async event => {
   const id = getRouterParam(event, 'id')
 
   if (!id) {
@@ -419,4 +419,4 @@ export default defineEventHandler(async event => {
   const timeline = buildTimelineEvents(entry, timelineRows)
 
   return { ...entry, timeline }
-})
+},  { maxAge: 5 * 60 /* 5 minutes*/ })

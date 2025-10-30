@@ -1046,7 +1046,7 @@ const computeMarketOverview = async (
   }
 }
 
-export default defineEventHandler(async (event): Promise<KevResponse> => {
+export default defineCachedEventHandler(async (event): Promise<KevResponse> => {
   const filters = normaliseQuery(getQuery(event))
   const entryLimit = Math.max(1, Math.min(MAX_ENTRY_LIMIT, filters.limit ?? DEFAULT_ENTRY_LIMIT))
   const db = useDrizzle()
@@ -1132,4 +1132,4 @@ export default defineEventHandler(async (event): Promise<KevResponse> => {
     entryLimit,
     market
   }
-})
+}, { maxAge: 5 * 60 /* 5 minutes*/ })
