@@ -23,8 +23,7 @@ RUN pnpm fetch
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile --offline \
-  && pnpm prune --prod \
+RUN pnpm install --frozen-lockfile --offline --prod \
   && apt-get purge -y --auto-remove python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
