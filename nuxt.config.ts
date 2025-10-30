@@ -7,10 +7,10 @@ export default defineNuxtConfig({
   hub: {
     database: true,
   },
-  ignore: [
-    'data/**',
-    'data/cache/**'
-  ],
+  ignore: ["data/**", "data/cache/**"],
+  colorMode: {
+    preference: "dark",
+  },
   ssr: false,
   runtimeConfig: {
     admin: {
@@ -35,13 +35,13 @@ export default defineNuxtConfig({
     port: 3001,
   },
   nitro: {
-    externals: { external: ['picomatch', 'fast-glob', 'chokidar'] },
-    rollupConfig: { external: ['node:path'] },
-    preset: 'cloudflare-pages'
+    externals: { external: ["picomatch", "fast-glob", "chokidar"] },
+    rollupConfig: { external: ["node:path"] },
+    preset: "cloudflare-pages",
   },
   vite: {
     optimizeDeps: {
-      exclude: ['picomatch', 'fast-glob']
-    }
-  }
+      exclude: ["picomatch", "fast-glob"],
+    },
+  },
 });
