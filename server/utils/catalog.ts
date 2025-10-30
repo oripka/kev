@@ -1003,6 +1003,20 @@ const toProgramType = (value: string | null | undefined): MarketProgramType => {
   return 'other'
 }
 
+const SQLITE_MAX_VARIABLE_NUMBER = 999
+
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+  if (size <= 0) {
+    return [items]
+  }
+
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
 const createEmptyMarketSignal = (): MarketSignal => ({
   offerCount: 0,
   minRewardUsd: null,
@@ -1039,26 +1053,46 @@ export const getMarketSignalsForProducts = async (
     )
   )
 
-  const productCondition = inArray(target.productKey, keys)
+  const extraVariableCount = programTypeFilter.length
+  const productKeyChunkSize = Math.max(
+    1,
+    SQLITE_MAX_VARIABLE_NUMBER - Math.max(extraVariableCount, 1)
+  )
+  const productKeyChunks = chunkArray(keys, productKeyChunkSize)
   const programCondition =
     programTypeFilter.length > 0 ? inArray(program.programType, programTypeFilter) : null
 
-  const priceRows = await db
-    .select({
-      productKey: target.productKey,
-      minReward: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
-      maxReward: sql<number | null>`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd}))`,
-      averageReward: sql<number | null>`avg((COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}) + COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd})) / 2.0)`,
-      lastSeenAt: sql<string | null>`max(${offer.sourceCaptureDate})`,
-      offerCount: sql<number>`count(distinct ${offer.id})`,
-      programTypes: sql<string | null>`json_group_array(distinct ${program.programType})`
-    })
-    .from(target)
-    .innerJoin(offer, eq(offer.id, target.offerId))
-    .innerJoin(program, eq(program.id, offer.programId))
-    .where(programCondition ? and(productCondition, programCondition) : productCondition)
-    .groupBy(target.productKey)
-    .all()
+  const priceRows: Array<{
+    productKey: string
+    minReward: number | null
+    maxReward: number | null
+    averageReward: number | null
+    lastSeenAt: string | null
+    offerCount: number
+    programTypes: string | null
+  }> = []
+
+  for (const chunk of productKeyChunks) {
+    const productCondition = inArray(target.productKey, chunk)
+    const rows = await db
+      .select({
+        productKey: target.productKey,
+        minReward: sql<number | null>`min(COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}))`,
+        maxReward: sql<number | null>`max(COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd}))`,
+        averageReward: sql<number | null>`avg((COALESCE(${offer.minRewardUsd}, ${offer.maxRewardUsd}) + COALESCE(${offer.maxRewardUsd}, ${offer.minRewardUsd})) / 2.0)`,
+        lastSeenAt: sql<string | null>`max(${offer.sourceCaptureDate})`,
+        offerCount: sql<number>`count(distinct ${offer.id})`,
+        programTypes: sql<string | null>`json_group_array(distinct ${program.programType})`
+      })
+      .from(target)
+      .innerJoin(offer, eq(offer.id, target.offerId))
+      .innerJoin(program, eq(program.id, offer.programId))
+      .where(programCondition ? and(productCondition, programCondition) : productCondition)
+      .groupBy(target.productKey)
+      .all()
+
+    priceRows.push(...rows)
+  }
 
   for (const row of priceRows) {
     const programTypeValues = typeof row.programTypes === 'string'
@@ -1088,25 +1122,37 @@ export const getMarketSignalsForProducts = async (
     })
   }
 
-  const categoryRows = await db
-    .select({
-      productKey: target.productKey,
-      categoryType: category.categoryType,
-      categoryKey: category.categoryKey,
-      categoryName: category.categoryName
-    })
-    .from(target)
-    .innerJoin(offer, eq(offer.id, target.offerId))
-    .innerJoin(category, eq(category.offerId, offer.id))
-    .innerJoin(program, eq(program.id, offer.programId))
-    .where(programCondition ? and(productCondition, programCondition) : productCondition)
-    .groupBy(
-      target.productKey,
-      category.categoryType,
-      category.categoryKey,
-      category.categoryName
-    )
-    .all()
+  const categoryRows: Array<{
+    productKey: string
+    categoryType: string
+    categoryKey: string
+    categoryName: string
+  }> = []
+
+  for (const chunk of productKeyChunks) {
+    const productCondition = inArray(target.productKey, chunk)
+    const rows = await db
+      .select({
+        productKey: target.productKey,
+        categoryType: category.categoryType,
+        categoryKey: category.categoryKey,
+        categoryName: category.categoryName
+      })
+      .from(target)
+      .innerJoin(offer, eq(offer.id, target.offerId))
+      .innerJoin(category, eq(category.offerId, offer.id))
+      .innerJoin(program, eq(program.id, offer.programId))
+      .where(programCondition ? and(productCondition, programCondition) : productCondition)
+      .groupBy(
+        target.productKey,
+        category.categoryType,
+        category.categoryKey,
+        category.categoryName
+      )
+      .all()
+
+    categoryRows.push(...rows)
+  }
 
   for (const row of categoryRows) {
     const existing = signals.get(row.productKey) ?? createEmptyMarketSignal()
