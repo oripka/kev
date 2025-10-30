@@ -14,7 +14,7 @@ RUN corepack enable
 FROM base AS deps
 
 RUN apt-get update \
-  && apt-get install --no-install-recommends -y git python3 make g++ sqlite3 \
+  && apt-get install --no-install-recommends -y git python3 make g++ sqlite3 ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
@@ -28,7 +28,7 @@ RUN pnpm fetch --prod \
 FROM base AS runner
 
 RUN apt-get update \
-  && apt-get install --no-install-recommends -y git sqlite3 \
+  && apt-get install --no-install-recommends -y git sqlite3 ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /root/.local/share/pnpm /root/.local/share/pnpm
