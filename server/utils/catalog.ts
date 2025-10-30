@@ -847,8 +847,8 @@ export const rebuildCatalog = async (
 
   options.onStart?.(catalogEntries.length)
 
-  await db.transaction(async tx => {
-    const existingRows = await tx
+  await db.transaction(tx => {
+    const existingRows = tx
       .select({ cveId: tables.catalogEntries.cveId })
       .from(tables.catalogEntries)
       .all()
@@ -856,7 +856,7 @@ export const rebuildCatalog = async (
     const nextIds = new Set<string>()
     const progressTotal = catalogEntries.length
 
-    const upsertCatalogEntry = async (entry: CatalogEntryRow) => {
+    const upsertCatalogEntry = (entry: CatalogEntryRow) => {
       const dateAddedTs = toTimestamp(entry.dateAdded)
       const dateUpdatedTs = toTimestamp(entry.dateUpdated)
       const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
@@ -914,7 +914,7 @@ export const rebuildCatalog = async (
         hasSourcePoc
       }
 
-      await tx
+      tx
         .insert(tables.catalogEntries)
         .values({ cveId: entry.cveId, ...record })
         .onConflictDoUpdate({
@@ -923,7 +923,7 @@ export const rebuildCatalog = async (
         })
         .run()
 
-      await tx
+      tx
         .delete(tables.catalogEntryDimensions)
         .where(eq(tables.catalogEntryDimensions.cveId, entry.cveId))
         .run()
@@ -947,15 +947,15 @@ export const rebuildCatalog = async (
       }
 
       if (dimensionRecords.length) {
-        await tx.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
+        tx.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
       }
 
-      await tx
+      tx
         .delete(tables.catalogEntriesFts)
         .where(eq(tables.catalogEntriesFts.cveId, entry.cveId))
         .run()
 
-      await tx
+      tx
         .insert(tables.catalogEntriesFts)
         .values({
           cveId: entry.cveId,
@@ -971,7 +971,7 @@ export const rebuildCatalog = async (
     for (let index = 0; index < catalogEntries.length; index += 1) {
       const entry = catalogEntries[index]
       nextIds.add(entry.cveId)
-      await upsertCatalogEntry(entry)
+      upsertCatalogEntry(entry)
 
       if ((index + 1) % 25 === 0 || index + 1 === progressTotal) {
         options.onProgress?.(index + 1, progressTotal)
@@ -989,15 +989,15 @@ export const rebuildCatalog = async (
       const chunkSize = 100
       for (let offset = 0; offset < staleIds.length; offset += chunkSize) {
         const chunk = staleIds.slice(offset, offset + chunkSize)
-        await tx
+        tx
           .delete(tables.catalogEntries)
           .where(inArray(tables.catalogEntries.cveId, chunk))
           .run()
-        await tx
+        tx
           .delete(tables.catalogEntryDimensions)
           .where(inArray(tables.catalogEntryDimensions.cveId, chunk))
           .run()
-        await tx
+        tx
           .delete(tables.catalogEntriesFts)
           .where(inArray(tables.catalogEntriesFts.cveId, chunk))
           .run()
