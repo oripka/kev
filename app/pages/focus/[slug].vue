@@ -5,6 +5,7 @@ import { focusTopics, type FocusTopic } from "~/constants/focusTopics";
 import { computeFocusMetric } from "~/utils/focusMetrics";
 import { useKevData } from "~/composables/useKevData";
 import { useDateDisplay } from "~/composables/useDateDisplay";
+import FocusVulnerabilityList from "~/components/FocusVulnerabilityList.vue";
 
 const route = useRoute();
 const slug = computed(() => String(route.params.slug ?? ""));
@@ -396,7 +397,7 @@ const copyShareLink = async () => {
 
     <section class="space-y-4">
       <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Curated vulnerability list</h2>
-      <CatalogTable
+      <FocusVulnerabilityList
         :entries="entries"
         :loading="pending"
         :total="totalEntries"
