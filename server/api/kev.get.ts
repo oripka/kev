@@ -9,7 +9,8 @@ import type {
   KevExploitLayer,
   KevResponse,
   KevVulnerabilityCategory,
-  MarketProgramType
+  MarketProgramType,
+  MarketSignal
 } from '~/types'
 import {
   extractQueryString,
@@ -64,6 +65,7 @@ type CatalogQuery = {
   sort?: SortKey
   sortDirection?: SortDirection
   marketProgramType?: MarketProgramType
+  includeMarketSignals?: boolean
 }
 
 type Condition = SQL<unknown>
@@ -243,6 +245,11 @@ const normaliseQuery = (raw: Record<string, unknown>): CatalogQuery => {
   const internetExposedOnly = getBoolean('internetExposedOnly')
   if (internetExposedOnly) {
     filters.internetExposedOnly = true
+  }
+
+  const includeMarketSignals = getBoolean('includeMarketSignals')
+  if (includeMarketSignals === false) {
+    filters.includeMarketSignals = false
   }
 
   const normaliseSource = (value: string | undefined): CatalogSource | null => {
@@ -690,13 +697,21 @@ const queryEntries = async (
   const productKeys = Array.from(
     new Set(rows.map(row => row.product_key).filter((key): key is string => typeof key === 'string' && key.length > 0))
   )
-  const marketSignals = await getMarketSignalsForProducts(
-    db,
-    productKeys,
-    filters.marketProgramType
-      ? { programTypes: [filters.marketProgramType] }
-      : undefined
-  )
+  let marketSignals: Map<string, MarketSignal> | undefined
+
+  if (filters.includeMarketSignals !== false && productKeys.length > 0) {
+    try {
+      marketSignals = await getMarketSignalsForProducts(
+        db,
+        productKeys,
+        filters.marketProgramType
+          ? { programTypes: [filters.marketProgramType] }
+          : undefined
+      )
+    } catch (error) {
+      console.warn('catalog: unable to load market signals', { error })
+    }
+  }
 
   return rows.map(row => catalogRowToSummary(row, { marketSignals }))
 }

@@ -36,6 +36,7 @@ const baseQuery = computed(() => ({
   limit: 10_000,
   sort: "publicationDate",
   sortDirection: "desc",
+  includeMarketSignals: false,
 }));
 
 const {
@@ -83,6 +84,7 @@ const baseCatalogQuery = computed<Record<string, string>>(() => {
   query.limit = "10000";
   query.sort = "publicationDate";
   query.sortDirection = "desc";
+  query.includeMarketSignals = "false";
   return query;
 });
 
