@@ -299,12 +299,18 @@ const main = async () => {
     reporter.stop()
 
     if (syncD1) {
-      logger.newline()
-      logger.info(ansis.bold('🔄 Syncing remote D1 database from local SQLite export …'))
-      logger.info(ansis.dim('   Running pnpm run db:deploy'))
-      await runCommand('pnpm', ['run', 'db:deploy'])
-      logger.success(ansis.green('   Remote D1 database synced successfully.'))
-      logger.newline()
+      if (result.hasCatalogChanges) {
+        logger.newline()
+        logger.info(ansis.bold('🔄 Syncing remote D1 database from local SQLite export …'))
+        logger.info(ansis.dim('   Running pnpm run db:deploy'))
+        await runCommand('pnpm', ['run', 'db:deploy'])
+        logger.success(ansis.green('   Remote D1 database synced successfully.'))
+        logger.newline()
+      } else {
+        logger.newline()
+        logger.info(ansis.bold(ansis.yellow('ℹ️ No catalog changes detected; skipping remote D1 sync.')))
+        logger.newline()
+      }
     }
 
     const summaryParts = [

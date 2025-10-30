@@ -95,6 +95,7 @@ export type CatalogImportOptions = {
 
 export type CatalogImportResult = {
   imported: number
+  hasCatalogChanges: boolean
   kevImported: number
   kevNewCount: number
   kevUpdatedCount: number
@@ -1129,6 +1130,7 @@ export const runCatalogImport = async (
 
     return {
       imported: totalImported,
+      hasCatalogChanges,
       kevImported,
       kevNewCount,
       kevUpdatedCount,
