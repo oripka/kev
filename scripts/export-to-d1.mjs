@@ -428,7 +428,7 @@ const rewriteVulnerabilityEntriesDump = (localDbPath) => {
   logger.success(`Exported ${rowInsertCount.toLocaleString()} vulnerability_entries rows.`)
 }
 
-const uploadDump = () => {
+const chunkDump = () => {
   logger.start('Chunking dump for upload …')
   const sql = readFileSync(dumpPath, 'utf8')
   if (existsSync(chunkDir)) {
@@ -531,6 +531,14 @@ const uploadDump = () => {
 
   logger.success(`Chunked dump into ${chunks.length} file(s).`)
 
+  return chunks
+}
+
+const uploadChunks = (chunks) => {
+  if (!Array.isArray(chunks) || chunks.length === 0) {
+    throw new Error('No chunk files available for upload. Aborting export before touching remote database.')
+  }
+
   const uploadProgress = logger.progress(
     `Uploading ${chunks.length} chunk(s) to Cloudflare D1 …`,
     { append: false }
@@ -561,13 +569,14 @@ const main = () => {
   try {
     ensureDataDir()
     writeResetSql()
-    resetRemoteDatabase()
     const localDbPath = resolveLocalDatabasePath()
     logger.info(`Using local NuxtHub D1 database at ${localDbPath}`)
     exportLocalDatabase(localDbPath)
     prepareDumpFile()
     rewriteVulnerabilityEntriesDump(localDbPath)
-    uploadDump()
+    const chunks = chunkDump()
+    resetRemoteDatabase()
+    uploadChunks(chunks)
     logger.success('Remote D1 database refreshed successfully.')
   } catch (error) {
     logger.fail('Failed to export local database to D1.')

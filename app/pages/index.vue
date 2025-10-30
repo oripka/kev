@@ -3938,21 +3938,21 @@ const tableMeta = computed(() => ({
       class="col-span-full px-4 sm:px-6 xl:col-span-3 xl:pl-6 xl:pr-0 xl:pt-8 2xl:pl-8"
     >
       <div
-        class="rounded-2xl border border-neutral-800 bg-gradient-to-br from-primary-500/10 via-neutral-900 to-neutral-950 p-6 shadow-lg transition hover:shadow-xl hover:border-primary-500/30 dark:from-primary-400/10 dark:via-neutral-900 dark:to-black"
+        class="rounded-2xl border border-neutral-200/70 bg-gradient-to-br from-primary-500/5 via-white/70 to-white/40 p-6 shadow-lg transition backdrop-blur supports-[backdrop-filter]:backdrop-blur hover:shadow-xl hover:border-primary-500/40 dark:border-neutral-800/80 dark:from-primary-400/10 dark:via-neutral-900 dark:to-black"
       >
         <div
           class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between"
         >
           <div class="space-y-3">
             <p
-              class="text-xs font-semibold uppercase tracking-widest text-primary-400"
+              class="text-xs font-semibold uppercase tracking-widest text-primary-600 dark:text-primary-400"
             >
               Exploit Intelligence Overview
             </p>
-            <p class="text-xl font-bold text-neutral-100 leading-tight">
+            <p class="text-xl font-bold text-neutral-900 dark:text-neutral-100 leading-tight">
               Track actively exploited vulnerabilities in real time
             </p>
-            <p class="text-sm text-neutral-400 leading-relaxed">
+            <p class="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
               Explore live feeds from CISA KEV, ENSISA, and curated research
               sources — all enriched for clarity so you can triage the vendors,
               products, and exploitation dynamics that matter most.
@@ -3962,13 +3962,13 @@ const tableMeta = computed(() => ({
             class="flex flex-col items-start gap-3 text-xs font-medium sm:items-end"
           >
             <span
-              class="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-neutral-900/60 px-4 py-1.5 text-primary-300 shadow-sm transition hover:bg-neutral-800/70"
+              class="inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-50/80 px-4 py-1.5 text-primary-700 shadow-sm transition backdrop-blur-sm hover:bg-primary-100/90 dark:border-primary-500/30 dark:bg-neutral-900/60 dark:text-primary-300 dark:hover:bg-neutral-800/70"
             >
               <UIcon name="i-lucide-activity" class="size-4" />
               Live CVE Updates
             </span>
             <span
-              class="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-neutral-900/60 px-4 py-1.5 text-primary-300 shadow-sm transition hover:bg-neutral-800/70"
+              class="inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-50/80 px-4 py-1.5 text-primary-700 shadow-sm transition backdrop-blur-sm hover:bg-primary-100/90 dark:border-primary-500/30 dark:bg-neutral-900/60 dark:text-primary-300 dark:hover:bg-neutral-800/70"
             >
               <UIcon name="i-lucide-filter" class="size-4" />
              Quick Filters
