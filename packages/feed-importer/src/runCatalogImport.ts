@@ -50,6 +50,7 @@ import {
   persistEntryRecord,
   type EntryDiffRecord
 } from 'server/utils/entry-diff'
+import { logger } from './logger'
 
 const ONE_DAY_MS = 86_400_000
 const MAX_INCREMENTAL_KEV_CVE_EVENT_IDS = 25
