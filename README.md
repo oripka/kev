@@ -38,6 +38,43 @@ In the Wild is a Nuxt 4 application that aggregates the CISA Known Exploited Vul
 3. Start the Nuxt dev server with `pnpm dev` (note: import jobs are restricted to development mode).
 4. Trigger a catalog import via `POST /api/fetchKev` with a valid `ADMIN_API_KEY` header to populate data locally.
 
+### Manual import commands
+- Full refresh against every feed (forces fresh downloads):  
+  ```bash
+  pnpm run import-feeds --mode force --strategy full --source all
+  ```
+- Incremental update that reuses cached feed data whenever possible:  
+  ```bash
+  pnpm run import-feeds --incremental
+  ```
+- Run the importer inside the production image without starting the default entrypoint (keeps `/app/data` mounted so SQLite changes persist):  
+  ```bash
+  docker build -t kev-import .
+  docker run --rm -it \
+    -v "$(pwd)/data:/app/data" \
+    --env-file .env \
+    --entrypoint bash \
+    kev-import \
+    -lc "pnpm run import-feeds --mode force --strategy full --source all"
+  ```
+  Replace the command inside the final quotes with other strategies (for example `pnpm run import-feeds --incremental --source kev,enisa --sync-d1`) as needed.
+
+### Systemd automation (optional)
+If you installed the importer as a `kev-import.timer` on a server:
+- Disable the timer and stop any pending runs:  
+  ```bash
+  sudo systemctl disable --now kev-import.timer
+  sudo systemctl stop kev-import.service    # stops an in-flight run, if any
+  ```
+- Re-enable periodic imports later:  
+  ```bash
+  sudo systemctl enable --now kev-import.timer
+  ```
+- Verify the next scheduled run or confirm it’s disabled:  
+  ```bash
+  systemctl list-timers kev-import.timer
+  ```
+
 ## Environment configuration
 | Variable | Purpose |
 | --- | --- |
