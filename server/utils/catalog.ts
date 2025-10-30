@@ -845,37 +845,29 @@ export const rebuildCatalog = async (
     pocEntries
   )
 
-  await db.delete(tables.catalogEntryDimensions).run()
-  await db.delete(tables.catalogEntries).run()
-  await db.delete(tables.catalogEntriesFts).run()
-
   options.onStart?.(catalogEntries.length)
 
-  const ftsRecords: Array<{
-    cveId: string
-    vendor: string
-    product: string
-    vulnerabilityName: string
-    description: string
-    aliases: string
-  }> = []
+  await db.transaction(async tx => {
+    const existingRows = await tx
+      .select({ cveId: tables.catalogEntries.cveId })
+      .from(tables.catalogEntries)
+      .all()
+    const existingIds = new Set(existingRows.map(row => row.cveId))
+    const nextIds = new Set<string>()
+    const progressTotal = catalogEntries.length
 
-  for (let index = 0; index < catalogEntries.length; index += 1) {
-    const entry = catalogEntries[index]
-    const dateAddedTs = toTimestamp(entry.dateAdded)
-    const dateUpdatedTs = toTimestamp(entry.dateUpdated)
-    const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
-    const hasKnownRansomware = toKnownRansomwareFlag(entry.ransomwareUse ?? null)
-    const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
-    const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
-    const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
-    const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
-    const hasSourcePoc = toBooleanFlag(entry.sources.includes('poc'))
+    const upsertCatalogEntry = async (entry: CatalogEntryRow) => {
+      const dateAddedTs = toTimestamp(entry.dateAdded)
+      const dateUpdatedTs = toTimestamp(entry.dateUpdated)
+      const isWellKnown = lookupCveName(entry.cveId) ? 1 : 0
+      const hasKnownRansomware = toKnownRansomwareFlag(entry.ransomwareUse ?? null)
+      const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
+      const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
+      const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
+      const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
+      const hasSourcePoc = toBooleanFlag(entry.sources.includes('poc'))
 
-    await db
-      .insert(tables.catalogEntries)
-      .values({
-        cveId: entry.cveId,
+      const record = {
         entryId: entry.id,
         sources: toJson(entry.sources),
         vendor: entry.vendor,
@@ -920,52 +912,98 @@ export const rebuildCatalog = async (
         hasSourceHistoric,
         hasSourceMetasploit,
         hasSourcePoc
-      })
-      .run()
+      }
 
-    const dimensions: CatalogDimension[] = ['domain', 'exploit', 'vulnerability']
-    const dimensionRecords: Array<{ cveId: string; dimension: string; value: string; name: string }> = []
-
-    for (const dimension of dimensions) {
-      const tuples = toDimensionTuples(entry, dimension)
-      for (const tuple of tuples) {
-        if (!tuple.value || tuple.name === 'Other') {
-          continue
-        }
-        dimensionRecords.push({
-          cveId: entry.cveId,
-          dimension,
-          value: tuple.value,
-          name: tuple.name
+      await tx
+        .insert(tables.catalogEntries)
+        .values({ cveId: entry.cveId, ...record })
+        .onConflictDoUpdate({
+          target: tables.catalogEntries.cveId,
+          set: record
         })
+        .run()
+
+      await tx
+        .delete(tables.catalogEntryDimensions)
+        .where(eq(tables.catalogEntryDimensions.cveId, entry.cveId))
+        .run()
+
+      const dimensions: CatalogDimension[] = ['domain', 'exploit', 'vulnerability']
+      const dimensionRecords: Array<{ cveId: string; dimension: string; value: string; name: string }> = []
+
+      for (const dimension of dimensions) {
+        const tuples = toDimensionTuples(entry, dimension)
+        for (const tuple of tuples) {
+          if (!tuple.value || tuple.name === 'Other') {
+            continue
+          }
+          dimensionRecords.push({
+            cveId: entry.cveId,
+            dimension,
+            value: tuple.value,
+            name: tuple.name
+          })
+        }
+      }
+
+      if (dimensionRecords.length) {
+        await tx.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
+      }
+
+      await tx
+        .delete(tables.catalogEntriesFts)
+        .where(eq(tables.catalogEntriesFts.cveId, entry.cveId))
+        .run()
+
+      await tx
+        .insert(tables.catalogEntriesFts)
+        .values({
+          cveId: entry.cveId,
+          vendor: entry.vendor,
+          product: entry.product,
+          vulnerabilityName: entry.vulnerabilityName,
+          description: entry.description,
+          aliases: entry.aliases.join(' ')
+        })
+        .run()
+    }
+
+    for (let index = 0; index < catalogEntries.length; index += 1) {
+      const entry = catalogEntries[index]
+      nextIds.add(entry.cveId)
+      await upsertCatalogEntry(entry)
+
+      if ((index + 1) % 25 === 0 || index + 1 === progressTotal) {
+        options.onProgress?.(index + 1, progressTotal)
       }
     }
 
-    if (dimensionRecords.length) {
-      await db.insert(tables.catalogEntryDimensions).values(dimensionRecords).run()
+    const staleIds: string[] = []
+    for (const existingId of existingIds) {
+      if (!nextIds.has(existingId)) {
+        staleIds.push(existingId)
+      }
     }
 
-    ftsRecords.push({
-      cveId: entry.cveId,
-      vendor: entry.vendor,
-      product: entry.product,
-      vulnerabilityName: entry.vulnerabilityName,
-      description: entry.description,
-      aliases: entry.aliases.join(' ')
-    })
-
-    if ((index + 1) % 25 === 0 || index + 1 === catalogEntries.length) {
-      options.onProgress?.(index + 1, catalogEntries.length)
+    if (staleIds.length > 0) {
+      const chunkSize = 100
+      for (let offset = 0; offset < staleIds.length; offset += chunkSize) {
+        const chunk = staleIds.slice(offset, offset + chunkSize)
+        await tx
+          .delete(tables.catalogEntries)
+          .where(inArray(tables.catalogEntries.cveId, chunk))
+          .run()
+        await tx
+          .delete(tables.catalogEntryDimensions)
+          .where(inArray(tables.catalogEntryDimensions.cveId, chunk))
+          .run()
+        await tx
+          .delete(tables.catalogEntriesFts)
+          .where(inArray(tables.catalogEntriesFts.cveId, chunk))
+          .run()
+      }
     }
-  }
-
-  if (ftsRecords.length) {
-    const chunkSize = 200
-    for (let offset = 0; offset < ftsRecords.length; offset += chunkSize) {
-      const batch = ftsRecords.slice(offset, offset + chunkSize)
-      await db.insert(tables.catalogEntriesFts).values(batch).run()
-    }
-  }
+  })
 
   options.onComplete?.(catalogEntries.length)
 
