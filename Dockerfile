@@ -6,6 +6,7 @@ ENV PNPM_HOME="/root/.local/share/pnpm"
 ENV PATH="${PNPM_HOME}:${PATH}"
 ENV NUXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV CI=true
 
 WORKDIR /app
 
