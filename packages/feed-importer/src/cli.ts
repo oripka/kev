@@ -19,7 +19,7 @@ const USAGE = `Usage: pnpm run import-feeds [--mode <auto|force|cache>] [--sourc
 
 Options:
   --mode       Import mode controlling cache behaviour (default: auto)
-  --source     Comma-separated list of sources to import (kev, historic, custom, enisa, metasploit, poc, market) or "all"
+  --source     Comma-separated list of sources to import (kev, historic, custom, enisa, epss, metasploit, poc, market) or "all"
   --strategy   Import strategy to use (full or incremental)
   --incremental  Shortcut for --strategy incremental
   --full         Shortcut for --strategy full
@@ -318,6 +318,7 @@ const main = async () => {
       `${ansis.bold(formatNumber(result.kevImported))} KEV`,
       `${ansis.bold(formatNumber(result.historicImported))} historic`,
       `${ansis.bold(formatNumber(result.enisaImported))} ENISA`,
+      `${ansis.bold(formatNumber(result.epssImported))} EPSS updates`,
       `${ansis.bold(formatNumber(result.metasploitImported))} Metasploit`,
       `${ansis.bold(formatNumber(result.pocImported))} GitHub PoCs`,
       `${ansis.bold(formatNumber(result.marketOfferCount))} market offers`
@@ -330,6 +331,16 @@ const main = async () => {
     logger.info(`${ansis.dim('  Sources')}: ${ansis.cyan(result.sources.join(', '))}`)
     logger.info(`${ansis.dim('  Catalog version')}: ${ansis.white(result.catalogVersion || 'unknown')}`)
     logger.info(`${ansis.dim('  Date released')}: ${ansis.white(result.dateReleased || 'unknown')}`)
+    if (result.epssScoreDate || result.epssDatasetVersion) {
+      const epssParts: string[] = []
+      if (result.epssScoreDate) {
+        epssParts.push(`score ${result.epssScoreDate}`)
+      }
+      if (result.epssDatasetVersion) {
+        epssParts.push(`model ${result.epssDatasetVersion}`)
+      }
+      logger.info(`${ansis.dim('  EPSS dataset')}: ${ansis.white(epssParts.join(' · ') || 'unknown')}`)
+    }
     logger.info(`${ansis.dim('  Imported at')}: ${ansis.white(result.importedAt)}`)
     logger.info(`${ansis.dim('  Summary')}: ${summaryLabel}`)
     logger.info(`${ansis.dim('  New KEV CVEs')}: ${formatKevIdList(result.kevNewCveIds ?? [])}`)

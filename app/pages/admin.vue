@@ -44,6 +44,7 @@ const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
   historic: "historic entries",
   custom: "curated entries",
   enisa: "ENISA entries",
+  epss: "EPSS updates",
   metasploit: "Metasploit entries",
   poc: "GitHub PoC entries",
   market: "market intelligence offers",
@@ -54,6 +55,7 @@ const INCREMENTAL_IMPORT_SOURCES = new Set<ImportTaskKey>([
   "historic",
   "custom",
   "enisa",
+  "epss",
   "metasploit",
   "poc",
 ]);
@@ -316,6 +318,7 @@ const importSummaryMessage = computed(() => {
     historic: summary.historicImported,
     custom: summary.customImported,
     enisa: summary.enisaImported,
+    epss: summary.epssImported,
     metasploit: summary.metasploitImported,
     poc: summary.pocImported,
     market: summary.marketImported,
@@ -332,6 +335,20 @@ const importSummaryMessage = computed(() => {
         return summary.metasploitModules > 0
           ? `${base} across ${summary.metasploitModules.toLocaleString()} modules`
           : base;
+      }
+      if (source === "epss" && summary.epssImportStrategy === "incremental") {
+        const detailParts: string[] = [];
+        if (summary.epssNewCount > 0) {
+          detailParts.push(`${summary.epssNewCount.toLocaleString()} new`);
+        }
+        if (summary.epssUpdatedCount > 0) {
+          detailParts.push(`${summary.epssUpdatedCount.toLocaleString()} updated`);
+        }
+        if (summary.epssRemovedCount > 0) {
+          detailParts.push(`${summary.epssRemovedCount.toLocaleString()} removed`);
+        }
+        const detail = detailParts.length ? ` (${detailParts.join(", ")})` : "";
+        return `${counts[source].toLocaleString()} ${label}${detail}`;
       }
       if (source === "market") {
         const base = `${counts[source].toLocaleString()} ${label}`;
@@ -460,6 +477,23 @@ const importSummaryMessage = computed(() => {
       messageParts.push("Incremental ENISA update detected no changes.");
     }
   }
+  if (summary.sources.includes("epss") && summary.epssImportStrategy === "incremental") {
+    const epssChanges: string[] = [];
+    if (summary.epssNewCount > 0) {
+      epssChanges.push(`${summary.epssNewCount.toLocaleString()} new`);
+    }
+    if (summary.epssUpdatedCount > 0) {
+      epssChanges.push(`${summary.epssUpdatedCount.toLocaleString()} updated`);
+    }
+    if (summary.epssRemovedCount > 0) {
+      epssChanges.push(`${summary.epssRemovedCount.toLocaleString()} removed`);
+    }
+    if (epssChanges.length) {
+      messageParts.push(`Incremental EPSS update touched ${epssChanges.join(", ")}.`);
+    } else {
+      messageParts.push("Incremental EPSS update detected no changes.");
+    }
+  }
 
   if (summary.sources.includes("metasploit") && summary.metasploitImportStrategy === "incremental") {
     const metasploitChanges: string[] = [];
@@ -517,6 +551,18 @@ const importSummaryMessage = computed(() => {
       );
     } else if (summary.metasploitCommit) {
       messageParts.push(`Metasploit repository at commit ${summary.metasploitCommit.slice(0, 7)}.`);
+    }
+  }
+  if (summary.sources.includes("epss") && (summary.epssScoreDate || summary.epssDatasetVersion)) {
+    const parts: string[] = [];
+    if (summary.epssScoreDate) {
+      parts.push(`scores dated ${formatTimestamp(summary.epssScoreDate)}`);
+    }
+    if (summary.epssDatasetVersion) {
+      parts.push(`model ${summary.epssDatasetVersion}`);
+    }
+    if (parts.length) {
+      messageParts.push(`EPSS dataset refreshed (${parts.join(", ")}).`);
     }
   }
 
@@ -606,6 +652,12 @@ const importProgressPercent = computed(() => {
   }
   if (phase === "enriching") {
     return 80;
+  }
+  if (phase === "resolvingPocHistory") {
+    if (total > 0) {
+      return Math.min(100, Math.round((completed / total) * 100));
+    }
+    return 82;
   }
   if (
     phase === "fetchingEnisa" ||

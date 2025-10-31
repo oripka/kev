@@ -378,14 +378,17 @@ export type ImportPhase =
   | 'preparing'
   | 'fetchingCvss'
   | 'fetchingEnisa'
+  | 'fetchingEpss'
   | 'fetchingHistoric'
   | 'fetchingCustom'
   | 'fetchingMetasploit'
   | 'fetchingPoc'
   | 'fetchingMarket'
   | 'enriching'
+  | 'resolvingPocHistory'
   | 'saving'
   | 'savingEnisa'
+  | 'savingEpss'
   | 'savingHistoric'
   | 'savingCustom'
   | 'savingMetasploit'
@@ -394,7 +397,7 @@ export type ImportPhase =
   | 'complete'
   | 'error'
 
-export type ImportTaskKey = CatalogSource | 'market'
+export type ImportTaskKey = CatalogSource | 'market' | 'epss'
 
 export type ImportTaskStatus = 'pending' | 'running' | 'complete' | 'skipped' | 'error'
 

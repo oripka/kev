@@ -88,6 +88,16 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
     'enisa.lastUpdatedAt',
     'enisa.lastImportAt',
     'enisa.totalCount',
+    'epss.lastImportAt',
+    'epss.cachedAt',
+    'epss.totalCount',
+    'epss.lastScoreDate',
+    'epss.lastModelVersion',
+    'epss.lastNewCount',
+    'epss.lastUpdatedCount',
+    'epss.lastSkippedCount',
+    'epss.lastRemovedCount',
+    'epss.lastImportStrategy',
     'historic.lastImportAt',
     'historic.totalCount',
     'custom.lastImportAt',
@@ -100,9 +110,10 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
     'poc.totalCount'
   ]
 
-  const [kevCachedAt, enisaCachedAt, pocCachedAt, metadata] = await Promise.all([
+  const [kevCachedAt, enisaCachedAt, epssCachedEntry, pocCachedAt, metadata] = await Promise.all([
     loadCachedAt('kev-feed.json'),
     loadCachedAt('enisa-feed.json'),
+    loadCachedAt('epss-feed.json'),
     loadCachedAt('github-poc-feed.json'),
     getMetadataMap(metadataKeys)
   ])
@@ -122,6 +133,18 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
   const marketOfferCount = parseNumber(metadata['market.offerCount'])
   const marketProgramCount = parseNumber(metadata['market.programCount'])
   const marketLastCaptureAt = normaliseString(metadata['market.lastCaptureAt'])
+  const epssLastImportedAt = normaliseString(metadata['epss.lastImportAt'])
+  const epssCachedAtMeta = normaliseString(metadata['epss.cachedAt'])
+  const epssCachedAt = epssCachedAtMeta ?? epssCachedEntry ?? null
+  const epssTotalCount = parseNumber(metadata['epss.totalCount'])
+  const epssScoreDate = normaliseString(metadata['epss.lastScoreDate'])
+  const epssModelVersion = normaliseString(metadata['epss.lastModelVersion'])
+  const epssNewCount = parseNumber(metadata['epss.lastNewCount']) ?? 0
+  const epssUpdatedCount = parseNumber(metadata['epss.lastUpdatedCount']) ?? 0
+  const epssSkippedCount = parseNumber(metadata['epss.lastSkippedCount']) ?? 0
+  const epssRemovedCount = parseNumber(metadata['epss.lastRemovedCount']) ?? 0
+  const epssStrategyRaw = normaliseString(metadata['epss.lastImportStrategy'])
+  const epssStrategy: 'full' | 'incremental' = epssStrategyRaw === 'incremental' ? 'incremental' : 'full'
 
   return {
     sources: [
@@ -158,6 +181,18 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         lastImportedAt: normaliseString(metadata['enisa.lastImportAt']),
         cachedAt: enisaCachedAt,
         totalCount: parseNumber(metadata['enisa.totalCount']),
+        programCount: null,
+        latestCaptureAt: null
+      },
+      {
+        key: 'epss',
+        label: 'EPSS scores',
+        importKey: 'epss',
+        catalogVersion: epssModelVersion,
+        dateReleased: epssScoreDate,
+        lastImportedAt: epssLastImportedAt,
+        cachedAt: epssCachedAt,
+        totalCount: epssTotalCount,
         programCount: null,
         latestCaptureAt: null
       },

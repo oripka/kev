@@ -74,6 +74,8 @@ const fetchFirstCommitDate = async (cveId: string): Promise<string | null> => {
 type ResolveOptions = {
   useCachedRepository?: boolean
   lookbackDays?: number
+  onStatus?: (message: string) => void
+  onProgress?: (completed: number, total: number) => void
 }
 
 export type PocPublishDateMap = Map<string, string | null>
@@ -88,21 +90,29 @@ export const resolvePocPublishDates = async (
 
   const lookbackDays = options.lookbackDays ?? DEFAULT_LOOKBACK_DAYS
 
+  const onStatus = options.onStatus
+  const onProgress = options.onProgress
+
   const windowCutoff = new Date()
   windowCutoff.setDate(windowCutoff.getDate() - lookbackDays)
 
   const cache = await loadCache()
   const missing: string[] = []
   const result = new Map<string, string | null>()
+  let cacheHits = 0
+  let cacheMisses = 0
+  let skippedByWindow = 0
 
   for (const { cveId, referenceDate } of cveIds) {
     const cached = cache.records[cveId]
     if (cached?.publishedAt) {
+      cacheHits += 1
       result.set(cveId, cached.publishedAt)
       continue
     }
 
     if (cached && cached.publishedAt === null) {
+      cacheMisses += 1
       result.set(cveId, null)
       continue
     }
@@ -112,6 +122,7 @@ export const resolvePocPublishDates = async (
       if (!Number.isNaN(parsed.getTime())) {
         if (differenceInDays(parsed, windowCutoff) < 0) {
           // Older than the lookback window; treat as not required
+          skippedByWindow += 1
           result.set(cveId, null)
           continue
         }
@@ -121,13 +132,28 @@ export const resolvePocPublishDates = async (
     missing.push(cveId)
   }
 
+  const missingCount = missing.length
+  onStatus?.(
+    missingCount
+      ? `Preparing to resolve ${missingCount.toLocaleString()} GitHub PoC publish dates (${cacheHits.toLocaleString()} cached, ${cacheMisses.toLocaleString()} previously checked, ${skippedByWindow.toLocaleString()} skipped by window)`
+      : `All GitHub PoC publish dates resolved from cache (${cacheHits.toLocaleString()} cached, ${cacheMisses.toLocaleString()} previously checked, ${skippedByWindow.toLocaleString()} skipped by window)`
+  )
+
   if (!missing.length) {
     return result
   }
 
   await loadRepository(options.useCachedRepository ?? false)
+  onStatus?.(
+    `Synchronized GitHub PoC history repository (${missing.length.toLocaleString()} lookups queued)`
+  )
 
   const runTask = createTaskQueue(HISTORY_CONCURRENCY)
+  const totalMissing = missing.length
+  let completed = 0
+  let gitHits = 0
+  let gitMisses = 0
+  let cacheDirty = false
 
   await Promise.all(
     missing.map(cveId =>
@@ -137,12 +163,29 @@ export const resolvePocPublishDates = async (
           publishedAt,
           cachedAt: new Date().toISOString()
         }
+        cacheDirty = true
         result.set(cveId, publishedAt)
+        if (publishedAt) {
+          gitHits += 1
+        } else {
+          gitMisses += 1
+        }
+        completed += 1
+        onProgress?.(completed, totalMissing)
       })
     )
   )
 
-  await persistCache(cache)
+  onStatus?.(
+    `GitHub PoC publish history lookups complete (${gitHits.toLocaleString()} found, ${gitMisses.toLocaleString()} with no history)`
+  )
+
+  if (cacheDirty) {
+    await persistCache(cache)
+    onStatus?.('Updated GitHub PoC publish history cache')
+  } else {
+    onStatus?.('GitHub PoC publish history cache already up to date')
+  }
 
   return result
 }

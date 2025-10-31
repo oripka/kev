@@ -532,27 +532,27 @@ export const importGithubPocCatalog = async (
         : `${baseEntries.length}`
     }
 
-    markTaskProgress(
-      'poc',
-      0,
-      0,
-      `Filtered GitHub PoC feed to ${baseEntries.length.toLocaleString('en-US')} CVEs with actionable links`
-    )
+    const filteredMessage = `Filtered GitHub PoC feed to ${baseEntries.length.toLocaleString('en-US')} CVEs with actionable links`
+    markTaskProgress('poc', 0, 0, filteredMessage)
 
     const totalEnrichment = baseEntries.length
+    const enrichmentConcurrency =
+      totalEnrichment > 0
+        ? Math.min(POC_ENRICHMENT_CONCURRENCY, Math.max(1, totalEnrichment))
+        : 0
+    const enrichmentStartMessage =
+      totalEnrichment > 0
+        ? `Enriching GitHub PoC entries with CVE data (${totalEnrichment.toLocaleString('en-US')} entries, ${enrichmentConcurrency.toLocaleString('en-US')} parallel workers)`
+        : 'No GitHub PoC entries require CVE enrichment'
 
     setImportPhase('enriching', {
-      message: 'Enriching GitHub PoC entries with CVE data',
+      message: enrichmentStartMessage,
       completed: 0,
       total: totalEnrichment
     })
 
-    markTaskProgress(
-      'poc',
-      0,
-      totalEnrichment,
-      'Enriching GitHub PoC entries with CVE data'
-    )
+    updateImportProgress('enriching', 0, totalEnrichment, enrichmentStartMessage)
+    markTaskProgress('poc', 0, totalEnrichment, enrichmentStartMessage)
 
     const enrichmentResults = await mapWithConcurrency(
       baseEntries,
@@ -571,8 +571,9 @@ export const importGithubPocCatalog = async (
           if (total === 0) {
             return
           }
-          updateImportProgress('enriching', completed, total)
-          markTaskProgress('poc', completed, total)
+          const progressMessage = `Enriching GitHub PoC entries with CVE data (${completed.toLocaleString('en-US')} of ${total.toLocaleString('en-US')})`
+          updateImportProgress('enriching', completed, total, progressMessage)
+          markTaskProgress('poc', completed, total, progressMessage)
         }
       }
     )
@@ -610,11 +611,43 @@ export const importGithubPocCatalog = async (
       }
     }
 
+    const historyTotal = historyCandidates.size
+    const preferCachedHistoryRepo = allowStale || dataset.cacheHit
+    if (historyTotal > 0) {
+      const historyStartMessage = `Resolving GitHub PoC publish history (${historyTotal.toLocaleString('en-US')} CVEs)`
+      setImportPhase('resolvingPocHistory', {
+        message: historyStartMessage,
+        completed: 0,
+        total: historyTotal
+      })
+      updateImportProgress('resolvingPocHistory', 0, historyTotal, historyStartMessage)
+      markTaskProgress('poc', 0, historyTotal, historyStartMessage)
+    }
+
+    let historyCompleted = 0
     const publishDates = await resolvePocPublishDates(
       Array.from(historyCandidates.values()),
       {
-        useCachedRepository: options.allowStale ?? dataset.cacheHit,
-        lookbackDays: POC_HISTORY_LOOKBACK_DAYS
+        useCachedRepository: preferCachedHistoryRepo,
+        lookbackDays: POC_HISTORY_LOOKBACK_DAYS,
+        onStatus(message) {
+          const trimmed = message.trim()
+          if (!trimmed) {
+            return
+          }
+          markTaskProgress('poc', historyCompleted, historyTotal, trimmed)
+        },
+        onProgress(completed, total) {
+          historyCompleted = completed
+          const progressMessage = `Resolving GitHub PoC publish history (${completed.toLocaleString('en-US')} of ${total.toLocaleString('en-US')})`
+          setImportPhase('resolvingPocHistory', {
+            message: progressMessage,
+            completed,
+            total
+          })
+          updateImportProgress('resolvingPocHistory', completed, total, progressMessage)
+          markTaskProgress('poc', completed, total, progressMessage)
+        }
       }
     )
 

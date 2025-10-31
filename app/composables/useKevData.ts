@@ -51,6 +51,14 @@ type ImportSummary = {
   enisaSkippedCount: number
   enisaRemovedCount: number
   enisaImportStrategy: ImportStrategy
+  epssImported: number
+  epssNewCount: number
+  epssUpdatedCount: number
+  epssSkippedCount: number
+  epssRemovedCount: number
+  epssImportStrategy: ImportStrategy
+  epssDatasetVersion: string | null
+  epssScoreDate: string | null
   metasploitImported: number
   metasploitNewCount: number
   metasploitUpdatedCount: number
@@ -271,6 +279,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     phase === 'fetchingPoc' ||
     phase === 'fetchingMarket' ||
     phase === 'enriching' ||
+    phase === 'resolvingPocHistory' ||
     phase === 'saving' ||
     phase === 'savingEnisa' ||
     phase === 'savingHistoric' ||

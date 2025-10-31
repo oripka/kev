@@ -18,6 +18,7 @@ type ImportPhase =
   | 'fetchingPoc'
   | 'fetchingMarket'
   | 'enriching'
+  | 'resolvingPocHistory'
   | 'saving'
   | 'savingEnisa'
   | 'savingHistoric'
@@ -41,7 +42,16 @@ type ImportProgressState = {
   events: ImportProgressEvent[]
 }
 
-const TASK_ORDER: ImportTaskKey[] = ['kev', 'historic', 'custom', 'enisa', 'metasploit', 'poc', 'market']
+const TASK_ORDER: ImportTaskKey[] = [
+  'kev',
+  'historic',
+  'custom',
+  'enisa',
+  'epss',
+  'metasploit',
+  'poc',
+  'market'
+]
 const EVENT_LIMIT = 50
 
 type InternalImportProgressState = ImportProgressState & {

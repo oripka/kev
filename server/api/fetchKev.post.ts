@@ -11,6 +11,7 @@ import { importEnisaCatalog } from '../utils/enisa'
 import { importMetasploitCatalog } from '../utils/metasploit'
 import { importGithubPocCatalog } from '../utils/github-poc'
 import { importMarketIntel } from '../utils/market'
+import { importEpssScores } from '../utils/epss'
 import { rebuildCatalog } from '../utils/catalog'
 import { rebuildProductCatalog } from '../utils/product-catalog'
 import {
@@ -159,6 +160,7 @@ const IMPORT_SOURCE_ORDER: ImportTaskKey[] = [
   'historic',
   'custom',
   'enisa',
+  'epss',
   'metasploit',
   'poc',
   'market'
@@ -211,6 +213,8 @@ export default defineEventHandler(async event => {
     'lastImportAt',
     'kev.sourceSignature',
     'enisa.lastUpdatedAt',
+    'epss.lastScoreDate',
+    'epss.lastModelVersion',
     'metasploit.lastCommit',
     'metasploit.moduleCount'
   ])
@@ -227,6 +231,8 @@ export default defineEventHandler(async event => {
   let catalogVersion = fallbackCatalogVersion
   let dateReleased = fallbackDateReleased
   let enisaLastUpdated = fallbackEnisaUpdated
+  let epssScoreDate = metadata['epss.lastScoreDate'] ?? null
+  let epssDatasetVersion = metadata['epss.lastModelVersion'] ?? null
   let metasploitCommit = fallbackMetasploitCommit
   let metasploitModules = fallbackMetasploitModules
   let importTimestamp = importStartedAt
@@ -255,6 +261,12 @@ export default defineEventHandler(async event => {
   let enisaSkippedCount = 0
   let enisaRemovedCount = 0
   let enisaImportStrategy: ImportStrategy = 'full'
+  let epssImported = 0
+  let epssNewCount = 0
+  let epssUpdatedCount = 0
+  let epssSkippedCount = 0
+  let epssRemovedCount = 0
+  let epssImportStrategy: ImportStrategy = 'full'
   let metasploitImported = 0
   let metasploitNewCount = 0
   let metasploitUpdatedCount = 0
@@ -1334,6 +1346,35 @@ export default defineEventHandler(async event => {
       markTaskSkipped('enisa', 'Skipped this run')
     }
 
+    let epssSummary = {
+      imported: 0,
+      totalCount: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy,
+      datasetVersion: epssDatasetVersion,
+      scoreDate: epssScoreDate
+    }
+    if (shouldImport('epss')) {
+      epssSummary = await importEpssScores(db, {
+        forceRefresh,
+        allowStale,
+        strategy
+      })
+      epssImported = epssSummary.imported
+      epssNewCount = epssSummary.newCount
+      epssUpdatedCount = epssSummary.updatedCount
+      epssSkippedCount = epssSummary.skippedCount
+      epssRemovedCount = epssSummary.removedCount
+      epssImportStrategy = epssSummary.strategy
+      epssDatasetVersion = epssSummary.datasetVersion ?? epssDatasetVersion
+      epssScoreDate = epssSummary.scoreDate ?? epssScoreDate
+    } else {
+      markTaskSkipped('epss', 'Skipped this run')
+    }
+
     let metasploitSummary = {
       imported: 0,
       totalCount: 0,
@@ -1419,6 +1460,7 @@ export default defineEventHandler(async event => {
       historicImported +
       customImported +
       enisaImported +
+      epssImported +
       metasploitImported +
       pocImported +
       marketImported
@@ -1506,6 +1548,27 @@ export default defineEventHandler(async event => {
         segments.push(`${enisaImported.toLocaleString()} ENISA entries${detail}`)
       } else {
         segments.push(`${enisaImported.toLocaleString()} ENISA entries`)
+      }
+    }
+    if (shouldImport('epss')) {
+      if (epssImportStrategy === 'incremental') {
+        const epssSegments: string[] = []
+        if (epssNewCount > 0) {
+          epssSegments.push(`${epssNewCount.toLocaleString()} new`)
+        }
+        if (epssUpdatedCount > 0) {
+          epssSegments.push(`${epssUpdatedCount.toLocaleString()} updated`)
+        }
+        if (epssSkippedCount > 0) {
+          epssSegments.push(`${epssSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (epssRemovedCount > 0) {
+          epssSegments.push(`${epssRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = epssSegments.length ? ` (${epssSegments.join(', ')})` : ''
+        segments.push(`${epssImported.toLocaleString()} EPSS updates${detail}`)
+      } else {
+        segments.push(`${epssImported.toLocaleString()} EPSS updates`)
       }
     }
     if (shouldImport('metasploit')) {
@@ -1612,6 +1675,14 @@ export default defineEventHandler(async event => {
       enisaSkippedCount,
       enisaRemovedCount,
       enisaImportStrategy,
+      epssImported: epssSummary.imported,
+      epssNewCount,
+      epssUpdatedCount,
+      epssSkippedCount,
+      epssRemovedCount,
+      epssImportStrategy,
+      epssDatasetVersion,
+      epssScoreDate,
       metasploitImported: metasploitSummary.imported,
       metasploitNewCount,
       metasploitUpdatedCount,
