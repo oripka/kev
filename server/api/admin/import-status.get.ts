@@ -90,6 +90,8 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
     'enisa.totalCount',
     'historic.lastImportAt',
     'historic.totalCount',
+    'custom.lastImportAt',
+    'custom.totalCount',
     'metasploit.lastCommit',
     'metasploit.lastImportAt',
     'metasploit.totalCount',
@@ -168,6 +170,18 @@ export default defineEventHandler(async (event): Promise<ImportStatusResponse> =
         lastImportedAt: normaliseString(metadata['historic.lastImportAt']),
         cachedAt: null,
         totalCount: parseNumber(metadata['historic.totalCount']),
+        programCount: null,
+        latestCaptureAt: null
+      },
+      {
+        key: 'custom',
+        label: 'Curated research feed',
+        importKey: 'custom',
+        catalogVersion: null,
+        dateReleased: null,
+        lastImportedAt: normaliseString(metadata['custom.lastImportAt']),
+        cachedAt: null,
+        totalCount: parseNumber(metadata['custom.totalCount']),
         programCount: null,
         latestCaptureAt: null
       },

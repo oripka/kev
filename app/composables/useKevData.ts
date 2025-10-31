@@ -39,6 +39,12 @@ type ImportSummary = {
   historicSkippedCount: number
   historicRemovedCount: number
   historicImportStrategy: ImportStrategy
+  customImported: number
+  customNewCount: number
+  customUpdatedCount: number
+  customSkippedCount: number
+  customRemovedCount: number
+  customImportStrategy: ImportStrategy
   enisaImported: number
   enisaNewCount: number
   enisaUpdatedCount: number
@@ -260,6 +266,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     phase === 'fetchingCvss' ||
     phase === 'fetchingEnisa' ||
     phase === 'fetchingHistoric' ||
+    phase === 'fetchingCustom' ||
     phase === 'fetchingMetasploit' ||
     phase === 'fetchingPoc' ||
     phase === 'fetchingMarket' ||
@@ -267,6 +274,7 @@ export const useKevData = (querySource?: QuerySource): UseKevDataResult => {
     phase === 'saving' ||
     phase === 'savingEnisa' ||
     phase === 'savingHistoric' ||
+    phase === 'savingCustom' ||
     phase === 'savingMetasploit' ||
     phase === 'savingPoc' ||
     phase === 'savingMarket'

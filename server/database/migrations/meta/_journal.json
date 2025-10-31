@@ -15,6 +15,13 @@
       "when": 1761736037538,
       "tag": "0001_catalog_entries_fts",
       "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1761820000000,
+      "tag": "0002_catalog_entries_custom",
+      "breakpoints": false
     }
   ]
 }

@@ -341,6 +341,7 @@ const selectableSources: CatalogSource[] = [
   "kev",
   "enisa",
   "historic",
+  "custom",
   "metasploit",
   "poc",
 ];
@@ -349,6 +350,7 @@ const defaultSourceSelection: CatalogSource[] = [
   "kev",
   "enisa",
   "historic",
+  "custom",
   "metasploit",
 ];
 

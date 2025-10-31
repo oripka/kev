@@ -19,7 +19,7 @@ const USAGE = `Usage: pnpm run import-feeds [--mode <auto|force|cache>] [--sourc
 
 Options:
   --mode       Import mode controlling cache behaviour (default: auto)
-  --source     Comma-separated list of sources to import (kev, historic, enisa, metasploit, poc, market) or "all"
+  --source     Comma-separated list of sources to import (kev, historic, custom, enisa, metasploit, poc, market) or "all"
   --strategy   Import strategy to use (full or incremental)
   --incremental  Shortcut for --strategy incremental
   --full         Shortcut for --strategy full

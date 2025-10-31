@@ -21,7 +21,7 @@ const queryParams = computed(() => ({
   fromDate: rangeStartIso,
   toDate: rangeEndIso,
   limit: 1_000,
-  source: "kev,enisa,historic,metasploit",
+  source: "kev,enisa,historic,custom,metasploit",
 }));
 
 const {

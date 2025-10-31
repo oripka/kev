@@ -4,6 +4,15 @@ import type { ImportTaskKey } from '~/types'
 import { requireAdminKey } from '../utils/adminAuth'
 import { useDrizzle } from '../database/client'
 import type { ImportStrategy } from '../utils/import-types'
+import { getMetadataMap } from '../utils/metadata'
+import { importHistoricCatalog } from '../utils/historic'
+import { importCustomCatalog } from '../utils/custom'
+import { importEnisaCatalog } from '../utils/enisa'
+import { importMetasploitCatalog } from '../utils/metasploit'
+import { importGithubPocCatalog } from '../utils/github-poc'
+import { importMarketIntel } from '../utils/market'
+import { rebuildCatalog } from '../utils/catalog'
+import { rebuildProductCatalog } from '../utils/product-catalog'
 import {
   CVELIST_ENRICHMENT_CONCURRENCY,
   clearCvelistMemoryCache,
@@ -145,7 +154,15 @@ const formatNewKevCveSummary = (ids: string[]): string => {
 type ImportMode = 'auto' | 'force' | 'cache'
 type ImportRequestBody = { mode?: ImportMode; source?: string; strategy?: string }
 
-const IMPORT_SOURCE_ORDER: ImportTaskKey[] = ['kev', 'historic', 'enisa', 'metasploit', 'poc', 'market']
+const IMPORT_SOURCE_ORDER: ImportTaskKey[] = [
+  'kev',
+  'historic',
+  'custom',
+  'enisa',
+  'metasploit',
+  'poc',
+  'market'
+]
 
 const isImportSourceKey = (value: string): value is ImportTaskKey => {
   return IMPORT_SOURCE_ORDER.includes(value as ImportTaskKey)
@@ -226,6 +243,12 @@ export default defineEventHandler(async event => {
   let historicSkippedCount = 0
   let historicRemovedCount = 0
   let historicImportStrategy: ImportStrategy = 'full'
+  let customImported = 0
+  let customNewCount = 0
+  let customUpdatedCount = 0
+  let customSkippedCount = 0
+  let customRemovedCount = 0
+  let customImportStrategy: ImportStrategy = 'full'
   let enisaImported = 0
   let enisaNewCount = 0
   let enisaUpdatedCount = 0
@@ -1262,6 +1285,27 @@ export default defineEventHandler(async event => {
       markTaskSkipped('historic', 'Skipped this run')
     }
 
+    let customSummary = {
+      imported: 0,
+      totalCount: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy
+    }
+    if (shouldImport('custom')) {
+      customSummary = await importCustomCatalog(db, { strategy })
+      customImported = customSummary.imported
+      customNewCount = customSummary.newCount
+      customUpdatedCount = customSummary.updatedCount
+      customSkippedCount = customSummary.skippedCount
+      customRemovedCount = customSummary.removedCount
+      customImportStrategy = customSummary.strategy
+    } else {
+      markTaskSkipped('custom', 'Skipped this run')
+    }
+
     let enisaSummary = {
       imported: 0,
       totalCount: 0,
@@ -1373,6 +1417,7 @@ export default defineEventHandler(async event => {
     const totalImported =
       kevImported +
       historicImported +
+      customImported +
       enisaImported +
       metasploitImported +
       pocImported +
@@ -1419,6 +1464,27 @@ export default defineEventHandler(async event => {
         segments.push(`${historicImported.toLocaleString()} historic entries${detail}`)
       } else {
         segments.push(`${historicImported.toLocaleString()} historic entries`)
+      }
+    }
+    if (shouldImport('custom')) {
+      if (customImportStrategy === 'incremental') {
+        const customSegments: string[] = []
+        if (customNewCount > 0) {
+          customSegments.push(`${customNewCount.toLocaleString()} new`)
+        }
+        if (customUpdatedCount > 0) {
+          customSegments.push(`${customUpdatedCount.toLocaleString()} updated`)
+        }
+        if (customSkippedCount > 0) {
+          customSegments.push(`${customSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (customRemovedCount > 0) {
+          customSegments.push(`${customRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = customSegments.length ? ` (${customSegments.join(', ')})` : ''
+        segments.push(`${customImported.toLocaleString()} curated entries${detail}`)
+      } else {
+        segments.push(`${customImported.toLocaleString()} curated entries`)
       }
     }
     if (shouldImport('enisa')) {
@@ -1534,6 +1600,12 @@ export default defineEventHandler(async event => {
       historicSkippedCount,
       historicRemovedCount,
       historicImportStrategy,
+      customImported: customSummary.imported,
+      customNewCount,
+      customUpdatedCount,
+      customSkippedCount,
+      customRemovedCount,
+      customImportStrategy,
       enisaImported: enisaSummary.imported,
       enisaNewCount,
       enisaUpdatedCount,

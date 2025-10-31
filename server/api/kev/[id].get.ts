@@ -362,7 +362,9 @@ export default defineCachedEventHandler(async event => {
         ce.has_source_kev,
         ce.has_source_enisa,
         ce.has_source_historic,
-        ce.has_source_metasploit
+        ce.has_source_custom,
+        ce.has_source_metasploit,
+        ce.has_source_poc
       FROM ${tables.catalogEntries} ce
       WHERE ce.entry_id = ${id}
       LIMIT 1

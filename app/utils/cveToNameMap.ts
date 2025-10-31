@@ -121,6 +121,9 @@ export const cveToNameMap: Record<string, string> = {
   'CVE-2024-21626': 'Leaky Vessels', // runc container privilege escalation
   'CVE-2024-3400': 'PaloAlto-GlobalProtect', // Palo Alto PAN-OS GlobalProtect
   'CVE-2024-51978': 'Brother Default Admin Auth Bypass', // Brother device default admin bypass
+
+  // Custom curated additions
+  'CVE-2025-58726': 'Ghost Reflection', // SMB privilege escalation via ghost SPNs
 }
 
 export const normalizeCveKey = (raw: string): string => {

@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "ghost-reflection-smb-privilege-escalation",
+    "cve": "CVE-2025-58726",
+    "title": "Ghost Reflection SMB privilege escalation via orphaned SPNs",
+    "vendor": "Microsoft",
+    "product": "Windows SMB Server",
+    "date_disclosed": "2025-10-14",
+    "source_url": "https://www.semperis.com/blog/exploiting-ghost-spns-and-kerberos-reflection-for-smb-privilege-elevation/",
+    "references": [
+      "https://www.semperis.com/blog/exploiting-ghost-spns-and-kerberos-reflection-for-smb-privilege-elevation/",
+      "https://msrc.microsoft.com/update-guide/en-US/vulnerability/CVE-2025-58726",
+      "https://x.com/decoder_it/status/1983565062943002933"
+    ],
+    "aliases": ["Ghost Reflection"],
+    "summary": "Ghost Reflection chains orphaned HOST/CIFS service principal names with Kerberos reflection to coerce SMB authentication back to an attacker-controlled host and escalate to SYSTEM when SMB signing is disabled.",
+    "notes": [
+      "Requires a ghost SPN mapped to a retired account and the ability to register DNS for the orphaned hostname.",
+      "Attackers replay Kerberos authentication captured via ghost SPNs against an SMB service lacking signing to gain elevated privileges."
+    ]
+  }
+]

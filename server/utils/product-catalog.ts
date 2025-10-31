@@ -86,6 +86,13 @@ export const rebuildProductCatalog = async (db: DrizzleDatabase) => {
     .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
     .all()
 
+  const customRows = await db
+    .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
+    .from(tables.vulnerabilityEntries)
+    .where(eq(tables.vulnerabilityEntries.source, 'custom'))
+    .groupBy(tables.vulnerabilityEntries.vendor, tables.vulnerabilityEntries.product)
+    .all()
+
   const metasploitRows = await db
     .select({ vendor: tables.vulnerabilityEntries.vendor, product: tables.vulnerabilityEntries.product })
     .from(tables.vulnerabilityEntries)
@@ -98,6 +105,7 @@ export const rebuildProductCatalog = async (db: DrizzleDatabase) => {
   collectProducts(kevRows, 'kev', catalog)
   collectProducts(enisaRows, 'enisa', catalog)
   collectProducts(historicRows, 'historic', catalog)
+  collectProducts(customRows, 'custom', catalog)
   collectProducts(metasploitRows, 'metasploit', catalog)
 
   for (const row of marketRows) {

@@ -10,6 +10,7 @@ import { getCachedData } from 'server/utils/cache'
 import { fetchCvssMetrics } from 'server/utils/cvss'
 import { importEnisaCatalog } from 'server/utils/enisa'
 import { importHistoricCatalog } from 'server/utils/historic'
+import { importCustomCatalog } from 'server/utils/custom'
 import {
   completeImportProgress,
   failImportProgress,
@@ -109,6 +110,12 @@ export type CatalogImportResult = {
   historicSkippedCount: number
   historicRemovedCount: number
   historicImportStrategy: ImportStrategy
+  customImported: number
+  customNewCount: number
+  customUpdatedCount: number
+  customSkippedCount: number
+  customRemovedCount: number
+  customImportStrategy: ImportStrategy
   enisaImported: number
   enisaNewCount: number
   enisaUpdatedCount: number
@@ -205,6 +212,7 @@ type CvssMetric = {
 export const IMPORT_SOURCE_ORDER: ImportTaskKey[] = [
   'kev',
   'historic',
+  'custom',
   'enisa',
   'metasploit',
   'poc',
@@ -272,6 +280,12 @@ export const runCatalogImport = async (
   let historicSkippedCount = 0
   let historicRemovedCount = 0
   let historicImportStrategy: ImportStrategy = 'full'
+  let customImported = 0
+  let customNewCount = 0
+  let customUpdatedCount = 0
+  let customSkippedCount = 0
+  let customRemovedCount = 0
+  let customImportStrategy: ImportStrategy = 'full'
   let enisaImported = 0
   let enisaNewCount = 0
   let enisaUpdatedCount = 0
@@ -818,6 +832,27 @@ export const runCatalogImport = async (
       markTaskSkipped('historic', 'Skipped this run')
     }
 
+    let customSummary = {
+      imported: 0,
+      totalCount: 0,
+      newCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedCount: 0,
+      strategy
+    }
+    if (shouldImport('custom')) {
+      customSummary = await importCustomCatalog(db, { strategy })
+      customImported = customSummary.imported
+      customNewCount = customSummary.newCount
+      customUpdatedCount = customSummary.updatedCount
+      customSkippedCount = customSummary.skippedCount
+      customRemovedCount = customSummary.removedCount
+      customImportStrategy = customSummary.strategy
+    } else {
+      markTaskSkipped('custom', 'Skipped this run')
+    }
+
     let enisaSummary = {
       imported: 0,
       totalCount: 0,
@@ -936,6 +971,12 @@ export const runCatalogImport = async (
         historicSummary.newCount > 0 ||
         historicSummary.updatedCount > 0 ||
         historicSummary.removedCount > 0)
+    const customChanged =
+      shouldImport('custom') &&
+      (customImportStrategy === 'full' ||
+        customNewCount > 0 ||
+        customUpdatedCount > 0 ||
+        customRemovedCount > 0)
     const enisaChanged =
       shouldImport('enisa') &&
       (enisaImportStrategy === 'full' ||
@@ -959,6 +1000,7 @@ export const runCatalogImport = async (
     const hasCatalogChanges =
       kevChanged ||
       historicChanged ||
+      customChanged ||
       enisaChanged ||
       metasploitChanged ||
       pocChanged ||
@@ -981,6 +1023,7 @@ export const runCatalogImport = async (
     const totalImported =
       kevImported +
       historicImported +
+      customImported +
       enisaImported +
       metasploitImported +
       pocImported +
@@ -1027,6 +1070,27 @@ export const runCatalogImport = async (
         segments.push(`${historicImported.toLocaleString()} historic entries${detail}`)
       } else {
         segments.push(`${historicImported.toLocaleString()} historic entries`)
+      }
+    }
+    if (shouldImport('custom')) {
+      if (customImportStrategy === 'incremental') {
+        const customSegments: string[] = []
+        if (customNewCount > 0) {
+          customSegments.push(`${customNewCount.toLocaleString()} new`)
+        }
+        if (customUpdatedCount > 0) {
+          customSegments.push(`${customUpdatedCount.toLocaleString()} updated`)
+        }
+        if (customSkippedCount > 0) {
+          customSegments.push(`${customSkippedCount.toLocaleString()} unchanged`)
+        }
+        if (customRemovedCount > 0) {
+          customSegments.push(`${customRemovedCount.toLocaleString()} removed`)
+        }
+        const detail = customSegments.length ? ` (${customSegments.join(', ')})` : ''
+        segments.push(`${customImported.toLocaleString()} curated entries${detail}`)
+      } else {
+        segments.push(`${customImported.toLocaleString()} curated entries`)
       }
     }
     if (shouldImport('enisa')) {
@@ -1144,6 +1208,12 @@ export const runCatalogImport = async (
       historicSkippedCount,
       historicRemovedCount,
       historicImportStrategy,
+      customImported: customSummary.imported,
+      customNewCount,
+      customUpdatedCount,
+      customSkippedCount,
+      customRemovedCount,
+      customImportStrategy,
       enisaImported: enisaSummary.imported,
       enisaNewCount,
       enisaUpdatedCount,

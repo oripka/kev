@@ -42,13 +42,21 @@ type AdminImportStatusResponse = {
 const SOURCE_SUMMARY_LABELS: Record<ImportTaskKey, string> = {
   kev: "CISA KEV entries",
   historic: "historic entries",
+  custom: "curated entries",
   enisa: "ENISA entries",
   metasploit: "Metasploit entries",
   poc: "GitHub PoC entries",
   market: "market intelligence offers",
 };
 
-const INCREMENTAL_IMPORT_SOURCES = new Set<ImportTaskKey>(["kev", "historic", "enisa", "metasploit", "poc"]);
+const INCREMENTAL_IMPORT_SOURCES = new Set<ImportTaskKey>([
+  "kev",
+  "historic",
+  "custom",
+  "enisa",
+  "metasploit",
+  "poc",
+]);
 
 const isDevEnvironment = import.meta.dev;
 
@@ -306,6 +314,7 @@ const importSummaryMessage = computed(() => {
   const counts: Record<ImportTaskKey, number> = {
     kev: summary.kevImported,
     historic: summary.historicImported,
+    custom: summary.customImported,
     enisa: summary.enisaImported,
     metasploit: summary.metasploitImported,
     poc: summary.pocImported,
@@ -407,6 +416,27 @@ const importSummaryMessage = computed(() => {
       messageParts.push(`Incremental historic update touched ${historicChanges.join(", ")}.`);
     } else {
       messageParts.push("Incremental historic update detected no changes.");
+    }
+  }
+
+  if (summary.sources.includes("custom") && summary.customImportStrategy === "incremental") {
+    const customChanges: string[] = [];
+    if (summary.customNewCount > 0) {
+      customChanges.push(`${summary.customNewCount.toLocaleString()} new`);
+    }
+    if (summary.customUpdatedCount > 0) {
+      customChanges.push(`${summary.customUpdatedCount.toLocaleString()} updated`);
+    }
+    if (summary.customSkippedCount > 0) {
+      customChanges.push(`${summary.customSkippedCount.toLocaleString()} unchanged`);
+    }
+    if (summary.customRemovedCount > 0) {
+      customChanges.push(`${summary.customRemovedCount.toLocaleString()} removed`);
+    }
+    if (customChanges.length) {
+      messageParts.push(`Incremental curated update touched ${customChanges.join(", ")}.`);
+    } else {
+      messageParts.push("Incremental curated update detected no changes.");
     }
   }
 

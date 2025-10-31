@@ -126,6 +126,7 @@ export type CatalogEntryRow = {
   has_source_kev: number
   has_source_enisa: number
   has_source_historic: number
+  has_source_custom: number
   has_source_metasploit: number
   has_source_poc: number
 }
@@ -370,7 +371,7 @@ const getEntryCategories = (
 const toStandardEntry = (
   row: VulnerabilityEntryRow,
   categories: EntryCategories,
-  source: 'kev' | 'historic' | 'metasploit' | 'poc'
+  source: 'kev' | 'historic' | 'custom' | 'metasploit' | 'poc'
 ): KevEntry => {
   const cveId = normaliseCve(row.cve_id ?? row.id)
   const notes = parseJsonArray(row.notes)
@@ -457,6 +458,11 @@ const toHistoricEntry = (
   row: VulnerabilityEntryRow,
   categories: EntryCategories
 ): KevEntry => toStandardEntry(row, categories, 'historic')
+
+const toCustomEntry = (
+  row: VulnerabilityEntryRow,
+  categories: EntryCategories
+): KevEntry => toStandardEntry(row, categories, 'custom')
 
 const toMetasploitEntry = (
   row: VulnerabilityEntryRow,
@@ -642,6 +648,7 @@ const buildCatalogEntries = (
   kevEntries: KevEntry[],
   enisaEntries: KevEntry[],
   historicEntries: KevEntry[],
+  customEntries: KevEntry[],
   metasploitEntries: KevEntry[],
   pocEntries: KevEntry[]
 ): KevEntry[] => {
@@ -666,6 +673,7 @@ const buildCatalogEntries = (
   kevEntries.forEach(add)
   enisaEntries.forEach(add)
   historicEntries.forEach(add)
+  customEntries.forEach(add)
   metasploitEntries.forEach(add)
   pocEntries.forEach(add)
 
@@ -829,6 +837,10 @@ export const rebuildCatalog = async (
     .filter(row => row.source === 'historic')
     .map(row => toHistoricEntry(row, getEntryCategories(row.id, categoryMap)))
 
+  const customEntries = entryRows
+    .filter(row => row.source === 'custom')
+    .map(row => toCustomEntry(row, getEntryCategories(row.id, categoryMap)))
+
   const metasploitEntries = entryRows
     .filter(row => row.source === 'metasploit')
     .map(row => toMetasploitEntry(row, getEntryCategories(row.id, categoryMap)))
@@ -841,6 +853,7 @@ export const rebuildCatalog = async (
     kevEntries,
     enisaEntries,
     historicEntries,
+    customEntries,
     metasploitEntries,
     pocEntries
   )
@@ -864,6 +877,7 @@ export const rebuildCatalog = async (
       const hasSourceKev = toBooleanFlag(entry.sources.includes('kev'))
       const hasSourceEnisa = toBooleanFlag(entry.sources.includes('enisa'))
       const hasSourceHistoric = toBooleanFlag(entry.sources.includes('historic'))
+      const hasSourceCustom = toBooleanFlag(entry.sources.includes('custom'))
       const hasSourceMetasploit = toBooleanFlag(entry.sources.includes('metasploit'))
       const hasSourcePoc = toBooleanFlag(entry.sources.includes('poc'))
 
@@ -910,6 +924,7 @@ export const rebuildCatalog = async (
         hasSourceKev,
         hasSourceEnisa,
         hasSourceHistoric,
+        hasSourceCustom,
         hasSourceMetasploit,
         hasSourcePoc
       }

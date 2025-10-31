@@ -55,6 +55,7 @@ export const catalogEntries = sqliteTable(
     hasSourceKev: integer('has_source_kev').notNull().default(0),
     hasSourceEnisa: integer('has_source_enisa').notNull().default(0),
     hasSourceHistoric: integer('has_source_historic').notNull().default(0),
+    hasSourceCustom: integer('has_source_custom').notNull().default(0),
     hasSourceMetasploit: integer('has_source_metasploit').notNull().default(0),
     hasSourcePoc: integer('has_source_poc').notNull().default(0)
   },
