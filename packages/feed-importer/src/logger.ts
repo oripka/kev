@@ -16,9 +16,17 @@ type ProgressOptions = {
 export class CliLogger {
   private readonly instance: ConsolaInstance
 
+  private readonly interactiveOutput: boolean
+
   private progressActive = false
 
   private lastProgressWidth = 0
+
+  private lastProgressMessage: string | null = null
+
+  private pendingDrain = false
+
+  private queuedProgress: { formatted: string; visibleLength: number } | null = null
 
   constructor() {
     this.instance = consola.withDefaults({
@@ -28,6 +36,10 @@ export class CliLogger {
         date: false
       }
     })
+    this.interactiveOutput =
+      Boolean(process.stdout.isTTY) &&
+      (process.env.TERM ?? '').toLowerCase() !== 'dumb' &&
+      process.env.KEV_IMPORT_PROGRESS !== 'off'
   }
 
   info(message: string) {
@@ -60,27 +72,41 @@ export class CliLogger {
     const formatted = this.withTimestamp(message)
 
     if (mode === 'append') {
+      this.lastProgressMessage = null
       this.endProgress()
       this.instance.log(formatted)
       return
     }
 
-    const visibleLength = stripAnsi(formatted).length
-    const padding = this.lastProgressWidth > visibleLength
-      ? ' '.repeat(this.lastProgressWidth - visibleLength)
-      : ''
+    if (!this.interactiveOutput) {
+      if (formatted === this.lastProgressMessage) {
+        return
+      }
+      this.lastProgressMessage = formatted
+      this.instance.log(formatted)
+      return
+    }
 
-    process.stdout.write(`\r${formatted}${padding}`)
-    this.progressActive = true
-    this.lastProgressWidth = visibleLength
+    if (formatted === this.lastProgressMessage) {
+      return
+    }
+
+    const visibleLength = stripAnsi(formatted).length
+    const padding =
+      this.lastProgressWidth > visibleLength
+        ? ' '.repeat(this.lastProgressWidth - visibleLength)
+        : ''
+
+    this.writeProgress(formatted, visibleLength, padding)
   }
 
   endProgress() {
-    if (this.progressActive) {
+    if (this.progressActive && this.interactiveOutput) {
       process.stdout.write('\n')
-      this.progressActive = false
-      this.lastProgressWidth = 0
     }
+    this.progressActive = false
+    this.lastProgressWidth = 0
+    this.lastProgressMessage = null
   }
 
   newline(count = 1) {
@@ -92,6 +118,41 @@ export class CliLogger {
 
   private prepareForLog() {
     this.endProgress()
+  }
+
+  private writeProgress(formatted: string, visibleLength: number, padding: string) {
+    if (!this.interactiveOutput) {
+      return
+    }
+
+    if (this.pendingDrain) {
+      this.queuedProgress = { formatted, visibleLength }
+      return
+    }
+
+    const output = `\r${formatted}${padding}`
+    const wrote = process.stdout.write(output)
+
+    this.progressActive = true
+    this.lastProgressWidth = visibleLength
+    this.lastProgressMessage = formatted
+
+    if (!wrote) {
+      this.pendingDrain = true
+      this.queuedProgress = { formatted, visibleLength }
+      process.stdout.once('drain', () => {
+        this.pendingDrain = false
+        const queued = this.queuedProgress
+        if (queued) {
+          this.queuedProgress = null
+          const nextPadding =
+            this.lastProgressWidth > queued.visibleLength
+              ? ' '.repeat(this.lastProgressWidth - queued.visibleLength)
+              : ''
+          this.writeProgress(queued.formatted, queued.visibleLength, nextPadding)
+        }
+      })
+    }
   }
 
   private withTimestamp(message: string) {

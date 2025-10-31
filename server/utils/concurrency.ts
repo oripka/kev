@@ -47,29 +47,42 @@ export const mapWithConcurrency = async <T, R>(
   iteratee: (item: T, index: number) => Promise<R>,
   options: ConcurrencyOptions = {}
 ): Promise<R[]> => {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new RangeError('Concurrency must be a positive integer')
+  }
+
   if (items.length === 0) {
     return []
   }
 
-  const runTask = createTaskQueue(concurrency)
-  const results = new Array<R>(items.length)
   const total = items.length
+  const results = new Array<R>(total)
+  const limit = Math.min(concurrency, total)
   let completed = 0
+  let nextIndex = 0
   const { onProgress } = options
 
-  await Promise.all(
-    items.map((item, index) =>
-      runTask(async () => {
-        const result = await iteratee(item, index)
-        results[index] = result
+  const runWorker = async () => {
+    while (true) {
+      const currentIndex = nextIndex
+      if (currentIndex >= total) {
+        return
+      }
+      nextIndex += 1
+
+      try {
+        const result = await iteratee(items[currentIndex], currentIndex)
+        results[currentIndex] = result
+      } finally {
         completed += 1
         if (onProgress) {
           onProgress(completed, total)
         }
-        return result
-      })
-    )
-  )
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => runWorker()))
 
   return results
 }

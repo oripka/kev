@@ -215,6 +215,23 @@ const createProgressReporter = () => {
   let interval: NodeJS.Timeout | null = null
   let lastSummary = ''
 
+  const pruneSeenEvents = (activeEvents: readonly { id?: string | null }[]) => {
+    if (seenEvents.size <= activeEvents.length * 4) {
+      return
+    }
+    const activeIds = new Set<string>()
+    for (const event of activeEvents) {
+      if (event.id) {
+        activeIds.add(event.id)
+      }
+    }
+    for (const eventId of seenEvents) {
+      if (!activeIds.has(eventId)) {
+        seenEvents.delete(eventId)
+      }
+    }
+  }
+
   const logSnapshot = () => {
     const progress = getImportProgress()
 
@@ -247,6 +264,7 @@ const createProgressReporter = () => {
       const taskLabel = event.taskLabel ? `${ansis.bold(`${event.taskLabel}:`)} ` : ''
       logger.progress(`  ${formattedStatus} ${taskLabel}${event.message}`, { mode: 'append' })
     }
+    pruneSeenEvents(progress.events)
   }
 
   return {
@@ -256,6 +274,7 @@ const createProgressReporter = () => {
       }
       logSnapshot()
       interval = setInterval(logSnapshot, 1000)
+      interval.unref?.()
     },
     stop() {
       if (interval) {
@@ -264,6 +283,8 @@ const createProgressReporter = () => {
       }
       logSnapshot()
       logger.endProgress()
+      seenEvents.clear()
+      lastSummary = ''
     }
   }
 }
