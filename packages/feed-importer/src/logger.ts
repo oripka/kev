@@ -16,7 +16,7 @@ type ProgressOptions = {
 export class CliLogger {
   private readonly instance: ConsolaInstance
 
-  private readonly interactiveOutput: boolean
+  private interactiveOutput: boolean
 
   private progressActive = false
 
@@ -27,6 +27,10 @@ export class CliLogger {
   private pendingDrain = false
 
   private queuedProgress: { formatted: string; visibleLength: number } | null = null
+
+  private drainTimeout: NodeJS.Timeout | null = null
+
+  private readonly drainFallbackDelayMs = 1000
 
   constructor() {
     this.instance = consola.withDefaults({
@@ -104,6 +108,9 @@ export class CliLogger {
     if (this.progressActive && this.interactiveOutput) {
       process.stdout.write('\n')
     }
+    this.clearDrainTimeout()
+    this.pendingDrain = false
+    this.queuedProgress = null
     this.progressActive = false
     this.lastProgressWidth = 0
     this.lastProgressMessage = null
@@ -118,6 +125,37 @@ export class CliLogger {
 
   private prepareForLog() {
     this.endProgress()
+  }
+
+  private clearDrainTimeout() {
+    if (this.drainTimeout) {
+      clearTimeout(this.drainTimeout)
+      this.drainTimeout = null
+    }
+  }
+
+  private scheduleDrainFallback() {
+    if (this.drainTimeout) {
+      return
+    }
+    this.drainTimeout = setTimeout(() => {
+      this.drainTimeout = null
+      if (!this.pendingDrain) {
+        return
+      }
+      this.pendingDrain = false
+      const queued = this.queuedProgress
+      this.queuedProgress = null
+      this.progressActive = false
+      this.lastProgressWidth = 0
+      if (queued) {
+        this.instance.log(queued.formatted)
+        this.lastProgressMessage = queued.formatted
+      }
+      // Disable interactive progress updates after a drain timeout to avoid repeated stalls.
+      this.interactiveOutput = false
+    }, this.drainFallbackDelayMs)
+    this.drainTimeout.unref?.()
   }
 
   private writeProgress(formatted: string, visibleLength: number, padding: string) {
@@ -140,8 +178,10 @@ export class CliLogger {
     if (!wrote) {
       this.pendingDrain = true
       this.queuedProgress = { formatted, visibleLength }
+      this.scheduleDrainFallback()
       process.stdout.once('drain', () => {
         this.pendingDrain = false
+        this.clearDrainTimeout()
         const queued = this.queuedProgress
         if (queued) {
           this.queuedProgress = null
@@ -152,6 +192,8 @@ export class CliLogger {
           this.writeProgress(queued.formatted, queued.visibleLength, nextPadding)
         }
       })
+    } else {
+      this.clearDrainTimeout()
     }
   }
 

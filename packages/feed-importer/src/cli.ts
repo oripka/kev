@@ -24,8 +24,11 @@ Options:
   --incremental  Shortcut for --strategy incremental
   --full         Shortcut for --strategy full
   --sync-d1    After a successful import, export the local SQLite database to NuxtHub D1 (default: false)
+  --sync-d1-mode <incremental|full>  Control how the remote D1 database is updated when --sync-d1 is enabled (default: incremental)
   --help       Show this help message
 `
+
+type SyncD1Mode = 'incremental' | 'full'
 
 const parseMode = (value: string | undefined): CatalogImportMode => {
   if (!value) return 'auto'
@@ -78,6 +81,21 @@ const normaliseSourceList = (value: string | undefined): ImportTaskKey[] => {
   return [...resolved]
 }
 
+const parseSyncD1Mode = (value: string | undefined): SyncD1Mode => {
+  if (!value) {
+    return 'incremental'
+  }
+
+  const normalised = value.trim().toLowerCase()
+  if (normalised === 'incremental' || normalised === 'full') {
+    return normalised
+  }
+
+  throw new Error(
+    `Unknown --sync-d1-mode value "${value}". Expected incremental or full.`
+  )
+}
+
 const parseCliArgs = () => {
   const args = process.argv.slice(2)
   const options = new Map<string, string | undefined>()
@@ -107,7 +125,7 @@ const parseCliArgs = () => {
     }
 
     const [key, rawValue] = arg.split('=', 2)
-    if (key === '--mode' || key === '--source' || key === '--strategy') {
+    if (key === '--mode' || key === '--source' || key === '--strategy' || key === '--sync-d1-mode') {
       if (rawValue !== undefined) {
         options.set(key, rawValue)
         continue
@@ -152,8 +170,12 @@ const parseCliArgs = () => {
   const sources = normaliseSourceList(options.get('--source'))
   const strategy = parseStrategy(options.get('--strategy'))
   const syncD1 = parseBoolean(options.get('--sync-d1'))
+  if (!syncD1 && options.has('--sync-d1-mode')) {
+    throw new Error('--sync-d1-mode can only be used when --sync-d1 is enabled')
+  }
+  const syncD1Mode = parseSyncD1Mode(options.get('--sync-d1-mode'))
 
-  return { mode, sources, strategy, syncD1 }
+  return { mode, sources, strategy, syncD1, syncD1Mode }
 }
 
 const formatNumber = (value: number) => value.toLocaleString('en-US')
@@ -293,7 +315,7 @@ const main = async () => {
   const reporter = createProgressReporter()
 
   try {
-    const { mode, sources, strategy, syncD1 } = parseCliArgs()
+    const { mode, sources, strategy, syncD1, syncD1Mode } = parseCliArgs()
     const db = useDrizzle()
 
     logger.info(ansis.bold(ansis.cyan('🚀 Starting vulnerability catalog import')))
@@ -305,6 +327,13 @@ const main = async () => {
     )
     logger.info(`${ansis.dim(' Sources')}: ${ansis.white(sources.join(', '))}`)
     logger.info(`${ansis.dim(' Sync D1')}: ${syncD1 ? ansis.green('enabled') : ansis.dim('disabled')}`)
+    if (syncD1) {
+      const modeLabel =
+        syncD1Mode === 'full'
+          ? ansis.yellow('full reset')
+          : ansis.green('incremental upsert')
+      logger.info(`${ansis.dim(' Sync D1 mode')}: ${modeLabel}`)
+    }
     logger.log(ansis.dim('----------------------------------------'))
 
     const importOptions: CatalogImportOptions = {
@@ -323,8 +352,9 @@ const main = async () => {
       if (result.hasCatalogChanges) {
         logger.newline()
         logger.info(ansis.bold('🔄 Syncing remote D1 database from local SQLite export …'))
-        logger.info(ansis.dim('   Running pnpm run db:deploy'))
-        await runCommand('pnpm', ['run', 'db:deploy'])
+        const deployArgs = ['run', 'db:deploy', '--', `--mode=${syncD1Mode}`]
+        logger.info(ansis.dim(`   Running pnpm ${deployArgs.join(' ')}`))
+        await runCommand('pnpm', deployArgs)
         logger.success(ansis.green('   Remote D1 database synced successfully.'))
         logger.newline()
       } else {

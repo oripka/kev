@@ -83,11 +83,11 @@ If you installed the importer as a `kev-import.timer` on a server:
 | `NVD_API_KEY` | Optional token for CVSS enrichment when `CVSS_FETCH_ENABLED` is toggled on. |
 | `LLM_AUDIT_API_URL`, `LLM_AUDIT_API_KEY`, `LLM_AUDIT_ORG_ID`, `LLM_AUDIT_MODEL`, `LLM_AUDIT_MAX_ENTRIES`, `LLM_AUDIT_TEMPERATURE`, `OPENAI_API_KEY` | Configure the optional LLM-powered classification audit surfaced in the UI. |
 | `NUXT_DISABLE_GITHUB_POC_IMPORT`, `DISABLE_GITHUB_POC_IMPORT`, `NUXT_PUBLIC_DISABLE_GITHUB_POC_IMPORT` | Disable the GitHub PoC feed to reduce import time or DB size. |
-| `NUXTHUB_D1_DATABASE`, `NUXTHUB_D1_DUMP`, `NUXTHUB_D1_CHUNK_BYTES`, `NUXTHUB_LOCAL_D1_PATH`, `LOCAL_SQLITE_PATH`, `DATABASE_PATH` | Override export paths when deploying snapshots to Cloudflare D1. |
+| `NUXTHUB_D1_DATABASE`, `NUXTHUB_D1_DUMP`, `NUXTHUB_D1_CHUNK_BYTES`, `NUXTHUB_D1_SYNC_MODE`, `NUXTHUB_LOCAL_D1_PATH`, `LOCAL_SQLITE_PATH`, `DATABASE_PATH` | Override export paths when deploying snapshots to Cloudflare D1. `NUXTHUB_D1_SYNC_MODE` defaults to incremental upserts; set to `full` to force a drop + redeploy. |
 
 ## Deployment notes
 - The site statically generates via Nuxt and serves dynamic catalog APIs through Nitro functions. Provide the `DB` binding (Cloudflare D1) and secrets above when deploying to Cloudflare Workers/Pages.
-- Run `pnpm db:deploy` during CI/CD to export the local sqlite schema/data to D1 using `scripts/export-to-d1.mjs`.
+- Run `pnpm db:deploy` during CI/CD to export the local sqlite schema/data to D1 using `scripts/export-to-d1.mjs`. Incremental upserts are the default; pass `pnpm db:deploy -- --mode=full` when a full drop + redeploy of the remote schema is required.
 - For self-hosted sqlite deployments, ensure the `data/` directory is writable so the bundled migrator can apply schema changes on first boot.
 
 ## Data caches

@@ -33,8 +33,87 @@ const legacyLocalDbPath = join(dataDir, 'db.sqlite')
 
 const logger = createCliLogger({ tag: 'export-to-d1' })
 
-const usePreview = process.argv.includes('--preview')
+const DEFAULT_SYNC_MODE = 'incremental'
+
+const normalizeSyncMode = (value, context) => {
+  if (!value) {
+    return null
+  }
+
+  const normalised = String(value).trim().toLowerCase()
+  if (normalised === 'incremental') {
+    return 'incremental'
+  }
+  if (normalised === 'full' || normalised === 'reset' || normalised === 'drop') {
+    return 'full'
+  }
+
+  throw new Error(
+    `Unsupported sync mode "${value}" from ${context}. Expected incremental or full.`
+  )
+}
+
+const parseCliOptions = () => {
+  const args = process.argv.slice(2)
+  let syncMode = normalizeSyncMode(process.env.NUXTHUB_D1_SYNC_MODE, 'NUXTHUB_D1_SYNC_MODE env') || DEFAULT_SYNC_MODE
+  let usePreview = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+
+    if (arg === '--') {
+      continue
+    }
+
+    if (arg === '--preview') {
+      usePreview = true
+      continue
+    }
+
+    if (arg === '--remote') {
+      usePreview = false
+      continue
+    }
+
+    if (arg === '--incremental') {
+      syncMode = 'incremental'
+      continue
+    }
+
+    if (arg === '--full' || arg === '--reset' || arg === '--drop') {
+      syncMode = 'full'
+      continue
+    }
+
+    if (arg === '--mode') {
+      const next = args[index + 1]
+      if (!next || next.startsWith('--')) {
+        throw new Error('Missing value for --mode option')
+      }
+      const resolved = normalizeSyncMode(next, '--mode option')
+      if (resolved) {
+        syncMode = resolved
+      }
+      index += 1
+      continue
+    }
+
+    if (arg.startsWith('--mode=')) {
+      const [, rawValue] = arg.split('=', 2)
+      const resolved = normalizeSyncMode(rawValue, '--mode option')
+      if (resolved) {
+        syncMode = resolved
+      }
+      continue
+    }
+  }
+
+  return { usePreview, syncMode }
+}
+
+const { usePreview, syncMode } = parseCliOptions()
 const wranglerTargetFlag = usePreview ? '--preview' : '--remote'
+const isIncrementalSync = syncMode === 'incremental'
 
 const wait = (milliseconds) => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
@@ -180,6 +259,42 @@ const cleanDump = (content) => {
       return true
     })
     .join('\n')
+}
+
+const applyIncrementalTransforms = (content) =>
+  content
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trimStart()
+      if (!trimmed) {
+        return line
+      }
+
+      if (/^CREATE\s+TABLE\s+/i.test(trimmed) && !/CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS/i.test(trimmed)) {
+        return line.replace(/^(\s*)CREATE\s+TABLE\s+/i, '$1CREATE TABLE IF NOT EXISTS ')
+      }
+
+      if (/^CREATE\s+UNIQUE\s+INDEX\s+/i.test(trimmed) && !/CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS/i.test(trimmed)) {
+        return line.replace(/^(\s*)CREATE\s+UNIQUE\s+INDEX\s+/i, '$1CREATE UNIQUE INDEX IF NOT EXISTS ')
+      }
+
+      if (/^CREATE\s+INDEX\s+/i.test(trimmed) && !/CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS/i.test(trimmed)) {
+        return line.replace(/^(\s*)CREATE\s+INDEX\s+/i, '$1CREATE INDEX IF NOT EXISTS ')
+      }
+
+      if (/^INSERT\s+INTO\s+/i.test(trimmed) && !/^INSERT\s+OR\s+/i.test(trimmed)) {
+        return line.replace(/^(\s*)INSERT\s+INTO\s+/i, '$1INSERT OR REPLACE INTO ')
+      }
+
+      return line
+    })
+    .join('\n')
+
+const transformDumpForMode = (content, mode) => {
+  if (mode === 'incremental') {
+    return applyIncrementalTransforms(content)
+  }
+  return content
 }
 
 const VULNERABILITY_ENTRY_COLUMNS = [
@@ -328,12 +443,17 @@ const exportLocalDatabase = localDbPath => {
   logger.success(`Exported selected tables to ${dumpPath}.`)
 }
 
-const prepareDumpFile = () => {
+const prepareDumpFile = (mode) => {
   logger.start('Cleaning dump file for D1 compatibility …')
   const raw = readFileSync(dumpPath, 'utf8')
   const cleaned = cleanDump(raw)
-  writeFileSync(dumpPath, `${cleaned}\n`, 'utf8')
-  logger.success('Dump file cleaned for D1 compatibility.')
+  const transformed = transformDumpForMode(cleaned, mode)
+  writeFileSync(dumpPath, `${transformed}\n`, 'utf8')
+  if (mode === 'incremental') {
+    logger.success('Dump file prepared for incremental upsert mode.')
+  } else {
+    logger.success('Dump file cleaned for full refresh mode.')
+  }
 }
 
 const sqlLiteral = (value) => {
@@ -406,7 +526,7 @@ const splitSqlStatements = (sql) => {
   return statements
 }
 
-const buildVulnerabilityEntryStatements = (localDbPath) => {
+const buildVulnerabilityEntryStatements = (localDbPath, mode) => {
   const db = new Database(localDbPath, { readonly: true })
   try {
     const hasTable = db
@@ -454,7 +574,8 @@ const buildVulnerabilityEntryStatements = (localDbPath) => {
       }
 
       const columnList = VULNERABILITY_ENTRY_COLUMNS.map((column) => `"${column}"`).join(', ')
-      const insertStatement = `INSERT INTO vulnerability_entries (${columnList}) VALUES (${insertValues.join(', ')});`
+      const insertVerb = mode === 'incremental' ? 'INSERT OR REPLACE' : 'INSERT'
+      const insertStatement = `${insertVerb} INTO vulnerability_entries (${columnList}) VALUES (${insertValues.join(', ')});`
       statements.push(insertStatement)
       statements.push(...updates)
     }
@@ -465,25 +586,33 @@ const buildVulnerabilityEntryStatements = (localDbPath) => {
   }
 }
 
-const rewriteVulnerabilityEntriesDump = (localDbPath) => {
+const rewriteVulnerabilityEntriesDump = (localDbPath, mode) => {
   logger.start('Rewriting vulnerability_entries export for D1 statement limits …')
 
   const raw = readFileSync(dumpPath, 'utf8')
   const parsedStatements = splitSqlStatements(raw)
   const filteredStatements = parsedStatements.filter((statement) => {
     const normalized = statement.trimStart()
-    return !(
-      normalized.startsWith('INSERT INTO "vulnerability_entries"') ||
-      normalized.startsWith('INSERT INTO vulnerability_entries') ||
-      normalized.startsWith('UPDATE "vulnerability_entries" SET') ||
-      normalized.startsWith('UPDATE vulnerability_entries SET') ||
-      normalized.startsWith('-- Exported vulnerability_entries')
-    )
+    if (
+      /^INSERT\s+(?:OR\s+\w+\s+)?INTO\s+"?vulnerability_entries"?/i.test(normalized)
+    ) {
+      return false
+    }
+    if (normalized.startsWith('UPDATE "vulnerability_entries" SET')) {
+      return false
+    }
+    if (normalized.startsWith('UPDATE vulnerability_entries SET')) {
+      return false
+    }
+    if (normalized.startsWith('-- Exported vulnerability_entries')) {
+      return false
+    }
+    return true
   })
 
   writeFileSync(dumpPath, `${filteredStatements.join('\n')}\n`, 'utf8')
 
-  const entryStatements = buildVulnerabilityEntryStatements(localDbPath)
+  const entryStatements = buildVulnerabilityEntryStatements(localDbPath, mode)
   if (!entryStatements.length) {
     logger.warn('No vulnerability_entries rows found to export.')
     return
@@ -491,7 +620,9 @@ const rewriteVulnerabilityEntriesDump = (localDbPath) => {
 
   const header = '\n-- Exported vulnerability_entries with chunked large columns\n'
   appendFileSync(dumpPath, header + entryStatements.join('\n') + '\n', 'utf8')
-  const rowInsertCount = entryStatements.filter((line) => line.startsWith('INSERT INTO vulnerability_entries')).length
+  const rowInsertCount = entryStatements.filter((line) =>
+    /^\s*INSERT\s+(?:OR\s+REPLACE\s+)?INTO\s+vulnerability_entries/i.test(line)
+  ).length
   logger.success(`Exported ${rowInsertCount.toLocaleString()} vulnerability_entries rows.`)
 }
 
@@ -635,16 +766,34 @@ const uploadChunks = (chunks) => {
 const main = () => {
   try {
     ensureDataDir()
-    writeResetSql()
+    logger.info(
+      syncMode === 'full'
+        ? 'Running in FULL reset mode (remote tables will be dropped before import).'
+        : 'Running in INCREMENTAL mode (remote tables will be upserted without dropping data).'
+    )
+    logger.info(`Cloudflare D1 target: ${usePreview ? 'preview' : 'remote production'}`)
+    if (!isIncrementalSync) {
+      writeResetSql()
+    }
     const localDbPath = resolveLocalDatabasePath()
     logger.info(`Using local NuxtHub D1 database at ${localDbPath}`)
     exportLocalDatabase(localDbPath)
-    prepareDumpFile()
-    rewriteVulnerabilityEntriesDump(localDbPath)
+    prepareDumpFile(syncMode)
+    rewriteVulnerabilityEntriesDump(localDbPath, syncMode)
     const chunks = chunkDump()
-    resetRemoteDatabase()
+    if (isIncrementalSync) {
+      logger.info(
+        'Incremental mode selected; skipping remote DROP statements and applying INSERT OR REPLACE upserts.'
+      )
+    } else {
+      resetRemoteDatabase()
+    }
     uploadChunks(chunks)
-    logger.success('Remote D1 database refreshed successfully.')
+    if (isIncrementalSync) {
+      logger.success('Remote D1 database updated incrementally.')
+    } else {
+      logger.success('Remote D1 database refreshed successfully.')
+    }
   } catch (error) {
     logger.fail('Failed to export local database to D1.')
     if (error instanceof Error) {
