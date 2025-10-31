@@ -48,6 +48,10 @@ const DISABLE_POC_ENV_KEYS = [
 ] as const
 
 const HEAD_REQUEST_TIMEOUT_MS = 7000
+const HEAD_REQUEST_HEADERS = {
+  'user-agent': 'InTheWildImporter/1.0 (+https://github.com/otr/in-the-wild)',
+  accept: 'application/json'
+}
 
 const describeTimestamp = (value: string | null | undefined) => {
   if (!value) {
@@ -64,22 +68,68 @@ const describeTimestamp = (value: string | null | undefined) => {
 
 const describeSignature = (value: string | null | undefined) => value ?? 'unavailable'
 
-const fetchHeadSignature = async (url: string, timeoutMs = HEAD_REQUEST_TIMEOUT_MS): Promise<string | null> => {
+type HeadSignatureProbe = {
+  signature: string | null
+  status: number | null
+  durationMs: number
+  error: string | null
+}
+
+const formatDurationMs = (value: number) => `${value.toLocaleString('en-US')} ms`
+
+const describeProbeError = (value: string | null) =>
+  value && value.trim().length > 0 ? value.trim() : 'no diagnostics'
+
+const probeHeadSignature = async (
+  url: string,
+  timeoutMs = HEAD_REQUEST_TIMEOUT_MS
+): Promise<HeadSignatureProbe> => {
+  const startedAt = Date.now()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(url, { method: 'HEAD', signal: controller.signal })
-    if (!response.ok) {
-      return null
-    }
+    const response = await ofetch.raw(url, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: HEAD_REQUEST_HEADERS,
+      retry: 0
+    })
     const etag = response.headers.get('etag')
     const lastModified = response.headers.get('last-modified')
-    if (!etag && !lastModified) {
-      return null
+    const signature = etag || lastModified ? `${etag ?? ''}|${lastModified ?? ''}` : null
+
+    return {
+      signature,
+      status: response.status ?? null,
+      durationMs: Date.now() - startedAt,
+      error: null
     }
-    return `${etag ?? ''}|${lastModified ?? ''}`
-  } catch {
-    return null
+  } catch (error) {
+    const durationMs = Date.now() - startedAt
+    let status: number | null = null
+    let message: string | null = null
+
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        message = `timeout after ${timeoutMs}ms`
+      } else {
+        message = error.message
+        const response = (error as { response?: { status?: number; statusText?: string } }).response
+        if (response && typeof response.status === 'number') {
+          status = response.status
+          if (response.statusText && !message.includes(response.statusText)) {
+            message = `${message} (${response.statusText})`
+          }
+        }
+      }
+    }
+
+    return {
+      signature: null,
+      status,
+      durationMs,
+      error: message ?? 'unknown error'
+    }
   } finally {
     clearTimeout(timeout)
   }
@@ -341,11 +391,12 @@ export const importGithubPocCatalog = async (
       })
       markTaskProgress('poc', 0, 0, quickMessage)
 
-      pocSourceSignature = await fetchHeadSignature(SOURCE_URL)
+      const headProbe = await probeHeadSignature(SOURCE_URL)
+      pocSourceSignature = headProbe.signature
 
       const quickResultMessage = pocSourceSignature
-        ? `Quick GitHub PoC check compared remote signature ${pocSourceSignature} with previous ${describeSignature(previousSignature)}`
-        : 'Quick GitHub PoC check could not retrieve remote signature; falling back to cache evaluation'
+        ? `Quick GitHub PoC check compared remote signature ${pocSourceSignature} with previous ${describeSignature(previousSignature)} (HTTP ${headProbe.status ?? 'n/a'}, ${formatDurationMs(headProbe.durationMs)})`
+        : `Quick GitHub PoC check could not retrieve remote signature (status ${headProbe.status ?? 'n/a'}, ${formatDurationMs(headProbe.durationMs)}, ${describeProbeError(headProbe.error)})`
       markTaskProgress('poc', 0, 0, quickResultMessage)
 
       if (pocSourceSignature && previousSignature && pocSourceSignature === previousSignature) {
@@ -524,7 +575,16 @@ export const importGithubPocCatalog = async (
       .filter((entry): entry is KevBaseEntry => entry !== null)
 
     if (!pocSourceSignature) {
-      pocSourceSignature = await fetchHeadSignature(SOURCE_URL)
+      const fallbackProbe = await probeHeadSignature(SOURCE_URL)
+      pocSourceSignature = fallbackProbe.signature
+      if (!pocSourceSignature) {
+        markTaskProgress(
+          'poc',
+          0,
+          0,
+          `GitHub PoC HEAD signature unavailable on fallback attempt (status ${fallbackProbe.status ?? 'n/a'}, ${formatDurationMs(fallbackProbe.durationMs)}, ${describeProbeError(fallbackProbe.error)}); using dataset fingerprint instead`
+        )
+      }
     }
     if (!pocSourceSignature) {
       pocSourceSignature = datasetTimestamp

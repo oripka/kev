@@ -1310,7 +1310,12 @@ export const importMetasploitCatalog = async (
       }
     }
 
-    if (strategy === 'incremental' && !reprocessCachedEntries && previousCommit) {
+    const quickCheckEligible =
+      strategy === 'incremental' && !reprocessCachedEntries && previousCommit
+    const quickCheckPermitted =
+      quickCheckEligible && options.offline !== true && options.useCachedRepository !== true
+
+    if (quickCheckPermitted) {
       const quickMessage = `Performing quick Metasploit update check (last import: ${describeTimestamp(previousImportAt)}, previous commit: ${describeCommit(previousCommit)})`
       setImportPhase('fetchingMetasploit', {
         message: quickMessage,
@@ -1343,6 +1348,20 @@ export const importMetasploitCatalog = async (
           'Quick Metasploit check unavailable; syncing repository'
         )
       }
+    } else if (quickCheckEligible) {
+      const skipReason =
+        options.offline === true
+          ? 'offline mode'
+          : options.useCachedRepository === true
+            ? 'cached repository only'
+            : 'missing quick check prerequisites'
+      const skipMessage = `Skipping Metasploit quick update check (${skipReason})`
+      setImportPhase('fetchingMetasploit', {
+        message: skipMessage,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('metasploit', 0, 0, skipMessage)
     }
 
     setImportPhase('fetchingMetasploit', {
