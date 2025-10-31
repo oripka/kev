@@ -57,6 +57,43 @@ import { logger } from './logger'
 
 const ONE_DAY_MS = 86_400_000
 const MAX_INCREMENTAL_KEV_CVE_EVENT_IDS = 25
+const KEV_HEAD_TIMEOUT_MS = 7_000
+
+const buildKevSourceSignature = (etag: string | null, lastModified: string | null): string | null => {
+  if (etag && lastModified) {
+    return `${etag}|${lastModified}`
+  }
+  return etag ?? lastModified
+}
+
+const fetchKevSourceSignature = async (
+  url: string,
+  timeoutMs = KEV_HEAD_TIMEOUT_MS
+): Promise<{ signature: string | null; etag: string | null; lastModified: string | null }> => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal })
+    if (!response.ok) {
+      logger.warn(`KEV feed signature request failed with status ${response.status}`)
+      return { signature: null, etag: null, lastModified: null }
+    }
+    const etag = response.headers.get('etag')
+    const lastModified = response.headers.get('last-modified')
+    return {
+      signature: buildKevSourceSignature(etag, lastModified),
+      etag,
+      lastModified
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.warn(`Failed to retrieve KEV feed signature: ${message}`)
+    return { signature: null, etag: null, lastModified: null }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 
 const formatNewKevCveSummary = (ids: string[]): string => {
   if (ids.length === 0) {
@@ -309,6 +346,7 @@ export const runCatalogImport = async (
     'catalog.latestDate',
     'lastImportAt',
     'kev.lastFingerprint',
+    'kev.sourceSignature',
     'enisa.lastUpdatedAt',
     'epss.lastScoreDate',
     'epss.lastModelVersion',
@@ -394,6 +432,9 @@ export const runCatalogImport = async (
       markTaskSkipped('kev', 'Skipped this run')
     } else {
       markTaskRunning('kev', 'Checking KEV cache')
+      const previousKevSignature = metadata['kev.sourceSignature'] ?? null
+      let kevFeedSignature: string | null = null
+      let kevForceRefresh = forceRefresh
 
       try {
         const syncResult = await syncCvelistRepo({ useCachedRepository: allowStale })
@@ -408,6 +449,35 @@ export const runCatalogImport = async (
 
       try {
         setImportPhase('preparing', { message: 'Checking KEV cache', completed: 0, total: 0 })
+
+        if (!allowStale) {
+          const { signature } = await fetchKevSourceSignature(SOURCE_URL)
+          kevFeedSignature = signature
+
+          let signatureMessage: string | null = null
+
+          if (!forceRefresh && strategy === 'incremental') {
+            if (kevFeedSignature && previousKevSignature && kevFeedSignature !== previousKevSignature) {
+              kevForceRefresh = true
+              signatureMessage = 'Detected updated KEV feed signature — refreshing cached dataset'
+            } else if (kevFeedSignature && previousKevSignature && kevFeedSignature === previousKevSignature) {
+              signatureMessage = 'KEV feed signature unchanged — using cached dataset'
+            } else if (kevFeedSignature && !previousKevSignature) {
+              signatureMessage = 'Recorded KEV feed signature for incremental comparisons'
+            } else {
+              signatureMessage = 'Unable to retrieve KEV feed signature — falling back to cache TTL'
+            }
+          } else if (kevFeedSignature && !previousKevSignature) {
+            signatureMessage = 'Recorded KEV feed signature for incremental comparisons'
+          } else if (!kevFeedSignature) {
+            signatureMessage = 'Unable to retrieve KEV feed signature — falling back to cache TTL'
+          }
+
+          if (signatureMessage) {
+            markTaskProgress('kev', 0, 0, signatureMessage)
+          }
+        }
+
         const kevDataset = await getCachedData(
           'kev-feed',
           async () => {
@@ -419,7 +489,7 @@ export const runCatalogImport = async (
             markTaskProgress('kev', 0, 0, 'Downloading latest KEV catalog')
             return ofetch(SOURCE_URL)
           },
-          { ttlMs: ONE_DAY_MS, forceRefresh, allowStale }
+          { ttlMs: ONE_DAY_MS, forceRefresh: kevForceRefresh, allowStale }
         )
 
         markTaskProgress(
@@ -481,6 +551,10 @@ export const runCatalogImport = async (
             { key: 'kev.lastImportStrategy', value: 'incremental' },
             { key: 'kev.lastFingerprint', value: datasetFingerprint }
           ]
+          const resolvedKevSignature = kevFeedSignature ?? previousKevSignature
+          if (resolvedKevSignature) {
+            metadataRows.push({ key: 'kev.sourceSignature', value: resolvedKevSignature })
+          }
 
           for (const record of metadataRows) {
             await db
@@ -796,6 +870,10 @@ export const runCatalogImport = async (
               { key: 'kev.lastImportStrategy', value: 'full' },
               { key: 'kev.lastFingerprint', value: datasetFingerprint }
             ]
+            const fullImportSignature = kevFeedSignature ?? previousKevSignature
+            if (fullImportSignature) {
+              metadataRows.push({ key: 'kev.sourceSignature', value: fullImportSignature })
+            }
 
             for (const record of metadataRows) {
               await db
@@ -897,6 +975,10 @@ export const runCatalogImport = async (
                 { key: 'kev.lastImportStrategy', value: 'incremental' },
                 { key: 'kev.lastFingerprint', value: datasetFingerprint }
               ]
+              const incrementalSignature = kevFeedSignature ?? previousKevSignature
+              if (incrementalSignature) {
+                metadataRows.push({ key: 'kev.sourceSignature', value: incrementalSignature })
+              }
 
               for (const record of metadataRows) {
                 tx

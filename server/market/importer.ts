@@ -637,6 +637,7 @@ export const runMarketImport = async (
     allowStale = false
   } = options
 
+  publishTaskEvent('market', 'Loading cached exchange rates (market-exchange-rates)')
   const ratesResult = await getCachedData('market-exchange-rates', fetchUsdExchangeRates, {
     ttlMs: EXCHANGE_RATES_TTL_MS,
     forceRefresh,
@@ -650,7 +651,12 @@ export const runMarketImport = async (
     }`
   )
 
+  publishTaskEvent('market', 'Loading product catalog snapshot from database')
   const catalog = await loadProductCatalog(db)
+  publishTaskEvent(
+    'market',
+    `Loaded product catalog snapshot (${catalog.size.toLocaleString()} products)`
+  )
   const programSummaries: MarketProgramProgress[] = []
   let offersProcessed = 0
   const totalPrograms = marketPrograms.length

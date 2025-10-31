@@ -71,6 +71,7 @@ export const importMarketIntel = async (
       }
     })
 
+    publishTaskEvent('market', 'Computing market summary statistics')
     const offer = tables.marketOffers
     const program = tables.marketPrograms
     const target = tables.marketOfferTargets
@@ -98,6 +99,7 @@ export const importMarketIntel = async (
         .get()
     ])
 
+    publishTaskEvent('market', 'Market summary statistics loaded from database')
     const offerCount = toCount(offerStats?.offerCount)
     const programCount = toCount(programStats?.programCount)
     const productCount = toCount(productStats?.productCount)
@@ -129,6 +131,7 @@ export const importMarketIntel = async (
     }
 
     await Promise.all(metadataEntries.map(([key, value]) => setMetadataValue(key, value)))
+    publishTaskEvent('market', 'Market metadata indicators updated')
 
     const completionLabel =
       offerCount > 0
