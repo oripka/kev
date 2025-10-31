@@ -1,7 +1,7 @@
 import { ofetch } from 'ofetch'
 import { matchExploitProduct } from '~/utils/exploitProductHints'
 import { matchVendorProductByTitle } from '../../utils/metasploitVendorCatalog'
-import { createCategory, defaultHeaders, normaliseWhitespace } from '../utils'
+import { MARKET_FETCH_TIMEOUT_MS, createCategory, defaultHeaders, normaliseWhitespace } from '../utils'
 import type { MarketOfferInput, MarketProgramDefinition } from '../types'
 
 const APPLE_URL = 'https://security.apple.com/bounty/categories/'
@@ -114,7 +114,10 @@ export const appleProgram: MarketProgramDefinition = {
   scrapeFrequency: 'monthly',
   parserVersion: '2025-02-15',
   fetchSnapshot: async () => {
-    const raw = await ofetch<string>(APPLE_URL, { headers: defaultHeaders })
+    const raw = await ofetch<string>(APPLE_URL, {
+      headers: defaultHeaders,
+      timeout: MARKET_FETCH_TIMEOUT_MS
+    })
     return {
       url: APPLE_URL,
       raw,

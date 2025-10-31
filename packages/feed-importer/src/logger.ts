@@ -146,14 +146,13 @@ export class CliLogger {
       this.pendingDrain = false
       const queued = this.queuedProgress
       this.queuedProgress = null
-      this.progressActive = false
-      this.lastProgressWidth = 0
-      if (queued) {
-        this.instance.log(queued.formatted)
-        this.lastProgressMessage = queued.formatted
-      }
       // Disable interactive progress updates after a drain timeout to avoid repeated stalls.
-      this.interactiveOutput = false
+      const fallbackMessage = queued?.formatted ?? this.lastProgressMessage ?? ''
+      if (fallbackMessage) {
+        this.disableInteractiveProgress(fallbackMessage)
+      } else {
+        this.disableInteractiveProgress('')
+      }
     }, this.drainFallbackDelayMs)
     this.drainTimeout.unref?.()
   }
@@ -176,25 +175,11 @@ export class CliLogger {
     this.lastProgressMessage = formatted
 
     if (!wrote) {
-      this.pendingDrain = true
-      this.queuedProgress = { formatted, visibleLength }
-      this.scheduleDrainFallback()
-      process.stdout.once('drain', () => {
-        this.pendingDrain = false
-        this.clearDrainTimeout()
-        const queued = this.queuedProgress
-        if (queued) {
-          this.queuedProgress = null
-          const nextPadding =
-            this.lastProgressWidth > queued.visibleLength
-              ? ' '.repeat(this.lastProgressWidth - queued.visibleLength)
-              : ''
-          this.writeProgress(queued.formatted, queued.visibleLength, nextPadding)
-        }
-      })
-    } else {
-      this.clearDrainTimeout()
+      this.disableInteractiveProgress(formatted)
+      return
     }
+
+    this.clearDrainTimeout()
   }
 
   private withTimestamp(message: string) {
@@ -203,6 +188,29 @@ export class CliLogger {
       return colors.dim(`[${timestamp}]`)
     }
     return `${colors.dim(`[${timestamp}]`)} ${message}`
+  }
+
+  private disableInteractiveProgress(formatted: string) {
+    if (!this.interactiveOutput) {
+      if (formatted) {
+        this.instance.log(formatted)
+        this.lastProgressMessage = formatted
+      }
+      return
+    }
+
+    this.clearDrainTimeout()
+    this.pendingDrain = false
+    this.queuedProgress = null
+    this.progressActive = false
+    this.lastProgressWidth = 0
+    this.interactiveOutput = false
+    if (formatted) {
+      this.lastProgressMessage = formatted
+      this.instance.log(formatted)
+    } else {
+      this.lastProgressMessage = null
+    }
   }
 }
 

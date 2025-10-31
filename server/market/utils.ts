@@ -7,6 +7,8 @@ type ExchangeRates = Map<string, number>
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
 
+export const MARKET_FETCH_TIMEOUT_MS = 15_000
+
 const HTML_ENTITY_MAP: Record<string, string> = {
   '&nbsp;': ' ',
   '&amp;': '&',
@@ -129,7 +131,7 @@ export const fetchUsdExchangeRates = async (): Promise<ExchangeRates> => {
   try {
     const response = await ofetch<{ rates?: Record<string, number> }>(EXCHANGE_ENDPOINT, {
       headers: defaultHeaders,
-      timeout: 7000
+      timeout: Math.min(MARKET_FETCH_TIMEOUT_MS, 7_000)
     })
     const rates = new Map<string, number>()
     rates.set('USD', 1)

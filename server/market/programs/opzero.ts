@@ -1,6 +1,7 @@
 import { load } from 'cheerio'
 import { ofetch } from 'ofetch'
 import {
+  MARKET_FETCH_TIMEOUT_MS,
   createCategory,
   defaultHeaders,
   normaliseWhitespace,
@@ -65,7 +66,10 @@ export const opzeroProgram: MarketProgramDefinition = {
   scrapeFrequency: 'weekly',
   parserVersion: '2025-02-15',
   fetchSnapshot: async () => {
-    const raw = await ofetch<string>(OPZERO_URL, { headers: defaultHeaders })
+    const raw = await ofetch<string>(OPZERO_URL, {
+      headers: defaultHeaders,
+      timeout: MARKET_FETCH_TIMEOUT_MS
+    })
     return {
       url: OPZERO_URL,
       raw,
