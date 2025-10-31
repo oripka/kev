@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { ofetch } from 'ofetch'
 import { z } from 'zod'
 import { eq, inArray, like, sql } from 'drizzle-orm'
@@ -191,6 +192,60 @@ const toNotes = (raw: unknown): string[] => {
     .filter(Boolean)
 }
 
+type KevCatalogPayload = z.infer<typeof kevSchema>
+
+const FINGERPRINT_FIELD_SEPARATOR = '\u0001'
+const FINGERPRINT_ENTRY_SEPARATOR = '\u0000'
+
+const createKevDatasetFingerprint = (dataset: KevCatalogPayload): string => {
+  const hash = createHash('sha256')
+
+  hash.update(dataset.catalogVersion ?? '')
+  hash.update(FINGERPRINT_FIELD_SEPARATOR)
+  hash.update(dataset.dateReleased ?? '')
+  hash.update(FINGERPRINT_FIELD_SEPARATOR)
+
+  const sorted = [...dataset.vulnerabilities].sort((left, right) =>
+    left.cveID.localeCompare(right.cveID)
+  )
+
+  for (const item of sorted) {
+    hash.update(item.cveID ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.vendorProject ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.product ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.vulnerabilityName ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.shortDescription ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.requiredAction ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.dateAdded ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.dueDate ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+    hash.update(item.knownRansomwareCampaignUse ?? '')
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+
+    const notes = toNotes(item.notes)
+    if (notes.length > 0) {
+      hash.update(notes.join(FINGERPRINT_FIELD_SEPARATOR))
+    }
+    hash.update(FINGERPRINT_FIELD_SEPARATOR)
+
+    if (Array.isArray(item.cwes) && item.cwes.length > 0) {
+      const sortedCwes = [...item.cwes].sort()
+      hash.update(sortedCwes.join(FINGERPRINT_FIELD_SEPARATOR))
+    }
+
+    hash.update(FINGERPRINT_ENTRY_SEPARATOR)
+  }
+
+  return hash.digest('hex')
+}
+
 const normaliseStoredSeverity = (value: unknown): KevEntry['cvssSeverity'] | null => {
   if (typeof value !== 'string') {
     return null
@@ -252,6 +307,8 @@ export const runCatalogImport = async (
     'catalog.entryCount',
     'catalog.earliestDate',
     'catalog.latestDate',
+    'lastImportAt',
+    'kev.lastFingerprint',
     'enisa.lastUpdatedAt',
     'epss.lastScoreDate',
     'epss.lastModelVersion',
@@ -265,6 +322,7 @@ export const runCatalogImport = async (
     Number.parseInt(metadata['catalog.entryCount'] ?? '0', 10) || 0
   const fallbackCatalogEarliest = metadata['catalog.earliestDate'] ?? null
   const fallbackCatalogLatest = metadata['catalog.latestDate'] ?? null
+  const fallbackLastImportAt = metadata['lastImportAt'] ?? null
   const fallbackEnisaUpdated = metadata['enisa.lastUpdatedAt']
   const fallbackMetasploitCommit = metadata['metasploit.lastCommit']
   const fallbackMetasploitModules =
@@ -279,7 +337,7 @@ export const runCatalogImport = async (
   let epssDatasetVersion = metadata['epss.lastModelVersion'] ?? null
   let metasploitCommit = fallbackMetasploitCommit
   let metasploitModules = fallbackMetasploitModules
-  let importTimestamp = importStartedAt
+  let importTimestamp = fallbackLastImportAt ?? importStartedAt
 
   let kevImported = 0
   let kevNewCount = 0
@@ -373,6 +431,7 @@ export const runCatalogImport = async (
             : 'Downloaded latest KEV catalog'
         )
 
+
         const parsed = kevSchema.safeParse(kevDataset.data)
 
         if (!parsed.success) {
@@ -382,400 +441,49 @@ export const runCatalogImport = async (
           })
         }
 
-        const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => {
-          const cveId = item.cveID
-          const normalised = normaliseVendorProduct(
-            {
-              vendor: item.vendorProject,
-              product: item.product
-            },
-            undefined,
-            undefined,
-            {
-              vulnerabilityName: item.vulnerabilityName,
-              description: item.shortDescription,
-              cveId
-            }
-          )
-          return {
-            id: `kev:${cveId}`,
-            sources: ['kev'],
-            cveId,
-            vendor: normalised.vendor.label,
-            vendorKey: normalised.vendor.key,
-            product: normalised.product.label,
-            productKey: normalised.product.key,
-            affectedProducts: [],
-            problemTypes: [],
-            vulnerabilityName: item.vulnerabilityName ?? 'Unknown vulnerability',
-            description: item.shortDescription ?? '',
-            requiredAction: item.requiredAction ?? null,
-            dateAdded: item.dateAdded ?? '',
-            dueDate: item.dueDate ?? null,
-            ransomwareUse: item.knownRansomwareCampaignUse ?? null,
-            notes: toNotes(item.notes),
-            cwes: Array.isArray(item.cwes) ? item.cwes : [],
-            cvssScore: null,
-            cvssVector: null,
-            cvssVersion: null,
-            cvssSeverity: null,
-            epssScore: null,
-            assigner: null,
-            datePublished: item.dateAdded ?? null,
-            dateUpdated: null,
-            exploitedSince: item.dateAdded ?? null,
-            sourceUrl: null,
-            pocUrl: null,
-            pocPublishedAt: null,
-            references: [],
-            aliases: cveId ? [cveId] : [],
-            metasploitModulePath: null,
-            metasploitModulePublishedAt: null,
-            internetExposed: false
-          }
-        })
+        const datasetFingerprint = createKevDatasetFingerprint(parsed.data)
 
-      type ExistingCvssRow = {
-        cve_id: string
-        cvss_score: number | null
-        cvss_vector: string | null
-        cvss_version: string | null
-        cvss_severity: string | null
-      }
-
-      const baseCveIds = baseEntries.map(entry => entry.cveId)
-      const existingCvss = new Map<string, CvssMetric>()
-
-      if (baseCveIds.length > 0) {
-        const baseCveIdSet = new Set(baseCveIds)
-        const existingRows: ExistingCvssRow[] = await db
-          .select({
-            cve_id: tables.vulnerabilityEntries.cveId,
-            cvss_score: tables.vulnerabilityEntries.cvssScore,
-            cvss_vector: tables.vulnerabilityEntries.cvssVector,
-            cvss_version: tables.vulnerabilityEntries.cvssVersion,
-            cvss_severity: tables.vulnerabilityEntries.cvssSeverity
-          })
+        const existingKevRow = await db
+          .select({ count: sql<number>`count(*)` })
           .from(tables.vulnerabilityEntries)
           .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-          .all()
+          .limit(1)
+          .get()
+        const existingKevCount = existingKevRow ? Number(existingKevRow.count) : 0
+        const hasExistingKevEntries = existingKevCount > 0
+        const previousKevFingerprint = metadata['kev.lastFingerprint'] ?? null
+        const canSkipIncrementalKev =
+          strategy === 'incremental' &&
+          !forceRefresh &&
+          hasExistingKevEntries &&
+          typeof previousKevFingerprint === 'string' &&
+          previousKevFingerprint.length > 0 &&
+          previousKevFingerprint === datasetFingerprint
 
-        for (const row of existingRows) {
-          if (!baseCveIdSet.has(row.cve_id)) {
-            continue
-          }
+        if (canSkipIncrementalKev) {
+          const skipMessage = 'KEV catalog already up to date'
+          setImportPhase('enriching', { message: skipMessage, completed: 0, total: 0 })
+          markTaskProgress('kev', 0, 0, skipMessage)
 
-          existingCvss.set(row.cve_id, {
-            score: typeof row.cvss_score === 'number' ? row.cvss_score : null,
-            vector: typeof row.cvss_vector === 'string' ? row.cvss_vector : null,
-            version: typeof row.cvss_version === 'string' ? row.cvss_version : null,
-            severity: normaliseStoredSeverity(row.cvss_severity)
-          })
-        }
-      }
-
-      const cvesNeedingFetch = baseEntries
-        .filter(entry => {
-          const existing = existingCvss.get(entry.cveId)
-          return !existing || existing.score === null
-        })
-        .map(entry => entry.cveId)
-
-      let fetchedCvss: Map<string, CvssMetric> | null = null
-
-      if (cvesNeedingFetch.length > 0) {
-        fetchedCvss = await fetchCvssMetrics(cvesNeedingFetch, {
-          onStart(total) {
-            const message =
-              total > 0
-                ? `Fetching CVSS metrics (0 of ${total})`
-                : 'No CVSS metrics to fetch'
-            setImportPhase('fetchingCvss', {
-              total,
-              completed: 0,
-              message
-            })
-            markTaskProgress('kev', 0, total, message)
-          },
-          onProgress(completed, total) {
-            const message =
-              total > 0
-                ? `Fetching CVSS metrics (${completed} of ${total})`
-                : 'Fetching CVSS metrics'
-            updateImportProgress('fetchingCvss', completed, total, message)
-            markTaskProgress('kev', completed, total, message)
-          }
-        })
-      } else {
-        const reusedCount = baseEntries.length
-        const message =
-          reusedCount > 0
-            ? `Reusing cached CVSS metrics for ${reusedCount} CVE${reusedCount === 1 ? '' : 's'}`
-            : 'No CVSS metrics required for this import'
-        setImportPhase('fetchingCvss', {
-          total: 0,
-          completed: 0,
-          message
-        })
-        markTaskProgress('kev', 0, 0, message)
-      }
-
-      const cvssMetrics = new Map<string, CvssMetric>()
-
-      for (const base of baseEntries) {
-        const existing = existingCvss.get(base.cveId)
-        const fetched = fetchedCvss?.get(base.cveId)
-
-        cvssMetrics.set(base.cveId, {
-          score: fetched?.score ?? existing?.score ?? null,
-          vector: fetched?.vector ?? existing?.vector ?? null,
-          version: fetched?.version ?? existing?.version ?? null,
-          severity: fetched?.severity ?? existing?.severity ?? null
-        })
-      }
-
-      const totalEnrichment = baseEntries.length
-
-      setImportPhase('enriching', {
-        message: 'Enriching KEV entries with classification data',
-        completed: 0,
-        total: totalEnrichment
-      })
-      markTaskProgress('kev', 0, totalEnrichment, 'Enriching KEV entries')
-
-      const enrichedResults = await mapWithConcurrency(
-        baseEntries,
-        CVELIST_ENRICHMENT_CONCURRENCY,
-        async base => {
-          const metrics = cvssMetrics.get(base.cveId)
-          const enrichedBase: KevBaseEntry = {
-            ...base,
-            cvssScore: metrics?.score ?? null,
-            cvssVector: metrics?.vector ?? null,
-            cvssVersion: metrics?.version ?? null,
-            cvssSeverity: metrics?.severity ?? null
-          }
-
-          let enrichmentResult: EnrichBaseEntryResult
-
-          try {
-            enrichmentResult = await enrichBaseEntryWithCvelist(enrichedBase)
-          } catch {
-            enrichmentResult = { entry: enrichedBase, impacts: [], hit: false }
-          }
-
-          const entry = enrichEntry(enrichmentResult.entry)
-          return { entry, impacts: enrichmentResult.impacts, hit: enrichmentResult.hit }
-        },
-        {
-          onProgress(completed, total) {
-            if (total === 0) {
-              return
-            }
-            updateImportProgress('enriching', completed, total)
-            markTaskProgress('kev', completed, total)
-          }
-        }
-      )
-
-      await flushCvelistCache()
-
-      let cvelistHits = 0
-      let cvelistMisses = 0
-      for (const result of enrichedResults) {
-        if (result.hit) {
-          cvelistHits += 1
-        } else {
-          cvelistMisses += 1
-        }
-      }
-
-      if (cvelistHits > 0 || cvelistMisses > 0) {
-        const message = `CVEList enrichment processed (${cvelistHits} hits, ${cvelistMisses} misses)`
-        markTaskProgress('kev', 0, 0, message)
-      }
-
-      const entries = enrichedResults.map(result => result.entry)
-      const impactRecordMap = new Map<string, VulnerabilityImpactRecord[]>()
-      for (const result of enrichedResults) {
-        if (result.impacts.length) {
-          impactRecordMap.set(result.entry.id, result.impacts)
-        }
-      }
-
-      const importedAt = new Date().toISOString()
-
-      const entryRecords = buildEntryDiffRecords(entries, 'kev', impactRecordMap)
-
-      const existingKevRow = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(tables.vulnerabilityEntries)
-        .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-        .limit(1)
-        .get()
-      const hasExistingKevEntries = existingKevRow ? Number(existingKevRow.count) > 0 : false
-      const useIncrementalKev = strategy === 'incremental' && hasExistingKevEntries
-      const totalEntries = entryRecords.length
-
-      if (!useIncrementalKev) {
-        // Clear any lingering KEV impact/category rows before rebuilding the source data.
-        await db
-          .delete(tables.vulnerabilityEntryImpacts)
-          .where(like(tables.vulnerabilityEntryImpacts.entryId, 'kev:%'))
-          .run()
-
-        await db
-          .delete(tables.vulnerabilityEntryCategories)
-          .where(like(tables.vulnerabilityEntryCategories.entryId, 'kev:%'))
-          .run()
-
-        await db
-          .delete(tables.vulnerabilityEntries)
-          .where(eq(tables.vulnerabilityEntries.source, 'kev'))
-          .run()
-
-        setImportPhase('saving', {
-          message: 'Saving entries to the local cache',
-          completed: 0,
-          total: totalEntries
-        })
-        markTaskProgress('kev', 0, totalEntries, 'Saving entries to the local cache')
-
-        for (let index = 0; index < entryRecords.length; index += 1) {
-          const record = entryRecords[index]
-
-          await db.insert(tables.vulnerabilityEntries).values(record.values).run()
-
-          if (record.impacts.length) {
-            await insertImpactRecords(db, record.impacts)
-          }
-
-          if (record.categories.length) {
-            await insertCategoryRecords(db, record.categories)
-          }
-
-          if ((index + 1) % 25 === 0 || index + 1 === totalEntries) {
-            const message = `Saving entries to the local cache (${index + 1} of ${totalEntries})`
-            setImportPhase('saving', {
-              completed: index + 1,
-              total: totalEntries,
-              message
-            })
-            markTaskProgress('kev', index + 1, totalEntries, message)
-          }
-        }
-
-        const metadataRows = [
-          { key: 'dateReleased', value: parsed.data.dateReleased },
-          { key: 'catalogVersion', value: parsed.data.catalogVersion },
-          { key: 'entryCount', value: String(totalEntries) },
-          { key: 'lastImportAt', value: importedAt },
-          { key: 'kev.lastNewCount', value: String(totalEntries) },
-          { key: 'kev.lastUpdatedCount', value: '0' },
-          { key: 'kev.lastSkippedCount', value: '0' },
-          { key: 'kev.lastRemovedCount', value: '0' },
-          { key: 'kev.lastImportStrategy', value: 'full' }
-        ]
-
-        for (const record of metadataRows) {
-          await db
-            .insert(tables.kevMetadata)
-            .values(record)
-            .onConflictDoUpdate({
-              target: tables.kevMetadata.key,
-              set: { value: sql`excluded.value` }
-            })
-            .run()
-        }
-
-        kevImported = totalEntries
-        kevNewCount = totalEntries
-        kevUpdatedCount = 0
-        kevSkippedCount = 0
-        kevRemovedCount = 0
-        kevImportStrategy = 'full'
-        kevNewCveIds = entryRecords.map(record => record.values.cveId)
-        catalogVersion = parsed.data.catalogVersion
-        dateReleased = parsed.data.dateReleased
-        importTimestamp = importedAt
-        const summaryMessage = `Imported ${totalEntries.toLocaleString()} KEV entries`
-        publishTaskEvent('kev', `${summaryMessage} (catalog size: ${totalEntries.toLocaleString()})`)
-        markTaskComplete('kev', summaryMessage)
-      } else {
-        const existingMap = await loadExistingEntryRecords(db, 'kev')
-        const { newRecords, updatedRecords, unchangedRecords, removedIds } =
-          diffEntryRecords(entryRecords, existingMap)
-        const totalChanges = newRecords.length + updatedRecords.length
-        const unchangedCount = unchangedRecords.length
-        const newKevIds = newRecords.map(record => record.values.cveId)
-
-        if (totalChanges > 0) {
-          const message = 'Saving KEV changes to the local cache'
-          setImportPhase('saving', { message, completed: 0, total: totalChanges })
-          markTaskProgress('kev', 0, totalChanges, message)
-        } else if (removedIds.length > 0) {
-          const message = `Removing ${removedIds.length.toLocaleString()} retired KEV entr${removedIds.length === 1 ? 'y' : 'ies'}`
-          setImportPhase('saving', { message, completed: 0, total: 0 })
-          markTaskProgress('kev', 0, 0, message)
-        } else {
-          const message = 'KEV catalog already up to date'
-          setImportPhase('saving', { message, completed: 0, total: 0 })
-          markTaskProgress('kev', 0, 0, message)
-        }
-
-        let processed = 0
-        db.transaction(tx => {
-          const persistWithProgress = (
-            record: EntryDiffRecord,
-            action: 'insert' | 'update'
-          ) => {
-            persistEntryRecord(tx, record, action)
-
-            if (totalChanges > 0) {
-              processed += 1
-              const progressMessage = `Saving KEV changes to the local cache (${processed} of ${totalChanges})`
-              setImportPhase('saving', {
-                completed: processed,
-                total: totalChanges,
-                message: progressMessage
-              })
-              markTaskProgress('kev', processed, totalChanges, progressMessage)
-            }
-          }
-
-          for (const record of newRecords) {
-            persistWithProgress(record, 'insert')
-          }
-
-          for (const record of updatedRecords) {
-            persistWithProgress(record, 'update')
-          }
-
-          if (removedIds.length > 0) {
-            const chunkSize = 25
-            for (let index = 0; index < removedIds.length; index += chunkSize) {
-              const idChunk = removedIds.slice(index, index + chunkSize)
-              tx
-                .delete(tables.vulnerabilityEntries)
-                .where(inArray(tables.vulnerabilityEntries.id, idChunk))
-                .run()
-            }
-          }
+          const catalogSize =
+            existingKevCount || parsed.data.count || parsed.data.vulnerabilities.length
+          const importedAt = importStartedAt
 
           const metadataRows = [
             { key: 'dateReleased', value: parsed.data.dateReleased },
             { key: 'catalogVersion', value: parsed.data.catalogVersion },
-            { key: 'entryCount', value: String(totalEntries) },
+            { key: 'entryCount', value: String(catalogSize) },
             { key: 'lastImportAt', value: importedAt },
-            { key: 'kev.lastNewCount', value: String(newRecords.length) },
-            { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
-            { key: 'kev.lastSkippedCount', value: String(unchangedCount) },
-            { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
-            { key: 'kev.lastImportStrategy', value: 'incremental' }
+            { key: 'kev.lastNewCount', value: '0' },
+            { key: 'kev.lastUpdatedCount', value: '0' },
+            { key: 'kev.lastSkippedCount', value: String(catalogSize) },
+            { key: 'kev.lastRemovedCount', value: '0' },
+            { key: 'kev.lastImportStrategy', value: 'incremental' },
+            { key: 'kev.lastFingerprint', value: datasetFingerprint }
           ]
 
           for (const record of metadataRows) {
-            tx
+            await db
               .insert(tables.kevMetadata)
               .values(record)
               .onConflictDoUpdate({
@@ -784,41 +492,458 @@ export const runCatalogImport = async (
               })
               .run()
           }
-        })
 
-        kevImported = newRecords.length + updatedRecords.length
-        kevNewCount = newRecords.length
-        kevUpdatedCount = updatedRecords.length
-        kevSkippedCount = unchangedCount
-        kevRemovedCount = removedIds.length
-        kevImportStrategy = 'incremental'
-        kevNewCveIds = newKevIds
-        catalogVersion = parsed.data.catalogVersion
-        dateReleased = parsed.data.dateReleased
-        importTimestamp = importedAt
+          kevImported = 0
+          kevNewCount = 0
+          kevUpdatedCount = 0
+          kevSkippedCount = catalogSize
+          kevRemovedCount = 0
+          kevImportStrategy = 'incremental'
+          kevNewCveIds = []
+          catalogVersion = parsed.data.catalogVersion
+          dateReleased = parsed.data.dateReleased
+          importTimestamp = importedAt
 
-        const detailSegments: string[] = []
-        if (newRecords.length > 0) {
-          detailSegments.push(`${newRecords.length.toLocaleString()} new`)
-        }
-        if (updatedRecords.length > 0) {
-          detailSegments.push(`${updatedRecords.length.toLocaleString()} updated`)
-        }
-        if (unchangedCount > 0) {
-          detailSegments.push(`${unchangedCount.toLocaleString()} unchanged`)
-        }
-        if (removedIds.length > 0) {
-          detailSegments.push(`${removedIds.length.toLocaleString()} removed`)
-        }
+          const baseSummary = `Incremental KEV import: ${catalogSize.toLocaleString()} unchanged (catalog size: ${catalogSize.toLocaleString()})`
+          const summaryMessage = `${baseSummary}. ${formatNewKevCveSummary([])}`
+          publishTaskEvent('kev', summaryMessage)
+          markTaskComplete('kev', summaryMessage)
+        } else {
+          const baseEntries = parsed.data.vulnerabilities.map((item): KevBaseEntry => {
+            const cveId = item.cveID
+            const normalised = normaliseVendorProduct(
+              {
+                vendor: item.vendorProject,
+                product: item.product
+              },
+              undefined,
+              undefined,
+              {
+                vulnerabilityName: item.vulnerabilityName,
+                description: item.shortDescription,
+                cveId
+              }
+            )
+            return {
+              id: `kev:${cveId}`,
+              sources: ['kev'],
+              cveId,
+              vendor: normalised.vendor.label,
+              vendorKey: normalised.vendor.key,
+              product: normalised.product.label,
+              productKey: normalised.product.key,
+              affectedProducts: [],
+              problemTypes: [],
+              vulnerabilityName: item.vulnerabilityName ?? 'Unknown vulnerability',
+              description: item.shortDescription ?? '',
+              requiredAction: item.requiredAction ?? null,
+              dateAdded: item.dateAdded ?? '',
+              dueDate: item.dueDate ?? null,
+              ransomwareUse: item.knownRansomwareCampaignUse ?? null,
+              notes: toNotes(item.notes),
+              cwes: Array.isArray(item.cwes) ? item.cwes : [],
+              cvssScore: null,
+              cvssVector: null,
+              cvssVersion: null,
+              cvssSeverity: null,
+              epssScore: null,
+              assigner: null,
+              datePublished: item.dateAdded ?? null,
+              dateUpdated: null,
+              exploitedSince: item.dateAdded ?? null,
+              sourceUrl: null,
+              pocUrl: null,
+              pocPublishedAt: null,
+              references: [],
+              aliases: cveId ? [cveId] : [],
+              metasploitModulePath: null,
+              metasploitModulePublishedAt: null,
+              internetExposed: false
+            }
+          })
 
-        const detailSummary = detailSegments.length
-          ? detailSegments.join(', ')
-          : 'no changes detected'
-        const baseSummary = `Incremental KEV import: ${detailSummary} (catalog size: ${totalEntries.toLocaleString()})`
-        const summaryMessage = `${baseSummary}. ${formatNewKevCveSummary(newKevIds)}`
-        publishTaskEvent('kev', summaryMessage)
-        markTaskComplete('kev', summaryMessage)
-      }
+          type ExistingCvssRow = {
+            cve_id: string
+            cvss_score: number | null
+            cvss_vector: string | null
+            cvss_version: string | null
+            cvss_severity: string | null
+          }
+
+          const baseCveIds = baseEntries.map(entry => entry.cveId)
+          const existingCvss = new Map<string, CvssMetric>()
+
+          if (baseCveIds.length > 0) {
+            const baseCveIdSet = new Set(baseCveIds)
+            const existingRows: ExistingCvssRow[] = await db
+              .select({
+                cve_id: tables.vulnerabilityEntries.cveId,
+                cvss_score: tables.vulnerabilityEntries.cvssScore,
+                cvss_vector: tables.vulnerabilityEntries.cvssVector,
+                cvss_version: tables.vulnerabilityEntries.cvssVersion,
+                cvss_severity: tables.vulnerabilityEntries.cvssSeverity
+              })
+              .from(tables.vulnerabilityEntries)
+              .where(eq(tables.vulnerabilityEntries.source, 'kev'))
+              .all()
+
+            for (const row of existingRows) {
+              if (!baseCveIdSet.has(row.cve_id)) {
+                continue
+              }
+
+              existingCvss.set(row.cve_id, {
+                score: typeof row.cvss_score === 'number' ? row.cvss_score : null,
+                vector: typeof row.cvss_vector === 'string' ? row.cvss_vector : null,
+                version: typeof row.cvss_version === 'string' ? row.cvss_version : null,
+                severity: normaliseStoredSeverity(row.cvss_severity)
+              })
+            }
+          }
+
+          const cvesNeedingFetch = baseEntries
+            .filter(entry => {
+              const existing = existingCvss.get(entry.cveId)
+              return !existing || existing.score === null
+            })
+            .map(entry => entry.cveId)
+
+          let fetchedCvss: Map<string, CvssMetric> | null = null
+
+          if (cvesNeedingFetch.length > 0) {
+            fetchedCvss = await fetchCvssMetrics(cvesNeedingFetch, {
+              onStart(total) {
+                const message =
+                  total > 0
+                    ? `Fetching CVSS metrics (0 of ${total})`
+                    : 'No CVSS metrics to fetch'
+                setImportPhase('fetchingCvss', {
+                  total,
+                  completed: 0,
+                  message
+                })
+                markTaskProgress('kev', 0, total, message)
+              },
+              onProgress(completed, total) {
+                const message =
+                  total > 0
+                    ? `Fetching CVSS metrics (${completed} of ${total})`
+                    : 'Fetching CVSS metrics'
+                updateImportProgress('fetchingCvss', completed, total, message)
+                markTaskProgress('kev', completed, total, message)
+              }
+            })
+          } else {
+            const reusedCount = baseEntries.length
+            const message =
+              reusedCount > 0
+                ? `Reusing cached CVSS metrics for ${reusedCount} CVE${reusedCount === 1 ? '' : 's'}`
+                : 'No CVSS metrics required for this import'
+            setImportPhase('fetchingCvss', {
+              total: 0,
+              completed: 0,
+              message
+            })
+            markTaskProgress('kev', 0, 0, message)
+          }
+
+          const cvssMetrics = new Map<string, CvssMetric>()
+
+          for (const base of baseEntries) {
+            const existing = existingCvss.get(base.cveId)
+            const fetched = fetchedCvss?.get(base.cveId)
+
+            cvssMetrics.set(base.cveId, {
+              score: fetched?.score ?? existing?.score ?? null,
+              vector: fetched?.vector ?? existing?.vector ?? null,
+              version: fetched?.version ?? existing?.version ?? null,
+              severity: fetched?.severity ?? existing?.severity ?? null
+            })
+          }
+
+          const totalEnrichment = baseEntries.length
+
+          setImportPhase('enriching', {
+            message: 'Enriching KEV entries with classification data',
+            completed: 0,
+            total: totalEnrichment
+          })
+          markTaskProgress('kev', 0, totalEnrichment, 'Enriching KEV entries')
+
+          const enrichedResults = await mapWithConcurrency(
+            baseEntries,
+            CVELIST_ENRICHMENT_CONCURRENCY,
+            async base => {
+              const metrics = cvssMetrics.get(base.cveId)
+              const enrichedBase: KevBaseEntry = {
+                ...base,
+                cvssScore: metrics?.score ?? null,
+                cvssVector: metrics?.vector ?? null,
+                cvssVersion: metrics?.version ?? null,
+                cvssSeverity: metrics?.severity ?? null
+              }
+
+              let enrichmentResult: EnrichBaseEntryResult
+
+              try {
+                enrichmentResult = await enrichBaseEntryWithCvelist(enrichedBase)
+              } catch {
+                enrichmentResult = { entry: enrichedBase, impacts: [], hit: false }
+              }
+
+              const entry = enrichEntry(enrichmentResult.entry)
+              return { entry, impacts: enrichmentResult.impacts, hit: enrichmentResult.hit }
+            },
+            {
+              onProgress(completed, total) {
+                if (total === 0) {
+                  return
+                }
+                updateImportProgress('enriching', completed, total)
+                markTaskProgress('kev', completed, total)
+              }
+            }
+          )
+
+          await flushCvelistCache()
+
+          let cvelistHits = 0
+          let cvelistMisses = 0
+          for (const result of enrichedResults) {
+            if (result.hit) {
+              cvelistHits += 1
+            } else {
+              cvelistMisses += 1
+            }
+          }
+
+          if (cvelistHits > 0 || cvelistMisses > 0) {
+            const message = `CVEList enrichment processed (${cvelistHits} hits, ${cvelistMisses} misses)`
+            markTaskProgress('kev', 0, 0, message)
+          }
+
+          const entries = enrichedResults.map(result => result.entry)
+          const impactRecordMap = new Map<string, VulnerabilityImpactRecord[]>()
+          for (const result of enrichedResults) {
+            if (result.impacts.length) {
+              impactRecordMap.set(result.entry.id, result.impacts)
+            }
+          }
+
+          const importedAt = new Date().toISOString()
+
+          const entryRecords = buildEntryDiffRecords(entries, 'kev', impactRecordMap)
+
+          const useIncrementalKev = strategy === 'incremental' && hasExistingKevEntries
+          const totalEntries = entryRecords.length
+
+          if (!useIncrementalKev) {
+            await db
+              .delete(tables.vulnerabilityEntryImpacts)
+              .where(like(tables.vulnerabilityEntryImpacts.entryId, 'kev:%'))
+              .run()
+
+            await db
+              .delete(tables.vulnerabilityEntryCategories)
+              .where(like(tables.vulnerabilityEntryCategories.entryId, 'kev:%'))
+              .run()
+
+            await db
+              .delete(tables.vulnerabilityEntries)
+              .where(eq(tables.vulnerabilityEntries.source, 'kev'))
+              .run()
+
+            setImportPhase('saving', {
+              message: 'Saving entries to the local cache',
+              completed: 0,
+              total: totalEntries
+            })
+            markTaskProgress('kev', 0, totalEntries, 'Saving entries to the local cache')
+
+            for (let index = 0; index < entryRecords.length; index += 1) {
+              const record = entryRecords[index]
+
+              await db.insert(tables.vulnerabilityEntries).values(record.values).run()
+
+              if (record.impacts.length) {
+                await insertImpactRecords(db, record.impacts)
+              }
+
+              if (record.categories.length) {
+                await insertCategoryRecords(db, record.categories)
+              }
+
+              if ((index + 1) % 25 === 0 || index + 1 === totalEntries) {
+                const message = `Saving entries to the local cache (${index + 1} of ${totalEntries})`
+                setImportPhase('saving', {
+                  completed: index + 1,
+                  total: totalEntries,
+                  message
+                })
+                markTaskProgress('kev', index + 1, totalEntries, message)
+              }
+            }
+
+            const metadataRows = [
+              { key: 'dateReleased', value: parsed.data.dateReleased },
+              { key: 'catalogVersion', value: parsed.data.catalogVersion },
+              { key: 'entryCount', value: String(totalEntries) },
+              { key: 'lastImportAt', value: importedAt },
+              { key: 'kev.lastNewCount', value: String(totalEntries) },
+              { key: 'kev.lastUpdatedCount', value: '0' },
+              { key: 'kev.lastSkippedCount', value: '0' },
+              { key: 'kev.lastRemovedCount', value: '0' },
+              { key: 'kev.lastImportStrategy', value: 'full' },
+              { key: 'kev.lastFingerprint', value: datasetFingerprint }
+            ]
+
+            for (const record of metadataRows) {
+              await db
+                .insert(tables.kevMetadata)
+                .values(record)
+                .onConflictDoUpdate({
+                  target: tables.kevMetadata.key,
+                  set: { value: sql`excluded.value` }
+                })
+                .run()
+            }
+
+            kevImported = totalEntries
+            kevNewCount = totalEntries
+            kevUpdatedCount = 0
+            kevSkippedCount = 0
+            kevRemovedCount = 0
+            kevImportStrategy = 'full'
+            kevNewCveIds = entryRecords.map(record => record.values.cveId)
+            catalogVersion = parsed.data.catalogVersion
+            dateReleased = parsed.data.dateReleased
+            importTimestamp = importedAt
+            const summaryMessage = `Imported ${totalEntries.toLocaleString()} KEV entries`
+            publishTaskEvent(
+              'kev',
+              `${summaryMessage} (catalog size: ${totalEntries.toLocaleString()})`
+            )
+            markTaskComplete('kev', summaryMessage)
+          } else {
+            const existingMap = await loadExistingEntryRecords(db, 'kev')
+            const { newRecords, updatedRecords, unchangedRecords, removedIds } =
+              diffEntryRecords(entryRecords, existingMap)
+            const totalChanges = newRecords.length + updatedRecords.length
+            const unchangedCount = unchangedRecords.length
+            const newKevIds = newRecords.map(record => record.values.cveId)
+
+            if (totalChanges > 0) {
+              const message = 'Saving KEV changes to the local cache'
+              setImportPhase('saving', { message, completed: 0, total: totalChanges })
+              markTaskProgress('kev', 0, totalChanges, message)
+            } else if (removedIds.length > 0) {
+              const message = `Removing ${removedIds.length.toLocaleString()} retired KEV entr${removedIds.length === 1 ? 'y' : 'ies'}`
+              setImportPhase('saving', { message, completed: 0, total: 0 })
+              markTaskProgress('kev', 0, 0, message)
+            } else {
+              const message = 'KEV catalog already up to date'
+              setImportPhase('saving', { message, completed: 0, total: 0 })
+              markTaskProgress('kev', 0, 0, message)
+            }
+
+            let processed = 0
+            db.transaction(tx => {
+              const persistWithProgress = (
+                record: EntryDiffRecord,
+                action: 'insert' | 'update'
+              ) => {
+                persistEntryRecord(tx, record, action)
+
+                if (totalChanges > 0) {
+                  processed += 1
+                  const progressMessage = `Saving KEV changes to the local cache (${processed} of ${totalChanges})`
+                  setImportPhase('saving', {
+                    completed: processed,
+                    total: totalChanges,
+                    message: progressMessage
+                  })
+                  markTaskProgress('kev', processed, totalChanges, progressMessage)
+                }
+              }
+
+              for (const record of newRecords) {
+                persistWithProgress(record, 'insert')
+              }
+
+              for (const record of updatedRecords) {
+                persistWithProgress(record, 'update')
+              }
+
+              if (removedIds.length > 0) {
+                const chunkSize = 25
+                for (let index = 0; index < removedIds.length; index += chunkSize) {
+                  const idChunk = removedIds.slice(index, index + chunkSize)
+                  tx
+                    .delete(tables.vulnerabilityEntries)
+                    .where(inArray(tables.vulnerabilityEntries.id, idChunk))
+                    .run()
+                }
+              }
+
+              const metadataRows = [
+                { key: 'dateReleased', value: parsed.data.dateReleased },
+                { key: 'catalogVersion', value: parsed.data.catalogVersion },
+                { key: 'entryCount', value: String(totalEntries) },
+                { key: 'lastImportAt', value: importedAt },
+                { key: 'kev.lastNewCount', value: String(newRecords.length) },
+                { key: 'kev.lastUpdatedCount', value: String(updatedRecords.length) },
+                { key: 'kev.lastSkippedCount', value: String(unchangedCount) },
+                { key: 'kev.lastRemovedCount', value: String(removedIds.length) },
+                { key: 'kev.lastImportStrategy', value: 'incremental' },
+                { key: 'kev.lastFingerprint', value: datasetFingerprint }
+              ]
+
+              for (const record of metadataRows) {
+                tx
+                  .insert(tables.kevMetadata)
+                  .values(record)
+                  .onConflictDoUpdate({
+                    target: tables.kevMetadata.key,
+                    set: { value: sql`excluded.value` }
+                  })
+                  .run()
+              }
+            })
+
+            kevImported = newRecords.length + updatedRecords.length
+            kevNewCount = newRecords.length
+            kevUpdatedCount = updatedRecords.length
+            kevSkippedCount = unchangedCount
+            kevRemovedCount = removedIds.length
+            kevImportStrategy = 'incremental'
+            kevNewCveIds = newKevIds
+            catalogVersion = parsed.data.catalogVersion
+            dateReleased = parsed.data.dateReleased
+            importTimestamp = importedAt
+
+            const detailSegments: string[] = []
+            if (newRecords.length > 0) {
+              detailSegments.push(`${newRecords.length.toLocaleString()} new`)
+            }
+            if (updatedRecords.length > 0) {
+              detailSegments.push(`${updatedRecords.length.toLocaleString()} updated`)
+            }
+            if (unchangedCount > 0) {
+              detailSegments.push(`${unchangedCount.toLocaleString()} unchanged`)
+            }
+            if (removedIds.length > 0) {
+              detailSegments.push(`${removedIds.length.toLocaleString()} removed`)
+            }
+
+            const detailSummary = detailSegments.length
+              ? detailSegments.join(', ')
+              : 'no changes detected'
+            const baseSummary = `Incremental KEV import: ${detailSummary} (catalog size: ${totalEntries.toLocaleString()})`
+            const summaryMessage = `${baseSummary}. ${formatNewKevCveSummary(newKevIds)}`
+            publishTaskEvent('kev', summaryMessage)
+            markTaskComplete('kev', summaryMessage)
+          }
+        }
     } catch (error) {
       const message =
         error instanceof Error
