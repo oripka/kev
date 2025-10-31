@@ -462,6 +462,20 @@ export const importGithubPocCatalog = async (
       }
     }
 
+    const shouldLoadCachedFeed = cacheIsFresh && !forceRefresh
+    if (shouldLoadCachedFeed) {
+      const cachedLabel = cacheTimestamp
+        ? `Loading cached GitHub PoC feed (cached ${new Date(cacheTimestamp).toISOString()})`
+        : 'Loading cached GitHub PoC feed'
+
+      setImportPhase('fetchingPoc', {
+        message: cachedLabel,
+        completed: 0,
+        total: 0
+      })
+      markTaskProgress('poc', 0, 0, cachedLabel)
+    }
+
     const dataset = await getCachedData(
       CACHE_KEY,
       async () => {
