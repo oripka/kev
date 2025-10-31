@@ -55,7 +55,7 @@ In the Wild is a Nuxt 4 application that aggregates the CISA Known Exploited Vul
     --env-file .env \
     --entrypoint bash \
     kev-import \
-    -lc "pnpm run import-feeds --mode force --strategy full --source all"
+    -lc "pnpm run import-feeds --mode force --strategy full --source all --sync-d1"
   ```
   Replace the command inside the final quotes with other strategies (for example `pnpm run import-feeds --incremental --source kev,enisa --sync-d1`) as needed.
 
