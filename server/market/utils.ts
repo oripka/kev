@@ -129,6 +129,7 @@ const EXCHANGE_ENDPOINT = 'https://open.er-api.com/v6/latest/USD'
 
 export const fetchUsdExchangeRates = async (): Promise<ExchangeRates> => {
   try {
+    console.info('[market] Fetching USD exchange rates from remote API…')
     const response = await ofetch<{ rates?: Record<string, number> }>(EXCHANGE_ENDPOINT, {
       headers: defaultHeaders,
       timeout: Math.min(MARKET_FETCH_TIMEOUT_MS, 7_000)
@@ -142,8 +143,14 @@ export const fetchUsdExchangeRates = async (): Promise<ExchangeRates> => {
         }
       }
     }
+    console.info(
+      `[market] Exchange rates resolved (${rates.size.toLocaleString()} currencies${
+        response?.rates ? '' : ', fallback payload'
+      })`
+    )
     return rates
-  } catch {
+  } catch (error) {
+    console.warn('[market] Exchange rate fetch failed, using fallback rates', error)
     const fallback = new Map<string, number>()
     fallback.set('USD', 1)
     fallback.set('EUR', 0.9)

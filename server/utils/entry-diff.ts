@@ -3,6 +3,7 @@ import type { KevEntry } from '~/types'
 import { tables } from '../database/client'
 import type { DrizzleDatabase } from '../database/client'
 import type { VulnerabilityImpactRecord } from './cvelist'
+import { runWithSqliteRetry } from './sqlite'
 
 export type EntryRowValues = {
   id: string
@@ -347,7 +348,9 @@ export const insertImpactRecords = (
     return
   }
   for (const batch of chunk(records, IMPACT_BATCH_SIZE)) {
-    db.insert(tables.vulnerabilityEntryImpacts).values(batch).run()
+    runWithSqliteRetry(() => {
+      db.insert(tables.vulnerabilityEntryImpacts).values(batch).run()
+    })
   }
 }
 
@@ -359,7 +362,9 @@ export const insertCategoryRecords = (
     return
   }
   for (const batch of chunk(records, CATEGORY_BATCH_SIZE)) {
-    db.insert(tables.vulnerabilityEntryCategories).values(batch).run()
+    runWithSqliteRetry(() => {
+      db.insert(tables.vulnerabilityEntryCategories).values(batch).run()
+    })
   }
 }
 
@@ -537,27 +542,35 @@ export const persistEntryRecord = (
   const { values, impacts, categories } = record
 
   if (action === 'insert') {
-    db.insert(tables.vulnerabilityEntries).values(values).run()
+    runWithSqliteRetry(() => {
+      db.insert(tables.vulnerabilityEntries).values(values).run()
+    })
   } else {
     const { id, ...updateValues } = values
-    db
-      .update(tables.vulnerabilityEntries)
-      .set(updateValues)
-      .where(eq(tables.vulnerabilityEntries.id, id))
-      .run()
+    runWithSqliteRetry(() => {
+      db
+        .update(tables.vulnerabilityEntries)
+        .set(updateValues)
+        .where(eq(tables.vulnerabilityEntries.id, id))
+        .run()
+    })
   }
 
-  db
-    .delete(tables.vulnerabilityEntryImpacts)
-    .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
-    .run()
+  runWithSqliteRetry(() => {
+    db
+      .delete(tables.vulnerabilityEntryImpacts)
+      .where(eq(tables.vulnerabilityEntryImpacts.entryId, values.id))
+      .run()
+  })
 
   insertImpactRecords(db, impacts)
 
-  db
-    .delete(tables.vulnerabilityEntryCategories)
-    .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
-    .run()
+  runWithSqliteRetry(() => {
+    db
+      .delete(tables.vulnerabilityEntryCategories)
+      .where(eq(tables.vulnerabilityEntryCategories.entryId, values.id))
+      .run()
+  })
 
   insertCategoryRecords(db, categories)
 }

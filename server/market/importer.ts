@@ -20,6 +20,7 @@ import type {
   MarketProgramSnapshot
 } from './types'
 import { getCachedData } from '../utils/cache'
+import { publishTaskEvent } from '../utils/import-progress'
 
 type ExchangeRates = Awaited<ReturnType<typeof fetchUsdExchangeRates>>
 
@@ -597,6 +598,10 @@ const saveProgram = async (
   catalog: Map<string, ProductCatalogRecord>,
   rates: ExchangeRates
 ): Promise<number> => {
+  publishTaskEvent(
+    'market',
+    `${program.name}: saving snapshot (${offers.length.toLocaleString()} offers)`
+  )
   await upsertProgram(db, program)
   await recordSnapshot(db, program.slug, snapshot, program.parserVersion)
 
@@ -607,6 +612,10 @@ const saveProgram = async (
       processed += 1
     }
   }
+  publishTaskEvent(
+    'market',
+    `${program.name}: stored ${processed.toLocaleString()} offers in database`
+  )
   return processed
 }
 
@@ -634,6 +643,12 @@ export const runMarketImport = async (
     allowStale
   })
   const rates = ratesResult.data
+  publishTaskEvent(
+    'market',
+    `Exchange rates ${ratesResult.cacheHit ? 'loaded from cache' : 'fetched from API'}${
+      ratesResult.stale ? ' (stale)' : ''
+    }`
+  )
 
   const catalog = await loadProductCatalog(db)
   const programSummaries: MarketProgramProgress[] = []
@@ -654,8 +669,18 @@ export const runMarketImport = async (
           allowStale
         }
       )
+      publishTaskEvent(
+        'market',
+        `${program.name}: snapshot ${
+          snapshotResult.cacheHit ? 'cache hit' : 'fetched from source'
+        }${snapshotResult.stale ? ' (stale)' : ''}`
+      )
       const snapshot = snapshotResult.data
       const offers = await program.parseOffers(snapshot)
+      publishTaskEvent(
+        'market',
+        `${program.name}: parsed ${offers.length.toLocaleString()} offers`
+      )
       const processed = await saveProgram(db, program, snapshot, offers, catalog, rates)
       offersProcessed += processed
       programSummaries.push({ program, offersProcessed: processed })

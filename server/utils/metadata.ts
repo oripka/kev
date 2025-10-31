@@ -1,4 +1,5 @@
 import { eq, inArray, tables, useDrizzle } from './drizzle'
+import { runWithSqliteRetry } from './sqlite'
 
 export async function getMetadataValue(key: string): Promise<string | null> {
   const db = useDrizzle()
@@ -35,11 +36,14 @@ export async function getMetadataMap(keys: string[]): Promise<Record<string, str
   return defaultEntries
 }
 
-export async function setMetadataValue(key: string, value: string): Promise<void> {
+export function setMetadataValue(key: string, value: string): Promise<void> {
   const db = useDrizzle()
-  await db
-    .insert(tables.kevMetadata)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: tables.kevMetadata.key, set: { value } })
-    .run()
+  runWithSqliteRetry(() => {
+    db
+      .insert(tables.kevMetadata)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: tables.kevMetadata.key, set: { value } })
+      .run()
+  })
+  return Promise.resolve()
 }

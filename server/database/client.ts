@@ -116,7 +116,8 @@ const initialiseDatabase = () => {
 
   const sqlite = new Database(databasePath)
   sqlite.pragma('journal_mode = WAL')
-  sqlite.pragma('busy_timeout = 5000')
+  // Allow long-running import batches to wait for file locks instead of failing immediately.
+  sqlite.pragma('busy_timeout = 60000')
   sqlite.pragma('foreign_keys = ON')
 
   sqliteInstance = sqlite

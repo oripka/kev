@@ -40,10 +40,7 @@ export class CliLogger {
         date: false
       }
     })
-    this.interactiveOutput =
-      Boolean(process.stdout.isTTY) &&
-      (process.env.TERM ?? '').toLowerCase() !== 'dumb' &&
-      process.env.KEV_IMPORT_PROGRESS !== 'off'
+    this.interactiveOutput = false
   }
 
   info(message: string) {
@@ -82,35 +79,15 @@ export class CliLogger {
       return
     }
 
-    if (!this.interactiveOutput) {
-      if (formatted === this.lastProgressMessage) {
-        return
-      }
-      this.lastProgressMessage = formatted
-      this.instance.log(formatted)
-      return
-    }
-
     if (formatted === this.lastProgressMessage) {
       return
     }
 
-    const visibleLength = stripAnsi(formatted).length
-    const padding =
-      this.lastProgressWidth > visibleLength
-        ? ' '.repeat(this.lastProgressWidth - visibleLength)
-        : ''
-
-    this.writeProgress(formatted, visibleLength, padding)
+    this.lastProgressMessage = formatted
+    this.instance.log(formatted)
   }
 
   endProgress() {
-    if (this.progressActive && this.interactiveOutput) {
-      process.stdout.write('\n')
-    }
-    this.clearDrainTimeout()
-    this.pendingDrain = false
-    this.queuedProgress = null
     this.progressActive = false
     this.lastProgressWidth = 0
     this.lastProgressMessage = null
@@ -119,67 +96,14 @@ export class CliLogger {
   newline(count = 1) {
     this.endProgress()
     if (count > 0) {
-      process.stdout.write('\n'.repeat(count))
+      for (let index = 0; index < count; index += 1) {
+        this.instance.log('')
+      }
     }
   }
 
   private prepareForLog() {
     this.endProgress()
-  }
-
-  private clearDrainTimeout() {
-    if (this.drainTimeout) {
-      clearTimeout(this.drainTimeout)
-      this.drainTimeout = null
-    }
-  }
-
-  private scheduleDrainFallback() {
-    if (this.drainTimeout) {
-      return
-    }
-    this.drainTimeout = setTimeout(() => {
-      this.drainTimeout = null
-      if (!this.pendingDrain) {
-        return
-      }
-      this.pendingDrain = false
-      const queued = this.queuedProgress
-      this.queuedProgress = null
-      // Disable interactive progress updates after a drain timeout to avoid repeated stalls.
-      const fallbackMessage = queued?.formatted ?? this.lastProgressMessage ?? ''
-      if (fallbackMessage) {
-        this.disableInteractiveProgress(fallbackMessage)
-      } else {
-        this.disableInteractiveProgress('')
-      }
-    }, this.drainFallbackDelayMs)
-    this.drainTimeout.unref?.()
-  }
-
-  private writeProgress(formatted: string, visibleLength: number, padding: string) {
-    if (!this.interactiveOutput) {
-      return
-    }
-
-    if (this.pendingDrain) {
-      this.queuedProgress = { formatted, visibleLength }
-      return
-    }
-
-    const output = `\r${formatted}${padding}`
-    const wrote = process.stdout.write(output)
-
-    this.progressActive = true
-    this.lastProgressWidth = visibleLength
-    this.lastProgressMessage = formatted
-
-    if (!wrote) {
-      this.disableInteractiveProgress(formatted)
-      return
-    }
-
-    this.clearDrainTimeout()
   }
 
   private withTimestamp(message: string) {
@@ -188,29 +112,6 @@ export class CliLogger {
       return colors.dim(`[${timestamp}]`)
     }
     return `${colors.dim(`[${timestamp}]`)} ${message}`
-  }
-
-  private disableInteractiveProgress(formatted: string) {
-    if (!this.interactiveOutput) {
-      if (formatted) {
-        this.instance.log(formatted)
-        this.lastProgressMessage = formatted
-      }
-      return
-    }
-
-    this.clearDrainTimeout()
-    this.pendingDrain = false
-    this.queuedProgress = null
-    this.progressActive = false
-    this.lastProgressWidth = 0
-    this.interactiveOutput = false
-    if (formatted) {
-      this.lastProgressMessage = formatted
-      this.instance.log(formatted)
-    } else {
-      this.lastProgressMessage = null
-    }
   }
 }
 

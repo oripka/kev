@@ -8,6 +8,7 @@ import {
   markTaskError,
   markTaskProgress,
   markTaskRunning,
+  publishTaskEvent,
   setImportPhase
 } from './import-progress'
 
@@ -38,10 +39,16 @@ export const importMarketIntel = async (
     markTaskProgress('market', 0, totalPrograms, 'Fetching market intelligence sources')
 
     let completedPrograms = 0
+    publishTaskEvent('market', 'Resolving market exchange rates')
     const importResult = await runMarketImport(db, {
       forceRefresh: options.forceRefresh,
       allowStale: options.allowStale,
       onProgramStart: ({ program, index, total }) => {
+        publishTaskEvent(
+          'market',
+          `Starting ${program.name} snapshot fetch (${index + 1}/${total})`,
+          'running'
+        )
         markTaskProgress('market', index, total, `Fetching ${program.name}`)
       },
       onProgramComplete: ({ program, total, offersProcessed }) => {
@@ -49,12 +56,17 @@ export const importMarketIntel = async (
         const label = offersProcessed
           ? `${program.name}: ${offersProcessed.toLocaleString()} offers processed`
           : `${program.name}: No offers found`
+        publishTaskEvent(
+          'market',
+          `${program.name} refresh complete (${offersProcessed.toLocaleString()} offers processed)`
+        )
         markTaskProgress('market', completedPrograms, total, label)
       },
       onProgramError: ({ program, total, error }) => {
         completedPrograms += 1
         const message = error instanceof Error ? error.message : 'Import failed'
         console.error('Market program import failed', program.slug, error)
+        publishTaskEvent('market', `${program.name} refresh failed: ${message}`, 'error')
         markTaskProgress('market', completedPrograms, total, `${program.name}: ${message}`)
       }
     })
@@ -140,4 +152,3 @@ export const importMarketIntel = async (
     throw error
   }
 }
-
